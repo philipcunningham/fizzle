@@ -1,0 +1,25 @@
+{
+ "filename": "CASIO084.FZF",
+ "is_split": false,
+ "local_voices": 0,
+ "memory_bytes": 1034240,
+ "voice_count": 1,
+ "voices": [
+  {
+   "bank_volume": 0,
+   "duration": 0,
+   "has_loop": false,
+   "index": 1,
+   "key_high": 0,
+   "key_low": 0,
+   "midi_channel": 0,
+   "name": "",
+   "output": "",
+   "playback_mode": "no_sound",
+   "rate_index": 0,
+   "root_note": 0,
+   "vel_high": 0,
+   "vel_low": 0
+  }
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "filename": "FULL-DATA-FZ.fzf",
+ "is_split": false,
+ "local_voices": 1,
+ "memory_bytes": 72138,
+ "voice_count": 1,
+ "voices": [
+  {
+   "bank_volume": 0,
+   "duration": 1.0019166666666666,
+   "has_loop": false,
+   "index": 1,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "STAB",
+   "output": "1",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 72,
+   "vel_high": 127,
+   "vel_low": 1
+  }
+ ]
+}

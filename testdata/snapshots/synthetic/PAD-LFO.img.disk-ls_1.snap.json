@@ -1,0 +1,14 @@
+{
+ "entries": [
+  {
+   "index": 1,
+   "name": "FULL-DATA-FZ",
+   "size": 205824,
+   "type": "Full Dump"
+  }
+ ],
+ "free_bytes": 1101824,
+ "label": "PAD LFO",
+ "total_bytes": 1308672,
+ "used_percent": 15
+}

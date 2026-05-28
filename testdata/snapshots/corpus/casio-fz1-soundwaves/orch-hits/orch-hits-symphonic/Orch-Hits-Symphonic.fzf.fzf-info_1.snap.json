@@ -1,0 +1,73 @@
+{
+ "filename": "Orch-Hits-Symphonic.fzf",
+ "is_split": false,
+ "local_voices": 4,
+ "memory_bytes": 763840,
+ "voice_count": 4,
+ "voices": [
+  {
+   "bank_volume": 0,
+   "duration": 2.6143055555555557,
+   "has_loop": false,
+   "index": 1,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "UNIS SUSTAIN",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 69,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 3.470083333333333,
+   "has_loop": false,
+   "index": 2,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "ORCH SUSTAIN",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 62,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 1.5563333333333333,
+   "has_loop": false,
+   "index": 3,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "SYMFONIC HIT",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 62,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 6.187888888888889,
+   "has_loop": false,
+   "index": 4,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "MAJOR SUST.",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 62,
+   "vel_high": 127,
+   "vel_low": 1
+  }
+ ]
+}

@@ -1,0 +1,34 @@
+# Build outputs
+/fizzle*
+
+# FZ format artefacts generated during development/testing
+*.img
+*.fzv
+*.fzf
+*.wav
+
+# Testdata assets are committed despite the above
+!testdata/**
+
+# Test coverage
+coverage.out
+coverage.html
+
+# Profile artefacts produced by `make profile`
+cpu.prof
+mem.prof
+*.test
+
+# macOS
+**/.DS_Store
+
+# AI agent working directories: ignore everything except project skills
+.claude/*
+!.claude/skills/
+
+# Generated attribution and SBOM (regenerated each `make build`)
+/internal/licenses/THIRD_PARTY_LICENSES.txt
+/internal/licenses/LICENSE.txt
+/internal/licenses/sbom.cdx.json
+/*.cdx.json
+/*.spdx.json

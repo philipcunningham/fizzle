@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+
+      - name: Install supply-chain tooling
+        run: make tools
+
+      - name: Cross-compile binaries and generate SBOM
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: make release
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          awk '
+            /^## Unreleased/ { found = 1; skip_blank = 1; next }
+            found && /^## / { exit }
+            found && skip_blank && /^$/ { next }
+            found { skip_blank = 0; print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "WARNING: release-notes.md is empty (no Unreleased bullets found)" >&2
+          fi
+          echo "--- release-notes.md ---"
+          cat release-notes.md
+          echo "--- end ---"
+
+      - name: Promote Unreleased to ${{ github.ref_name }} on main
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          git fetch origin main
+          git checkout main
+          awk -v tag="${TAG}" -v today="${TODAY}" '
+            /^## Unreleased \(last updated [0-9-]+\)$/ && !done {
+              print "## Unreleased (last updated " today ")"
+              print ""
+              print "## " tag " (" today ")"
+              done = 1
+              next
+            }
+            { print }
+          ' CHANGELOG.md > CHANGELOG.tmp
+          mv CHANGELOG.tmp CHANGELOG.md
+          echo "--- CHANGELOG.md diff ---"
+          git --no-pager diff CHANGELOG.md
+          echo "--- end ---"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "release: promote Unreleased to ${TAG}"
+          git push origin main
+
+      - name: Stage release assets
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p release-assets
+          cp fizzle-linux-amd64       "release-assets/fizzle-${TAG}-linux-amd64"
+          cp fizzle-darwin-amd64      "release-assets/fizzle-${TAG}-darwin-amd64"
+          cp fizzle-darwin-arm64      "release-assets/fizzle-${TAG}-darwin-arm64"
+          cp fizzle-windows-amd64.exe "release-assets/fizzle-${TAG}-windows-amd64.exe"
+          cp fizzle.cdx.json          "release-assets/fizzle-${TAG}.cdx.json"
+          cp docs/fizzle-manual.md    "release-assets/fizzle-${TAG}-manual.md"
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+          ls -la
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes-file release-notes.md \
+            release-assets/*

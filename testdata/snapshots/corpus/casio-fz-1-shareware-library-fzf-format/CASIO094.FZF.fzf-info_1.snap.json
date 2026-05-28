@@ -1,0 +1,41 @@
+{
+ "filename": "CASIO094.FZF",
+ "is_split": false,
+ "local_voices": 2,
+ "memory_bytes": 987230,
+ "voice_count": 2,
+ "voices": [
+  {
+   "bank_volume": 0,
+   "duration": 7.174055555555555,
+   "has_loop": true,
+   "index": 1,
+   "key_high": 72,
+   "key_low": 48,
+   "midi_channel": 1,
+   "name": "AIRPLANE",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 60,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 6.537472222222222,
+   "has_loop": true,
+   "index": 2,
+   "key_high": 96,
+   "key_low": 73,
+   "midi_channel": 1,
+   "name": "AUDIENCE",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 84,
+   "vel_high": 127,
+   "vel_low": 1
+  }
+ ]
+}

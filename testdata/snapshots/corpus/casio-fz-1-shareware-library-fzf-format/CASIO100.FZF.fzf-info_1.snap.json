@@ -1,0 +1,73 @@
+{
+ "filename": "CASIO100.FZF",
+ "is_split": false,
+ "local_voices": 4,
+ "memory_bytes": 1047786,
+ "voice_count": 4,
+ "voices": [
+  {
+   "bank_volume": 0,
+   "duration": 3.559888888888889,
+   "has_loop": false,
+   "index": 1,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "INDIAN SUMME",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 72,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 3.2195833333333335,
+   "has_loop": false,
+   "index": 2,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "GLASS BLOWER",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 72,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 3.439111111111111,
+   "has_loop": true,
+   "index": 3,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "RED OCTOBER",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 72,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 4.334,
+   "has_loop": false,
+   "index": 4,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "VENUS PAD",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 72,
+   "vel_high": 127,
+   "vel_low": 1
+  }
+ ]
+}

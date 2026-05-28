@@ -1,0 +1,25 @@
+{
+ "filename": "FULL-DATA-FZ.fzf",
+ "is_split": false,
+ "local_voices": 1,
+ "memory_bytes": 203294,
+ "voice_count": 1,
+ "voices": [
+  {
+   "bank_volume": 0,
+   "duration": 5.647055555555555,
+   "has_loop": false,
+   "index": 1,
+   "key_high": 36,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "PAD",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 1,
+   "root_note": 36,
+   "vel_high": 127,
+   "vel_low": 1
+  }
+ ]
+}

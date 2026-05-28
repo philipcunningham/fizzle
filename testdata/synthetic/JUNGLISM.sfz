@@ -1,0 +1,185 @@
+// Created with Renoise - https://www.renoise.com
+
+<region>
+sample=JUNGLISM Samples/amen 01.wav
+pitch_keycenter=0
+lokey=0 hikey=0
+mutegroup=0
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/amen 02.wav
+pitch_keycenter=1
+lokey=1 hikey=1
+mutegroup=0
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/amen 03.wav
+pitch_keycenter=2
+lokey=2 hikey=2
+mutegroup=0
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/amen 04.wav
+pitch_keycenter=3
+lokey=3 hikey=3
+mutegroup=0
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/amen 05.wav
+pitch_keycenter=4
+lokey=4 hikey=4
+mutegroup=0
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/amen 06.wav
+pitch_keycenter=5
+lokey=5 hikey=9
+mutegroup=0
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/amen 07.wav
+pitch_keycenter=10
+lokey=10 hikey=10
+mutegroup=0
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/amen 08.wav
+pitch_keycenter=11
+lokey=11 hikey=11
+mutegroup=0
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/think 01.wav
+pitch_keycenter=12
+lokey=12 hikey=12
+mutegroup=1
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/think 02.wav
+pitch_keycenter=13
+lokey=13 hikey=13
+mutegroup=1
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/think 03.wav
+pitch_keycenter=14
+lokey=14 hikey=14
+mutegroup=1
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/think 04.wav
+pitch_keycenter=15
+lokey=15 hikey=15
+mutegroup=1
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/think 05.wav
+pitch_keycenter=16
+lokey=16 hikey=16
+mutegroup=1
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/think 06.wav
+pitch_keycenter=17
+lokey=17 hikey=17
+mutegroup=1
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/think 07.wav
+pitch_keycenter=18
+lokey=18 hikey=18
+mutegroup=1
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/think 08.wav
+pitch_keycenter=19
+lokey=19 hikey=19
+mutegroup=1
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/think 09.wav
+pitch_keycenter=23
+lokey=20 hikey=23
+mutegroup=1
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/808.wav
+pitch_keycenter=24
+lokey=24 hikey=35
+mutegroup=2
+loop_mode=ONE_SHOT
+transpose=-7
+
+<region>
+sample=JUNGLISM Samples/reese.wav
+pitch_keycenter=48
+lokey=36 hikey=59
+mutegroup=2
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/pad 1.wav
+lokey=60 hikey=71
+mutegroup=3
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/pad 2.wav
+pitch_keycenter=84
+lokey=72 hikey=83
+mutegroup=3
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/piano.wav
+pitch_keycenter=84
+lokey=84 hikey=95
+mutegroup=5
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/lead 1.wav
+pitch_keycenter=108
+lokey=96 hikey=107
+mutegroup=5
+transpose=-1
+
+<region>
+sample=JUNGLISM Samples/vox.wav
+pitch_keycenter=108
+lokey=108 hikey=117
+mutegroup=5
+loop_mode=ONE_SHOT
+
+<region>
+sample=JUNGLISM Samples/ragga 1.wav
+pitch_keycenter=118
+lokey=118 hikey=118
+mutegroup=6
+loop_mode=ONE_SHOT
+transpose=-2
+
+<region>
+sample=JUNGLISM Samples/ragga 2.wav
+pitch_keycenter=119
+lokey=119 hikey=119
+mutegroup=6
+loop_mode=ONE_SHOT
+transpose=-2

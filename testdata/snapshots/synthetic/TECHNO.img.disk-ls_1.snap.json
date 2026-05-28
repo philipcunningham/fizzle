@@ -1,0 +1,14 @@
+{
+ "entries": [
+  {
+   "index": 1,
+   "name": "FULL-DATA-FZ",
+   "size": 1053696,
+   "type": "Full Dump"
+  }
+ ],
+ "free_bytes": 253952,
+ "label": "Techno Split",
+ "total_bytes": 1308672,
+ "used_percent": 80
+}

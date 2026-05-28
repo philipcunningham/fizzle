@@ -1,0 +1,57 @@
+{
+ "filename": "CASIO039.FZF",
+ "is_split": false,
+ "local_voices": 3,
+ "memory_bytes": 182474,
+ "voice_count": 3,
+ "voices": [
+  {
+   "bank_volume": 0,
+   "duration": 2.534361111111111,
+   "has_loop": false,
+   "index": 1,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "CMI E4",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 64,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 2.534361111111111,
+   "has_loop": false,
+   "index": 2,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "CMI E4.",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 64,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 2.534361111111111,
+   "has_loop": false,
+   "index": 3,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "CMI E4..",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 64,
+   "vel_high": 127,
+   "vel_low": 1
+  }
+ ]
+}

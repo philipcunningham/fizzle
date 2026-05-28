@@ -1,0 +1,41 @@
+{
+ "filename": "CASIO090.FZF",
+ "is_split": false,
+ "local_voices": 2,
+ "memory_bytes": 385094,
+ "voice_count": 2,
+ "voices": [
+  {
+   "bank_volume": 0,
+   "duration": 4.541666666666667,
+   "has_loop": true,
+   "index": 1,
+   "key_high": 0,
+   "key_low": 0,
+   "midi_channel": 1,
+   "name": "GONG",
+   "output": "none",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 0,
+   "vel_high": 0,
+   "vel_low": 0
+  },
+  {
+   "bank_volume": 0,
+   "duration": 0.8068611111111111,
+   "has_loop": false,
+   "index": 2,
+   "key_high": 0,
+   "key_low": 0,
+   "midi_channel": 1,
+   "name": "COWBELL 1",
+   "output": "none",
+   "playback_mode": "normal",
+   "rate_index": 0,
+   "root_note": 0,
+   "vel_high": 0,
+   "vel_low": 0
+  }
+ ]
+}

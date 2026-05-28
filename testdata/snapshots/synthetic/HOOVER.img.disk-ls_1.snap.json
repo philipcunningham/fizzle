@@ -1,0 +1,14 @@
+{
+ "entries": [
+  {
+   "index": 1,
+   "name": "HOOVER",
+   "size": 143360,
+   "type": "Voice"
+  }
+ ],
+ "free_bytes": 1164288,
+ "label": "HOOVER",
+ "total_bytes": 1308672,
+ "used_percent": 11
+}

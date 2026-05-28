@@ -1,0 +1,14 @@
+{
+ "entries": [
+  {
+   "index": 1,
+   "name": "FULL-DATA-FZ",
+   "size": 928768,
+   "type": "Full Dump"
+  }
+ ],
+ "free_bytes": 378880,
+ "label": "Brass Ensemb",
+ "total_bytes": 1308672,
+ "used_percent": 71
+}

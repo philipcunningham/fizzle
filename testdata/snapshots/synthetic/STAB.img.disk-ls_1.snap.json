@@ -1,0 +1,20 @@
+{
+ "entries": [
+  {
+   "index": 1,
+   "name": "STAB",
+   "size": 73728,
+   "type": "Voice"
+  },
+  {
+   "index": 2,
+   "name": "FULL-DATA-FZ",
+   "size": 74752,
+   "type": "Full Dump"
+  }
+ ],
+ "free_bytes": 1158144,
+ "label": "STAB",
+ "total_bytes": 1308672,
+ "used_percent": 11
+}

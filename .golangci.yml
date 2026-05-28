@@ -1,0 +1,46 @@
+version: "2"
+
+run:
+  timeout: 3m
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+linters:
+  enable:
+    - bodyclose
+    - errcheck
+    - errorlint
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nilerr
+    - prealloc
+    - revive
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - wastedassign
+    - exhaustive
+    - goconst
+    - tparallel
+    - dupword
+  settings:
+    errcheck:
+      check-type-assertions: true
+    gosec:
+      excludes:
+        - G104 # unhandled errors (covered by errcheck linter)
+        - G301 # directory permissions (tool creates user directories)
+        - G302 # file permissions (tool creates user files)
+        - G304 # file path from variable (tool reads user-specified paths by design)
+        - G306 # write permissions (tool writes user files)
+
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 5

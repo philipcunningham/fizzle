@@ -1,0 +1,15 @@
+
+Third-party licenses:
+
+{{range .}}Module:  {{.Name}}
+{{- if .Version}}
+Version: {{.Version}}
+{{- end}}
+License: {{.LicenseName}}
+{{- if .LicenseURL}}
+URL:     {{.LicenseURL}}
+{{- end}}
+
+{{.LicenseText}}
+
+{{end}}
