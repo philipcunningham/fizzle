@@ -2,6 +2,8 @@
 
 ## Unreleased (last updated 2026-05-28)
 
+## v0.1.0 (2026-05-28)
+
 - `disk add` recognises Casio FZ-1 expanded-software binaries (`.bin` files starting with the standard 14-byte program preamble) and writes them as Type-5 "Program" directory entries; the on-disk name is derived from the input filename basename (uppercased, truncated to 12 chars)
 - `make demo` builds a Casio FZ-1 scrolling-text demo program: assembles `testdata/assembly/DEMO.asm` with nasm and bakes a loadable `DEMO.img`. `make asm-tools` installs nasm via Homebrew on macOS. See `testdata/assembly/README.md` for details
 - `fzv play` command for voice audio preview; native audio on macOS and Windows via oto/v3 (no external tools), `aplay`/`paplay`/`ffplay` on Linux
