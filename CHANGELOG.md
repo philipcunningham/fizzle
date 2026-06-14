@@ -2,6 +2,8 @@
 
 ## Unreleased (last updated 2026-06-14)
 
+## v0.2.0 (2026-06-14)
+
 - `fizzle studio` is now a workspace-oriented Bubble Tea TUI; the previous tview-based studio has been removed. studio takes a workspace directory (defaulting to the current working directory) and opens files from its Workspace browser; individual files are no longer passed on the command line. See [pkg/studio/README.md](pkg/studio/README.md) for the feature set, key bindings, and testing approach.
 - Expanded the factory-library test corpus with Casio sound disks FL-7 through FL-12 and FL-14 (27 full dumps), completing FL-1 through FL-14 plus FL-A and FL-B. Adds `fzf info` snapshot coverage for all new files and integration assertions exercising multi-disk-sized audio areas, velocity-split kits, and dumps that mix sample rates within a single file.
 
