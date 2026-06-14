@@ -22,9 +22,10 @@ const (
 	fmtID  = "fmt "
 	dataID = "data"
 
-	pcmFormat     = 1
-	monoChannels  = 1
-	bitsPerSample = 16
+	pcmFormat      = 1
+	monoChannels   = 1
+	stereoChannels = 2
+	bitsPerSample  = 16
 
 	smplChunkID         = "smpl"
 	smplHeaderSize      = 36
@@ -83,12 +84,57 @@ var (
 // no loop is defined in the file. MIDIUnityNote is the SMPL chunk's root
 // MIDI note (0..127); zero means "unset" and falls back to middle C (60)
 // when writing, mirroring the legacy default.
+//
+// For stereo input, Samples holds interleaved frames (L0, R0, L1,
+// R1, ...) and Channels reports 2. Mono input populates Samples
+// directly with Channels=1. Callers that want a single channel from
+// a stereo file use ExtractChannel or MixChannels.
 type File struct {
 	SampleRate    uint32
 	Samples       []int16
+	Channels      uint16
 	LoopStart     int
 	LoopEnd       int
 	MIDIUnityNote uint8
+}
+
+// ExtractChannel returns a mono []int16 holding the requested
+// channel (0=left, 1=right) of an interleaved stereo File. For a
+// mono File, Samples is returned unchanged regardless of channel.
+// Out-of-range channel indices return nil.
+func (f *File) ExtractChannel(channel int) []int16 {
+	if f.Channels <= 1 {
+		return f.Samples
+	}
+	if channel < 0 || channel >= int(f.Channels) {
+		return nil
+	}
+	stride := int(f.Channels)
+	out := make([]int16, len(f.Samples)/stride)
+	for i := range out {
+		out[i] = f.Samples[i*stride+channel]
+	}
+	return out
+}
+
+// MixChannels returns a mono []int16 holding the per-frame average
+// of every channel in a stereo File. For mono input Samples is
+// returned unchanged. Average is computed in int32 to avoid
+// overflow.
+func (f *File) MixChannels() []int16 {
+	if f.Channels <= 1 {
+		return f.Samples
+	}
+	stride := int(f.Channels)
+	out := make([]int16, len(f.Samples)/stride)
+	for i := range out {
+		var sum int32
+		for c := 0; c < stride; c++ {
+			sum += int32(f.Samples[i*stride+c])
+		}
+		out[i] = int16(sum / int32(stride)) //nolint:gosec // G115: stride is int(f.Channels) where f.Channels is uint16 (max 65535), well within int32 range.
+	}
+	return out
 }
 
 // Duration returns the duration in seconds.
@@ -100,9 +146,11 @@ func (f *File) Duration() float64 {
 }
 
 // Read decodes a WAV file from r. Supported formats: 16, 24, and 32-bit
-// mono PCM; all are decoded to int16. Returns an error for stereo files or
-// unsupported formats. The reader is limited to 256 MB to prevent unbounded
-// memory allocation on untrusted input.
+// mono OR stereo PCM; all are decoded to int16. For stereo input, the
+// returned File holds interleaved frames in Samples and Channels=2;
+// callers select / mix channels via ExtractChannel / MixChannels.
+// The reader is limited to 256 MB to prevent unbounded memory
+// allocation on untrusted input.
 func Read(r io.Reader) (*File, error) {
 	lr := &io.LimitedReader{R: r, N: limits.MaxRead}
 
@@ -119,6 +167,7 @@ func Read(r io.Reader) (*File, error) {
 
 	var sampleRate uint32
 	var bitsField uint32
+	var channels uint16
 	foundFmt := false
 	var samples []int16
 	loopStart := -1
@@ -160,7 +209,7 @@ func Read(r io.Reader) (*File, error) {
 				return nil, err
 			}
 			var err error
-			sampleRate, bitsField, err = parseFmtChunk(fmtData)
+			sampleRate, bitsField, channels, err = parseFmtChunk(fmtData)
 			if err != nil {
 				return nil, err
 			}
@@ -242,30 +291,31 @@ func Read(r io.Reader) (*File, error) {
 	return &File{
 		SampleRate:    sampleRate,
 		Samples:       samples,
+		Channels:      channels,
 		LoopStart:     loopStart,
 		LoopEnd:       loopEnd,
 		MIDIUnityNote: midiUnityNote,
 	}, nil
 }
 
-func parseFmtChunk(data []byte) (sampleRate uint32, bitsPerSample uint32, err error) {
+func parseFmtChunk(data []byte) (sampleRate uint32, bitsPerSample uint32, channels uint16, err error) {
 	audioFmt := binary.LittleEndian.Uint16(data[0:2])
-	channels := binary.LittleEndian.Uint16(data[2:4])
+	channels = binary.LittleEndian.Uint16(data[2:4])
 	sampleRate = binary.LittleEndian.Uint32(data[4:8])
 	bits := binary.LittleEndian.Uint16(data[14:16])
 	if audioFmt != pcmFormat {
-		return 0, 0, fmt.Errorf("%w: format %d (only PCM supported)", ErrUnsupportedPCM, audioFmt)
+		return 0, 0, 0, fmt.Errorf("%w: format %d (only PCM supported)", ErrUnsupportedPCM, audioFmt)
 	}
-	if channels != monoChannels {
-		return 0, 0, fmt.Errorf("%w: %d (only mono supported)", ErrChannelCount, channels)
+	if channels != monoChannels && channels != stereoChannels {
+		return 0, 0, 0, fmt.Errorf("%w: %d (supported: 1, 2)", ErrChannelCount, channels)
 	}
 	if bits != 16 && bits != 24 && bits != 32 {
-		return 0, 0, fmt.Errorf("%w: %d (supported: 16, 24, 32)", ErrBitDepth, bits)
+		return 0, 0, 0, fmt.Errorf("%w: %d (supported: 16, 24, 32)", ErrBitDepth, bits)
 	}
 	if sampleRate == 0 {
-		return 0, 0, fmt.Errorf("%w: must be non-zero", ErrSampleRate)
+		return 0, 0, 0, fmt.Errorf("%w: must be non-zero", ErrSampleRate)
 	}
-	return sampleRate, uint32(bits), nil
+	return sampleRate, uint32(bits), channels, nil
 }
 
 func parseDataChunk(raw []byte, bitsPerSample uint32) []int16 {
@@ -363,6 +413,16 @@ func Write(w io.Writer, f *File) error {
 	}
 	if len(f.Samples) > maxWAVSamples {
 		return ErrTooManySamples
+	}
+	// Stereo write is intentionally rejected. Read accepts stereo
+	// and exposes ExtractChannel / MixChannels for callers to
+	// reduce to mono; Write writes a mono RIFF header, so passing
+	// a stereo File here would produce a malformed WAV (mono
+	// header with 2x sample data). Callers must explicitly pick
+	// or mix channels before calling Write.
+	if f.Channels >= stereoChannels {
+		return fmt.Errorf("%w: Write does not support stereo (channels=%d); use ExtractChannel or MixChannels first",
+			ErrChannelCount, f.Channels)
 	}
 
 	hasLoop := f.LoopStart >= 0 && f.LoopEnd > f.LoopStart

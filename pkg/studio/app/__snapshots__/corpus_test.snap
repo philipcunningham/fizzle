@@ -1,0 +1,49 @@
+
+[TestCorpusLayoutSnapshot - 1]
+ fizzle studio                                                                                                         <workspace>/Drums.fzf
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
+│ Layout   <workspace>/Drums.fzf   (4 banks, 24 voices)                                                                        │ │ W │
+│                                                                                                                              │ │ P │
+│     bank    name     voices                                                                                                  │ │ L │
+│  ▶  Bank 1  DRUMS 1  (61 voices)                                                                                             │ │ S │
+│     Bank 2  DRUMS 2  (61 voices)                                                                                             │ └───┘
+│     Bank 3  DRUMS 3  (30 voices)                                                                                             │
+│     Bank 4  DRUMS 4  (29 voices)                                                                                             │ Free: 270 KB
+│     Bank 5  (empty)                                                                                                          │
+│     Bank 6  (empty)                                                                                                          │
+│     Bank 7  (empty)                                                                                                          │
+│     Bank 8  (empty)                                                                                                          │
+│                                                                                                                              │
+│ up/down move  •  Enter open  •  r rename  •  f effects  •  Del clear bank  •  SHIFT+down to Sound (after Area)               │
+│                                                                                                                              │
+│ A bank groups up to 64 Areas, each mapping a key and velocity range to a voice. Empty banks fill in on first assignment.     │
+│                                                                                                                              │
+│                                                                                                                              │
+│                                                                                                                              │
+│                                                                                                                              │
+│                                                                                                                              │
+│                                                                                                                              │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+---
+
+[TestTooSmallSnapshot - 1]
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                  Studio requires 140 columns by 30 rows.
+                                                  Current: 139 by 29.
+                                                  Resize the terminal to continue.
+---

@@ -166,27 +166,136 @@ func TestRead32Bit(t *testing.T) {
 	}
 }
 
-func TestReadStereoRejectsWithError(t *testing.T) {
+func TestReadStereoDecodesInterleaved(t *testing.T) {
 	t.Parallel()
+	// Build a 4-frame stereo file: frames (L,R) = (100, 200), (101, 201),
+	// (102, 202), (103, 203). Data chunk is 4 frames × 2 channels × 2 bytes = 16 bytes.
+	var buf bytes.Buffer
+	buf.WriteString("RIFF")
+	binary.Write(&buf, binary.LittleEndian, uint32(36+16)) //nolint:errcheck
+	buf.WriteString("WAVE")
+	buf.WriteString("fmt ")
+	binary.Write(&buf, binary.LittleEndian, uint32(16))        //nolint:errcheck
+	binary.Write(&buf, binary.LittleEndian, uint16(1))         //nolint:errcheck // PCM
+	binary.Write(&buf, binary.LittleEndian, uint16(2))         //nolint:errcheck // stereo
+	binary.Write(&buf, binary.LittleEndian, uint32(44100))     //nolint:errcheck
+	binary.Write(&buf, binary.LittleEndian, uint32(44100*2*2)) //nolint:errcheck // byte rate
+	binary.Write(&buf, binary.LittleEndian, uint16(2*2))       //nolint:errcheck // block align (stereo, 16-bit)
+	binary.Write(&buf, binary.LittleEndian, uint16(16))        //nolint:errcheck // bits per sample
+	buf.WriteString("data")
+	binary.Write(&buf, binary.LittleEndian, uint32(16)) //nolint:errcheck
+	for _, v := range []int16{100, 200, 101, 201, 102, 202, 103, 203} {
+		binary.Write(&buf, binary.LittleEndian, v) //nolint:errcheck
+	}
+
+	got, err := Read(&buf)
+	if err != nil {
+		t.Fatalf("Read stereo: %v", err)
+	}
+	if got.Channels != 2 {
+		t.Errorf("Channels = %d, want 2", got.Channels)
+	}
+	wantInterleaved := []int16{100, 200, 101, 201, 102, 202, 103, 203}
+	if len(got.Samples) != len(wantInterleaved) {
+		t.Fatalf("Samples len = %d, want %d", len(got.Samples), len(wantInterleaved))
+	}
+	for i, v := range wantInterleaved {
+		if got.Samples[i] != v {
+			t.Errorf("Samples[%d] = %d, want %d", i, got.Samples[i], v)
+		}
+	}
+	// ExtractChannel(0) to left.
+	left := got.ExtractChannel(0)
+	wantL := []int16{100, 101, 102, 103}
+	for i, v := range wantL {
+		if left[i] != v {
+			t.Errorf("Left[%d] = %d, want %d", i, left[i], v)
+		}
+	}
+	// ExtractChannel(1) to right.
+	right := got.ExtractChannel(1)
+	wantR := []int16{200, 201, 202, 203}
+	for i, v := range wantR {
+		if right[i] != v {
+			t.Errorf("Right[%d] = %d, want %d", i, right[i], v)
+		}
+	}
+	// MixChannels to per-frame average.
+	mix := got.MixChannels()
+	wantMix := []int16{150, 151, 152, 153}
+	for i, v := range wantMix {
+		if mix[i] != v {
+			t.Errorf("Mix[%d] = %d, want %d", i, mix[i], v)
+		}
+	}
+}
+
+// TestWrite_RejectsStereo pins the Read/Write asymmetry: Read
+// accepts stereo and exposes ExtractChannel / MixChannels; Write
+// emits a mono RIFF header and so MUST refuse a stereo File to
+// avoid producing a malformed file (mono header + 2× sample data).
+// Callers reduce to mono via ExtractChannel/MixChannels first.
+func TestWrite_RejectsStereo(t *testing.T) {
+	t.Parallel()
+	stereo := &File{
+		SampleRate: 44100,
+		Channels:   2,
+		Samples:    []int16{100, 200, 101, 201},
+	}
+	var buf bytes.Buffer
+	err := Write(&buf, stereo)
+	if err == nil {
+		t.Fatal("Write(stereo) returned nil; expected ErrChannelCount")
+	}
+	if !errors.Is(err, ErrChannelCount) {
+		t.Errorf("Write(stereo) error = %v; expected wraps ErrChannelCount", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("Write(stereo) wrote %d bytes; expected 0", buf.Len())
+	}
+
+	// A File with Channels=0 (legacy default-zero from existing
+	// callers) or Channels=1 still writes successfully.
+	mono := &File{
+		SampleRate: 44100,
+		Samples:    []int16{100, 200, 101, 201},
+	}
+	var monoBuf bytes.Buffer
+	if err := Write(&monoBuf, mono); err != nil {
+		t.Fatalf("Write(channels=0): %v", err)
+	}
+	monoExplicit := &File{
+		SampleRate: 44100,
+		Channels:   1,
+		Samples:    []int16{100, 200, 101, 201},
+	}
+	monoBuf.Reset()
+	if err := Write(&monoBuf, monoExplicit); err != nil {
+		t.Errorf("Write(channels=1): %v", err)
+	}
+}
+
+func TestReadInvalidChannelCount(t *testing.T) {
+	t.Parallel()
+	// 5.1 surround (6 channels); still rejected.
 	var buf bytes.Buffer
 	buf.WriteString("RIFF")
 	binary.Write(&buf, binary.LittleEndian, uint32(36+4)) //nolint:errcheck
 	buf.WriteString("WAVE")
 	buf.WriteString("fmt ")
-	binary.Write(&buf, binary.LittleEndian, uint32(16))      //nolint:errcheck
-	binary.Write(&buf, binary.LittleEndian, uint16(1))       //nolint:errcheck
-	binary.Write(&buf, binary.LittleEndian, uint16(2))       //nolint:errcheck // stereo
-	binary.Write(&buf, binary.LittleEndian, uint32(44100))   //nolint:errcheck
-	binary.Write(&buf, binary.LittleEndian, uint32(44100*4)) //nolint:errcheck
-	binary.Write(&buf, binary.LittleEndian, uint16(4))       //nolint:errcheck
-	binary.Write(&buf, binary.LittleEndian, uint16(16))      //nolint:errcheck
+	binary.Write(&buf, binary.LittleEndian, uint32(16))       //nolint:errcheck
+	binary.Write(&buf, binary.LittleEndian, uint16(1))        //nolint:errcheck
+	binary.Write(&buf, binary.LittleEndian, uint16(6))        //nolint:errcheck // 6 channels
+	binary.Write(&buf, binary.LittleEndian, uint32(44100))    //nolint:errcheck
+	binary.Write(&buf, binary.LittleEndian, uint32(44100*12)) //nolint:errcheck
+	binary.Write(&buf, binary.LittleEndian, uint16(12))       //nolint:errcheck
+	binary.Write(&buf, binary.LittleEndian, uint16(16))       //nolint:errcheck
 	buf.WriteString("data")
 	binary.Write(&buf, binary.LittleEndian, uint32(4)) //nolint:errcheck
 	binary.Write(&buf, binary.LittleEndian, int32(0))  //nolint:errcheck
 
-	_, err := Read(&buf)
-	if err == nil {
-		t.Error("expected error for stereo WAV")
+	if _, err := Read(&buf); err == nil {
+		t.Error("expected error for 6-channel WAV")
 	}
 }
 

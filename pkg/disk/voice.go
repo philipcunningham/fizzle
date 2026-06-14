@@ -294,7 +294,10 @@ const (
 	// factory disks and produces the loudest reliable playback observed.
 	DefaultBankVolume  = 0
 	BankVoiceNumOffset = 0x202
-	EffectDataSize     = 24
+	// VPEntrySize is the size of a single vp[] entry in a bank
+	// sector (a 16-bit little-endian voice-slot index).
+	VPEntrySize    = 2
+	EffectDataSize = 24
 
 	// Effect block field offsets (relative to BankEffectOffset). See spec
 	// section 2-3 (struct effectdata). Every field is one byte. The
@@ -773,4 +776,22 @@ func VoiceAreaSectors(nvoice int) int {
 // VoiceSlotOffset returns the byte offset of voice voiceIndex within a bank starting at bankStart.
 func VoiceSlotOffset(bankStart int, voiceIndex int) int {
 	return bankStart + (voiceIndex/VoicesPerSector)*SectorSize + (voiceIndex%VoicesPerSector)*VoicePackSize
+}
+
+// BankVPLookup returns the voice-slot index that bank bankIdx's vp[]
+// maps to area areaIdx, and whether the lookup is in bounds. The vp[]
+// table is the canonical mapping from a bank's per-Area key-split
+// slots to the voice-area slot indices (spec §2-2). Linear cumulative
+// indexing (sum of prior banks' bstep) is NOT equivalent: vp[] entries
+// may repeat across banks, banks may reorder voices, and a multi-bank
+// dump may have voices that no bank's vp[] references.
+//
+// data is the full FZF byte slice. Returns (0, false) when bankIdx or
+// areaIdx points outside the readable bytes.
+func BankVPLookup(data []byte, bankIdx, areaIdx int) (int, bool) {
+	off := bankIdx*SectorSize + BankVoiceNumOffset + VPEntrySize*areaIdx
+	if off+VPEntrySize > len(data) {
+		return 0, false
+	}
+	return int(binary.LittleEndian.Uint16(data[off : off+VPEntrySize])), true
 }

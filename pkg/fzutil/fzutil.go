@@ -284,6 +284,14 @@ func CountAllVoices(data []byte) int {
 // start of a raw FZF byte slice. Real hardware full dumps can contain up to 8
 // banks; each bank sector has a non-zero voice count and a printable name at
 // offset 0x282. Returns at least 1.
+//
+// Note: a sector with bstep=0 is NOT counted as a bank, even with a printable
+// name. Single-voice FZFs (e.g. emitted by `fizzle voice import`) seed the
+// voice-area sector with the voice name written at offset 0x282 alongside
+// bstep=0, so requiring bstep>0 here keeps the bank/voice-area boundary
+// unambiguous. Callers that produce empty trailing banks (studio's
+// auto-grow on rename or assign-skip) must compact them at save time;
+// otherwise the trailing banks vanish on reload.
 func CountBankSectors(data []byte) int {
 	n := 1
 	for i := 1; i < disk.MaxBanks; i++ {
@@ -600,6 +608,58 @@ func ResolveVoiceTargets(data []byte, hdr *FZFHeader, voiceNames []string, allVo
 		}
 	}
 	return targets, storedNames, nil
+}
+
+// IsMultiDiskFirstHalf reports whether data looks like disk 1 of a
+// 2-disk full dump split: bank 0's BankTotalWaveOffset claims more
+// wave sectors than are present locally, AND at least one plausibly-
+// named voice's wavst points past the local audio area. Both
+// conditions matter because the BankTotalWaveOffset marker is
+// frequently garbage in real-world dumps; the corroborating voice
+// check prevents false positives. Mirrors the heuristic in fzfinfo
+// without pulling in the renderer it doesn't need.
+//
+// Callers use this to gate destructive operations (e.g. studio's
+// growBanksTo refuses on disk 1 of a split because BankCount is
+// shared with disk 2; growing one would desync the pair).
+func IsMultiDiskFirstHalf(data []byte) bool {
+	if len(data) < disk.SectorSize+8 {
+		return false
+	}
+	hdr, err := ParseFZFHeader(data)
+	if err != nil {
+		return false
+	}
+	voiceSectors := disk.VoiceAreaSectors(hdr.NVoice)
+	voiceAreaEnd := hdr.VoiceAreaStart + voiceSectors*disk.SectorSize
+	if len(data) < voiceAreaEnd {
+		return false
+	}
+	bank := data[:disk.SectorSize]
+	totalWaveMarker := int(binary.LittleEndian.Uint32(
+		bank[disk.BankTotalWaveOffset : disk.BankTotalWaveOffset+4]))
+	localAudioBytes := len(data) - voiceAreaEnd
+	localWaveSectors := localAudioBytes / disk.SectorSize
+	if totalWaveMarker <= 0 || totalWaveMarker <= localWaveSectors {
+		return false
+	}
+	voiceArea := data[hdr.VoiceAreaStart:voiceAreaEnd]
+	for i := 0; i < hdr.NVoice; i++ {
+		voff := disk.VoiceSlotOffset(0, i)
+		if voff+disk.VoiceHeaderUsed > len(voiceArea) {
+			continue
+		}
+		slot := voiceArea[voff : voff+disk.VoiceHeaderUsed]
+		if !disk.IsPlausibleVoiceSlot(slot) {
+			continue
+		}
+		wavst := binary.LittleEndian.Uint32(
+			slot[disk.VoiceWaveStartOffset : disk.VoiceWaveStartOffset+4])
+		if int(wavst)*disk.BytesPerSample >= localAudioBytes {
+			return true
+		}
+	}
+	return false
 }
 
 // voiceNotFoundError builds a "voice not found" error that lists the

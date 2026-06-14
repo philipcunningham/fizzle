@@ -5,28 +5,36 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"github.com/philipcunningham/fizzle/pkg/studio/app"
+	studio "github.com/philipcunningham/fizzle/pkg/studio/app"
 )
 
-// studioCmd registers the `fizzle studio` subcommand. The studio is a
-// document-centric editor: one .fzf or .img per session.
+// studioCmd registers the `fizzle studio` subcommand. studio is a
+// workspace-oriented Bubble Tea TUI for editing FZ-1 / FZ-10M /
+// FZ-20M sound material. DIRECTORY is optional and points at the
+// workspace root containing the .img / .fzf / .fzv / .wav files
+// to browse. Omitting DIRECTORY uses the current working
+// directory. Individual files are opened from the Workspace
+// browser inside the TUI, not from the CLI.
 func studioCmd() *cli.Command {
 	return &cli.Command{
 		Name:      "studio",
-		Usage:     "edit a Casio FZ-1 full dump or disk image",
-		ArgsUsage: "FILE",
-		UsageText: `Launch the terminal UI for editing an FZ full dump or
-voice file. FILE is a standalone .fzf or an .img disk image; for
-.img the full-dump entry is extracted into memory automatically.
+		Usage:     "interactive TUI for editing FZ-1 sound material",
+		ArgsUsage: "[DIRECTORY]",
+		UsageText: `Launch the studio TUI. DIRECTORY is optional and
+points at the workspace folder containing .img / .fzf / .fzv /
+.wav files. Files inside the workspace are opened from the
+Workspace browser inside the TUI. Omitting DIRECTORY uses the
+current working directory.
 
-Example:
-   fizzle studio sounds/CASIO001.fzf
-   fizzle studio disk-images/01.img`,
+Examples:
+   fizzle studio                  # use cwd as workspace
+   fizzle studio ~/fz-library     # use a directory as workspace`,
 		Action: func(_ context.Context, cmd *cli.Command) error {
-			if cmd.Args().Len() != 1 {
-				return cli.Exit("usage: fizzle studio FILE", exitUsage)
+			directory := ""
+			if cmd.Args().Len() >= 1 {
+				directory = cmd.Args().Get(0)
 			}
-			return app.Run(cmd.Args().Get(0))
+			return studio.Run(directory)
 		},
 	}
 }

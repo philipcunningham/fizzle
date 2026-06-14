@@ -396,6 +396,67 @@ func TestParseFZFHeader(t *testing.T) {
 	}
 }
 
+// TestIsMultiDiskFirstHalf pins the shared helper studio uses to
+// gate destructive operations against multi-disk dumps. A standalone
+// single-disk FZF must return false; a synthesised disk-1-like
+// payload (BankTotalWaveOffset claiming more audio than is present,
+// plus a plausible voice with wavst past local audio) must return
+// true.
+func TestIsMultiDiskFirstHalf(t *testing.T) {
+	t.Parallel()
+
+	t.Run("single-disk returns false", func(t *testing.T) {
+		t.Parallel()
+		// One bank, three plausible voices, audio area large enough
+		// for the claimed wavst, BankTotalWaveOffset zero.
+		const bstep = 3
+		voiceAreaSectors := disk.VoiceAreaSectors(bstep)
+		data := make([]byte, disk.SectorSize+voiceAreaSectors*disk.SectorSize+4*disk.SectorSize)
+		binary.LittleEndian.PutUint16(data[disk.BankVoiceCountOffset:], uint16(bstep))
+		copy(data[disk.BankNameOffset:], "OnceDisk    ")
+		for i := 0; i < bstep; i++ {
+			off := disk.VoiceSlotOffset(disk.SectorSize, i)
+			binary.LittleEndian.PutUint16(data[off+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
+		}
+		if IsMultiDiskFirstHalf(data) {
+			t.Errorf("standalone FZF flagged as multi-disk first half")
+		}
+	})
+
+	t.Run("disk-1-like returns true", func(t *testing.T) {
+		t.Parallel()
+		const bstep = 1
+		voiceAreaSectors := disk.VoiceAreaSectors(bstep)
+		// Local audio: 2 sectors.
+		localAudioSectors := 2
+		data := make([]byte, disk.SectorSize+voiceAreaSectors*disk.SectorSize+localAudioSectors*disk.SectorSize)
+		binary.LittleEndian.PutUint16(data[disk.BankVoiceCountOffset:], uint16(bstep))
+		copy(data[disk.BankNameOffset:], "Disk1       ")
+		// Claim 100 wave sectors total.
+		binary.LittleEndian.PutUint32(data[disk.BankTotalWaveOffset:], 100)
+		// Slot 0: plausible voice with name, valid playback mode, and
+		// wavst pointing way past local audio. IsPlausibleVoiceSlot
+		// also requires waved >= wavst and envelope-stage fields in
+		// range.
+		off := disk.VoiceSlotOffset(disk.SectorSize, 0)
+		binary.LittleEndian.PutUint16(data[off+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
+		copy(data[off+disk.VoiceNameOffset:], "Voice1      ")
+		// wavst in samples = 1024 sectors past local audio.
+		const wavstSamples = 524288
+		binary.LittleEndian.PutUint32(data[off+disk.VoiceWaveStartOffset:], wavstSamples)
+		binary.LittleEndian.PutUint32(data[off+disk.VoiceWaveEndOffset:], wavstSamples+1024)
+		data[off+disk.VoiceSampOffset] = 0
+		// Envelope stages: any value < EnvelopeStages (=8).
+		data[off+disk.VoiceDCASusOffset] = 0
+		data[off+disk.VoiceDCAEndOffset] = 0
+		data[off+disk.VoiceDCFSusOffset] = 0
+		data[off+disk.VoiceDCFEndOffset] = 0
+		if !IsMultiDiskFirstHalf(data) {
+			t.Errorf("synthetic disk-1 payload not flagged as multi-disk first half")
+		}
+	})
+}
+
 // TestParseFZFHeaderBStepLargerThanVoices is a regression test for the
 // bstep/vn conflation bug. Real-world Drums-style FZFs (e.g. CASIO005,
 // CASIO019, several factory drum kits) declare a bank-level bstep that
