@@ -97,15 +97,15 @@ Long conversions respect Ctrl+C: cancel a running `sfz convert` and the command 
 ## Studio: the interactive TUI
 
 ```sh
-fizzle studio JUNGLE.img
-fizzle studio CASIO001.fzf
+fizzle studio                    # use the current directory as workspace
+fizzle studio ~/fz-library       # use a directory as workspace
 ```
 
-`fizzle studio` opens a document-centric terminal editor. Pass it a single full dump (`.fzf`) or a disk image (`.img`). For an image, fizzle extracts the full-dump entry into memory automatically. The studio loads the file into a three-zone layout: header, upper voice/bank browser, lower Voice Details / Loop Details / Global Effect detail panels.
+`fizzle studio` is a workspace-oriented terminal editor for FZ-1 / FZ-10M / FZ-20M sound material. It takes a directory of `.img` / `.fzf` / `.fzv` / `.wav` files and opens them from the in-TUI Workspace browser. Omitting the argument uses the current working directory.
 
-Numbers `1..9` switch upper tabs (1 = Voices, 2..N = banks). `Alt+1` / `Alt+2` / `Alt+3` switch the lower detail panel. `Tab` advances field-by-field within the active pane; `Shift+Tab` jumps section-to-section across both panes. `Space` auditions the focused voice. `Ctrl+S` saves, `Ctrl+Z` / `Ctrl+Y` undo and redo, `Ctrl+H` shows the full keymap, `Ctrl+Q` quits. Every spec parameter is editable; saving writes the file back atomically (and patches the disk-image companion when present).
+studio organises around four spaces: Workspace (file browser), Pool (a session-level basket of voices), Layout (the in-focus container's banks and Areas), and Sound (the currently selected voice, edited per-cell). `SHIFT+up` / `SHIFT+down` move between spaces. `Ctrl+S` saves, `Ctrl+Z` / `Ctrl+Y` undo and redo, `Ctrl+D` duplicates an Area for velocity multi-switching, `Ctrl+C` / `Ctrl+V` copy / paste between compatible cells, `Space` auditions, `?` opens contextual help, `Ctrl+Q` quits. studio includes autosave with crash recovery: dirty containers get a `.bak` snapshot next to the source file every 30 seconds, deleted on a successful save and offered for recovery if a crash occurs.
 
-When fizzle's CLI gets in your way (lots of voices to compare, lots of parameters to tweak), studio is usually faster.
+For the full feature set, key bindings, user workflows, and testing approach see [pkg/studio/README.md](pkg/studio/README.md).
 
 ---
 

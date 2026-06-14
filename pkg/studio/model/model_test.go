@@ -1,289 +1,186 @@
 package model
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-
-	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
-	"github.com/philipcunningham/fizzle/pkg/voiceedit"
 )
 
-const (
-	testVoiceAlpha = "ALPHA"
-	testVoiceBravo = "BRAVO"
-)
-
-func newTestFZF(t *testing.T, names []string) string {
-	t.Helper()
-	_, p := fzfbuilder.MakeTestFZF(t, names)
-	return p
-}
-
-func TestNewLoadsFZF(t *testing.T) {
-	t.Parallel()
-	p := newTestFZF(t, []string{testVoiceAlpha, testVoiceBravo})
-
-	m, err := New(p)
+func TestApplySingleByteEdit(t *testing.T) {
+	m := FromBytes("", []byte{0x00, 0x01, 0x02, 0x03})
+	err := m.Apply(Patch{Offset: 1, Old: []byte{0x01}, New: []byte{0xAA}})
 	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	if m.Path() != p {
-		t.Errorf("Path = %q, want %q", m.Path(), p)
-	}
-	hdr := m.Header()
-	if hdr == nil {
-		t.Fatalf("Header is nil")
-	}
-	if hdr.NVoice != 2 {
-		t.Errorf("NVoice = %d, want 2", hdr.NVoice)
-	}
-	if m.IsDirty() {
-		t.Errorf("fresh model should not be dirty")
-	}
-	if got, want := len(m.Bytes()), 2*disk.SectorSize+disk.SectorSize; got < want {
-		t.Errorf("Bytes length %d looks too short", got)
-	}
-}
-
-func TestNewRejectsMissingFile(t *testing.T) {
-	t.Parallel()
-	_, err := New(filepath.Join(t.TempDir(), "nope.fzf"))
-	if err == nil {
-		t.Fatalf("New: want error for missing file")
-	}
-}
-
-func TestApplyPatchMutatesBytesAndDirties(t *testing.T) {
-	t.Parallel()
-	p := newTestFZF(t, []string{testVoiceAlpha})
-	m, err := New(p)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	// Bank 0 name: 12 bytes at BankNameOffset.
-	patches, err := buildBankNamePatchAt(0, "NEW-BANK")
-	if err != nil {
-		t.Fatalf("buildBankNamePatchAt: %v", err)
-	}
-	for _, pp := range patches {
-		if err := m.Apply(pp); err != nil {
-			t.Fatalf("Apply: %v", err)
-		}
-	}
-	if !m.IsDirty() {
-		t.Errorf("model should be dirty after Apply")
-	}
-	if got := m.BankName(0); got != "NEW-BANK" {
-		t.Errorf("BankName(0) = %q, want NEW-BANK", got)
-	}
-}
-
-func TestApplyOutOfBoundsErrors(t *testing.T) {
-	t.Parallel()
-	p := newTestFZF(t, []string{testVoiceAlpha})
-	m, err := New(p)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	err = m.Apply(voiceedit.Patch{Offset: 1 << 30, Size: 1, Value: 0})
-	if err == nil {
-		t.Errorf("Apply out-of-bounds: want error")
-	}
-}
-
-func TestUndoRedoRoundtrip(t *testing.T) {
-	t.Parallel()
-	p := newTestFZF(t, []string{testVoiceAlpha})
-	m, err := New(p)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	before := append([]byte(nil), m.Bytes()...)
-
-	// Apply a single 1-byte patch we can verify by hand.
-	off := disk.BankNameOffset
-	origByte := before[off]
-	newByte := origByte ^ 0x01
-	if err := m.Apply(voiceedit.Patch{Offset: off, Size: 1, Value: uint16(newByte)}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if m.Bytes()[off] != newByte {
-		t.Errorf("byte not applied: got %x want %x", m.Bytes()[off], newByte)
+	want := []byte{0x00, 0xAA, 0x02, 0x03}
+	if !bytes.Equal(m.Bytes(), want) {
+		t.Errorf("Bytes() = %v, want %v", m.Bytes(), want)
+	}
+	if !m.Dirty() {
+		t.Errorf("Dirty() = false, want true")
 	}
 	if !m.CanUndo() || m.CanRedo() {
 		t.Errorf("CanUndo=%v CanRedo=%v, want true,false", m.CanUndo(), m.CanRedo())
 	}
+}
 
+func TestApplyRejectsPreImageMismatch(t *testing.T) {
+	m := FromBytes("", []byte{0x00, 0x01, 0x02})
+	err := m.Apply(Patch{Offset: 1, Old: []byte{0xFF}, New: []byte{0xAA}})
+	if !errors.Is(err, ErrPatchPreImageMismatch) {
+		t.Errorf("Apply error = %v, want ErrPatchPreImageMismatch", err)
+	}
+	if m.Dirty() {
+		t.Errorf("Dirty() = true after rejected patch, want false")
+	}
+}
+
+func TestApplyRejectsOutOfBounds(t *testing.T) {
+	m := FromBytes("", []byte{0x00, 0x01, 0x02})
+	err := m.Apply(Patch{Offset: 5, Old: []byte{0x00}, New: []byte{0xAA}})
+	if !errors.Is(err, ErrPatchOutOfBounds) {
+		t.Errorf("Apply error = %v, want ErrPatchOutOfBounds", err)
+	}
+}
+
+func TestApplyRejectsLenMismatch(t *testing.T) {
+	m := FromBytes("", []byte{0x00, 0x01, 0x02})
+	err := m.Apply(Patch{Offset: 0, Old: []byte{0x00}, New: []byte{0xAA, 0xBB}})
+	if !errors.Is(err, ErrPatchLenMismatch) {
+		t.Errorf("Apply error = %v, want ErrPatchLenMismatch", err)
+	}
+}
+
+func TestApplyBatchAtomicity(t *testing.T) {
+	m := FromBytes("", []byte{0x00, 0x01, 0x02, 0x03})
+	// Second patch is invalid (bad pre-image). Whole batch must fail
+	// without mutating the model.
+	err := m.ApplyBatch([]Patch{
+		{Offset: 0, Old: []byte{0x00}, New: []byte{0xAA}},
+		{Offset: 2, Old: []byte{0xFF}, New: []byte{0xBB}},
+	})
+	if !errors.Is(err, ErrPatchPreImageMismatch) {
+		t.Errorf("ApplyBatch error = %v, want ErrPatchPreImageMismatch", err)
+	}
+	want := []byte{0x00, 0x01, 0x02, 0x03}
+	if !bytes.Equal(m.Bytes(), want) {
+		t.Errorf("Bytes() = %v, want unchanged %v", m.Bytes(), want)
+	}
+}
+
+func TestUndoRedoRoundtrip(t *testing.T) {
+	m := FromBytes("", []byte{0x00, 0x01, 0x02})
+	if err := m.Apply(Patch{Offset: 0, Old: []byte{0x00}, New: []byte{0xAA}}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if err := m.Apply(Patch{Offset: 1, Old: []byte{0x01}, New: []byte{0xBB}}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	wantAfterApply := []byte{0xAA, 0xBB, 0x02}
+	if !bytes.Equal(m.Bytes(), wantAfterApply) {
+		t.Fatalf("after two applies = %v, want %v", m.Bytes(), wantAfterApply)
+	}
 	if err := m.Undo(); err != nil {
 		t.Fatalf("Undo: %v", err)
 	}
-	if m.Bytes()[off] != origByte {
-		t.Errorf("byte not restored: got %x want %x", m.Bytes()[off], origByte)
+	wantAfterUndo := []byte{0xAA, 0x01, 0x02}
+	if !bytes.Equal(m.Bytes(), wantAfterUndo) {
+		t.Fatalf("after undo = %v, want %v", m.Bytes(), wantAfterUndo)
 	}
-	if m.CanUndo() || !m.CanRedo() {
-		t.Errorf("after Undo CanUndo=%v CanRedo=%v, want false,true", m.CanUndo(), m.CanRedo())
-	}
-	if m.IsDirty() {
-		t.Errorf("after Undo back to baseline, IsDirty should be false")
-	}
-
 	if err := m.Redo(); err != nil {
 		t.Fatalf("Redo: %v", err)
 	}
-	if m.Bytes()[off] != newByte {
-		t.Errorf("byte not re-applied: got %x want %x", m.Bytes()[off], newByte)
-	}
-	if !m.IsDirty() {
-		t.Errorf("after Redo, IsDirty should be true")
+	if !bytes.Equal(m.Bytes(), wantAfterApply) {
+		t.Fatalf("after redo = %v, want %v", m.Bytes(), wantAfterApply)
 	}
 }
 
-func TestApplyClearsRedoStack(t *testing.T) {
-	t.Parallel()
-	p := newTestFZF(t, []string{testVoiceAlpha})
-	m, _ := New(p)
-	off := disk.BankNameOffset
-	_ = m.Apply(voiceedit.Patch{Offset: off, Size: 1, Value: 0xAA})
+func TestApplyClearsRedo(t *testing.T) {
+	m := FromBytes("", []byte{0x00, 0x01})
+	_ = m.Apply(Patch{Offset: 0, Old: []byte{0x00}, New: []byte{0xAA}})
 	_ = m.Undo()
 	if !m.CanRedo() {
-		t.Fatalf("CanRedo after Undo: want true")
+		t.Fatalf("CanRedo = false after Undo, want true")
 	}
-	_ = m.Apply(voiceedit.Patch{Offset: off, Size: 1, Value: 0xBB})
+	_ = m.Apply(Patch{Offset: 1, Old: []byte{0x01}, New: []byte{0xBB}})
 	if m.CanRedo() {
-		t.Errorf("CanRedo after fresh Apply: want false")
+		t.Errorf("CanRedo = true after new Apply, want false")
 	}
 }
 
-func TestSaveFZFClearsUndoAndPersists(t *testing.T) {
-	t.Parallel()
-	p := newTestFZF(t, []string{testVoiceAlpha})
-	m, err := New(p)
+func TestBatchedUndoIsSingleStep(t *testing.T) {
+	m := FromBytes("", []byte{0x00, 0x01, 0x02})
+	err := m.ApplyBatch([]Patch{
+		{Offset: 0, Old: []byte{0x00}, New: []byte{0xAA}},
+		{Offset: 1, Old: []byte{0x01}, New: []byte{0xBB}},
+	})
 	if err != nil {
-		t.Fatalf("New: %v", err)
+		t.Fatalf("ApplyBatch: %v", err)
 	}
-	off := disk.BankNameOffset
-	_ = m.Apply(voiceedit.Patch{Offset: off, Size: 1, Value: 'Z'})
-	if !m.IsDirty() {
-		t.Fatalf("IsDirty: want true before save")
-	}
-
-	if err := m.Save(); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-
-	if m.IsDirty() {
-		t.Errorf("IsDirty: want false after save")
+	if err := m.Undo(); err != nil {
+		t.Fatalf("Undo: %v", err)
 	}
 	if m.CanUndo() {
-		t.Errorf("undo stack should be cleared after save")
+		t.Errorf("CanUndo = true after single Undo of batch, want false")
 	}
+	want := []byte{0x00, 0x01, 0x02}
+	if !bytes.Equal(m.Bytes(), want) {
+		t.Errorf("after batch+undo = %v, want %v", m.Bytes(), want)
+	}
+}
 
-	on, err := os.ReadFile(p)
+func TestSaveClearsStacksAndDirty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.img")
+	m := FromBytes(path, []byte{0x00, 0x01, 0x02})
+	_ = m.Apply(Patch{Offset: 0, Old: []byte{0x00}, New: []byte{0xAA}})
+	if !m.Dirty() {
+		t.Fatalf("expected dirty before save")
+	}
+	if err := m.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if m.Dirty() || m.CanUndo() || m.CanRedo() {
+		t.Errorf("after save: dirty=%v canUndo=%v canRedo=%v, want all false",
+			m.Dirty(), m.CanUndo(), m.CanRedo())
+	}
+	written, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read back: %v", err)
+		t.Fatalf("ReadFile: %v", err)
 	}
-	if on[off] != 'Z' {
-		t.Errorf("on-disk byte not persisted: got 0x%02x want 'Z'", on[off])
-	}
-}
-
-func TestSubscribeFiresOnApply(t *testing.T) {
-	t.Parallel()
-	p := newTestFZF(t, []string{testVoiceAlpha})
-	m, _ := New(p)
-
-	var calls int
-	unsub := m.Subscribe(func() { calls++ })
-	defer unsub()
-
-	off := disk.BankNameOffset
-	_ = m.Apply(voiceedit.Patch{Offset: off, Size: 1, Value: 'X'})
-	if calls != 1 {
-		t.Errorf("Subscribe: got %d calls after Apply, want 1", calls)
-	}
-	_ = m.Undo()
-	if calls != 2 {
-		t.Errorf("Subscribe: got %d calls after Undo, want 2", calls)
-	}
-	unsub()
-	_ = m.Apply(voiceedit.Patch{Offset: off, Size: 1, Value: 'Y'})
-	if calls != 2 {
-		t.Errorf("Subscribe: got %d calls after unsubscribe, want still 2", calls)
+	want := []byte{0xAA, 0x01, 0x02}
+	if !bytes.Equal(written, want) {
+		t.Errorf("file = %v, want %v", written, want)
 	}
 }
 
-func TestSetBankName(t *testing.T) {
-	t.Parallel()
-	p := newTestFZF(t, []string{testVoiceAlpha})
-	m, _ := New(p)
-	if err := m.SetBankName(0, "MYBANK"); err != nil {
-		t.Fatalf("SetBankName: %v", err)
+func TestSaveAsUpdatesPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.img")
+	m := FromBytes("", []byte{0x00, 0x01, 0x02})
+	if got := m.Path(); got != "" {
+		t.Fatalf("Path() = %q, want empty", got)
 	}
-	got := m.BankName(0)
-	if got != "MYBANK" {
-		t.Errorf("BankName(0) = %q, want MYBANK", got)
+	if err := m.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
 	}
-	// Undo restores the previous name.
-	prev := m.BankName(0)
-	_ = m.Undo()
-	if m.BankName(0) == prev {
-		t.Errorf("Undo did not restore bank name")
+	if got := m.Path(); got != path {
+		t.Errorf("Path() after Save = %q, want %q", got, path)
 	}
 }
 
-func TestSetBankNameRejectsTooLong(t *testing.T) {
-	t.Parallel()
-	p := newTestFZF(t, []string{testVoiceAlpha})
-	m, _ := New(p)
-	tooLong := strings.Repeat("A", disk.LabelSize+1)
-	if err := m.SetBankName(0, tooLong); err == nil {
-		t.Errorf("SetBankName(%q) want error, got nil", tooLong)
+func TestUndoOnEmptyStackIsError(t *testing.T) {
+	m := FromBytes("", []byte{0x00})
+	if err := m.Undo(); !errors.Is(err, ErrNothingToUndo) {
+		t.Errorf("Undo on empty stack = %v, want ErrNothingToUndo", err)
 	}
 }
 
-func TestVoiceAccessor(t *testing.T) {
-	t.Parallel()
-	p := newTestFZF(t, []string{testVoiceAlpha, testVoiceBravo})
-	m, _ := New(p)
-	v, err := m.Voice(1)
-	if err != nil {
-		t.Fatalf("Voice(1): %v", err)
-	}
-	if v.Name != testVoiceBravo {
-		t.Errorf("Voice(1).Name = %q, want BRAVO", v.Name)
+func TestRedoOnEmptyStackIsError(t *testing.T) {
+	m := FromBytes("", []byte{0x00})
+	if err := m.Redo(); !errors.Is(err, ErrNothingToRedo) {
+		t.Errorf("Redo on empty stack = %v, want ErrNothingToRedo", err)
 	}
 }
-
-func TestVoiceAccessorOutOfRange(t *testing.T) {
-	t.Parallel()
-	p := newTestFZF(t, []string{testVoiceAlpha})
-	m, _ := New(p)
-	if _, err := m.Voice(99); err == nil {
-		t.Errorf("Voice(99): want error")
-	}
-	if _, err := m.Voice(-1); err == nil {
-		t.Errorf("Voice(-1): want error")
-	}
-}
-
-// buildBankNamePatchAt returns a patch that writes the 12-byte padded name
-// into the bank-name field of bankIdx. Mirrors what SetBankName builds
-// internally; used to drive Apply tests without depending on the method.
-func buildBankNamePatchAt(bankIdx int, name string) ([]voiceedit.Patch, error) {
-	if len(name) > disk.LabelSize {
-		return nil, errLongName
-	}
-	padded := disk.PadLabel(strings.ToUpper(name))
-	off := bankIdx*disk.SectorSize + disk.BankNameOffset
-	return []voiceedit.Patch{{Offset: off, Bytes: padded[:]}}, nil
-}
-
-var errLongName = &nameError{}
-
-type nameError struct{}
-
-func (e *nameError) Error() string { return "name too long" }

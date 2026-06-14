@@ -1,0 +1,42 @@
+# 2026/06/14 14:18:14.375238 [TestAreaEditor_InvariantsHoldAcrossKeyStream] [rapid] draw seedKeyLow: 0
+# 2026/06/14 14:18:14.375254 [TestAreaEditor_InvariantsHoldAcrossKeyStream] [rapid] draw seedKeyHigh: 0
+# 2026/06/14 14:18:14.375255 [TestAreaEditor_InvariantsHoldAcrossKeyStream] [rapid] draw seedKeyOrig: 0
+# 2026/06/14 14:18:14.375255 [TestAreaEditor_InvariantsHoldAcrossKeyStream] [rapid] draw seedVelLow: 1
+# 2026/06/14 14:18:14.375256 [TestAreaEditor_InvariantsHoldAcrossKeyStream] [rapid] draw seedVelHigh: 0
+# 2026/06/14 14:18:14.375256 [TestAreaEditor_InvariantsHoldAcrossKeyStream] [rapid] draw seedVolume: 0
+# 2026/06/14 14:18:14.375256 [TestAreaEditor_InvariantsHoldAcrossKeyStream] [rapid] draw seedAudioOut: 0
+# 2026/06/14 14:18:14.375257 [TestAreaEditor_InvariantsHoldAcrossKeyStream] [rapid] draw seedMIDIChan: 0
+# 2026/06/14 14:18:14.375257 [TestAreaEditor_InvariantsHoldAcrossKeyStream] [rapid] draw numKeys: 1
+# 2026/06/14 14:18:14.375259 [TestAreaEditor_InvariantsHoldAcrossKeyStream] [rapid] draw key: "tab"
+# 2026/06/14 14:18:14.375260 [TestAreaEditor_InvariantsHoldAcrossKeyStream] step 0 after "tab": velLow=1 > velHigh=0
+# 
+v0.4.8#6564520709928629401
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0

@@ -282,9 +282,9 @@ CI should fail with a clear message rather than hang or crash.
 **Steps:**
 
 ```sh
-fizzle studio testdata/synthetic/HOOVER.img < /dev/null 2>&1 | head -5
+fizzle studio testdata/synthetic < /dev/null 2>&1 | head -5
 echo "exit=$?"
-fizzle studio testdata/synthetic/HOOVER.img < /dev/null > /tmp/out 2>&1
+fizzle studio testdata/synthetic < /dev/null > /tmp/out 2>&1
 echo "exit=$?"
 ```
 
@@ -831,54 +831,63 @@ Copy `env-test.img` to the sampler.
 
 ## HW-07: Studio edit round-trip
 
-**Automated counterparts:** the model + widget tests under
-`pkg/studio/{model,widgets/*}/widget_test.go` cover field commit,
-undo/redo, focus cycling, and bank-site fan-out at the model layer.
-Hardware QA verifies the edits are audible on a real FZ-1 / FZ-10M.
+**Automated counterparts:** the journey + round-trip tests under
+`pkg/studio/app/journey_test.go`, `pkg/studio/spaces/sound/roundtrip_test.go`,
+and the property tests under `pkg/studio/{model,spaces,widgets}/*property_test.go`
+cover field commit, undo/redo, focus navigation, byte-level edit
+persistence, and patch validity at the model layer. Hardware QA
+verifies the edits are audible on a real FZ-1 / FZ-10M.
 
-**Scenario:** Open an image in the studio, edit one voice across DCA /
-DCF / LFO / global effect, rename a bank, save, reload, and verify the
-edits persist and play correctly on hardware.
+**Scenario:** Open a workspace in studio, edit one voice across DCA /
+DCF / LFO / per-bank effects, rename a bank, save, reload, and verify
+the edits persist and play correctly on hardware.
 
 **Setup:**
 ```sh
-cp testdata/synthetic/HOOVER.img /tmp/qa-studio.img
-fizzle studio /tmp/qa-studio.img
+mkdir -p /tmp/qa-studio && cp testdata/synthetic/HOOVER.img /tmp/qa-studio/
+fizzle studio /tmp/qa-studio
 ```
 
 **Edits to perform inside the studio:**
 
-1. Navigation: press `2` to switch to a bank tab; press `Alt+1` / `Alt+2`
-   / `Alt+3` to cycle the lower detail panels; press `Tab` to walk
-   forward through fields; press `Shift+Tab` to cycle panes.
-2. Voice Details: pick any voice and change Cutoff, Resonance, DCA
-   Level KF, and LFO Rate to distinct non-default values.
-3. Bank tab: rename the bank to something with mixed case (e.g.
-   `Test Edit`). Confirm the displayed value preserves case after Tab
-   out (no auto-upper-case).
-4. Bank tab: for the voice you edited in step 2, change its area
-   Volume and MIDI Channel.
-5. Loop Details: select that voice. Change Sustain loop to a different
-   stage.
-6. Global Effect: change Bend Range to a distinct value.
+1. Navigation: in the Workspace browser, select `HOOVER.img` and press
+   `Enter` to open it (studio transitions into Layout). Press `Enter`
+   on Bank 1 to drill into the area list. Press `Enter` on an Area
+   (or `SHIFT+down`) to drill into Sound. Inside Sound, arrows move
+   between cells of the DCA / DCF / LFO / Sample / Loops grid;
+   `SHIFT+up` returns to Layout.
+2. Sound, DCF row: change Cutoff, Resonance, and Vel res to distinct
+   non-default values. Sound, DCA row: change Level KF (cell `[lvlKF/VF]`)
+   to a non-default value. Sound, LFO row: change Rate (cell
+   `[shape]`) to a non-default value.
+3. Layout, bank list: press `r` (or `F2`) on Bank 1 to rename. Type
+   a name with mixed case (e.g. `Test Edit`) and confirm Tab
+   preserves case after commit (no auto-upper-case).
+4. Layout, area list: press `a` on the Area you edited in step 2 to
+   open the per-Area editor; change Volume and MIDI Channel.
+5. Sound, Loops row: select that voice's loop cell. Walk Sustain
+   loop to a different stage via the `[ptrs]` cell.
+6. Layout, bank list: press `f` on Bank 1 to open the per-bank
+   effects editor; change Bend Depth to a distinct value.
 7. Optional: press `Ctrl+Z` once and `Ctrl+Y` once to confirm
    undo/redo round-trips.
-8. Press `Ctrl+S`, confirm the save modal. The status line should
-   report the save; the header's `[modified]` indicator should clear.
-9. Quit with `Ctrl+Q` and re-launch on the same file.
+8. Press `Ctrl+S`. The status line should report the save; the
+   modified indicator should clear.
+9. Quit with `Ctrl+Q`. Re-launch with `fizzle studio /tmp/qa-studio`
+   and re-open `HOOVER.img` from the Workspace browser.
 
 **Pass criteria (on-screen, after reload):**
 
 - Every edit from steps 2 to 6 is visible and unchanged in the studio
   after the relaunch.
 - Bank name preserves the typed mixed case.
-- The `[modified]` indicator is absent on relaunch.
+- The modified indicator is absent on relaunch.
 
 **Pass criteria (on hardware):**
 
-- Copy `/tmp/qa-studio.img` to the floppy / Gotek and load on the
+- Copy `/tmp/qa-studio/HOOVER.img` to the floppy / Gotek and load on the
   FZ-1. The edited voice plays with the new filter, envelope, LFO,
-  and global-effect characteristics. The bank shows the renamed
+  and effects characteristics. The bank shows the renamed
   name on the front panel.
 - F14 sanity: the voice's key range as reported by the FZ-1 matches
   what was edited (this is the bank-site fan-out for key-range edits;
@@ -892,8 +901,8 @@ fizzle studio /tmp/qa-studio.img
   storage offset.
 - Field reverts after save then relaunch: indicates the model's
   Apply path is not committing through to the saved bytes.
-- Save modal does not appear, or the studio hangs on Ctrl+S: file
-  lock contention or modal stack regression.
+- Studio hangs on Ctrl+S: file lock contention or modal stack
+  regression.
 
 ---
 

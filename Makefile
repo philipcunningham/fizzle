@@ -77,7 +77,7 @@ fuzz-seed:
 check: fmt vet lint test integration-test fuzz-seed
 
 coverage:
-	go test -race -coverprofile=coverage.out ./...
+	go test -race -coverpkg=./... -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 
 benchmark:

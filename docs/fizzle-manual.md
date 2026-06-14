@@ -577,43 +577,54 @@ Long conversions respect Ctrl+C. The command exits cleanly without leaving a hal
 ## The interactive studio
 
 ```
-fizzle studio FILE
+fizzle studio [DIRECTORY]
 ```
 
-A document-centric terminal editor for a single full dump (`.fzf`) or disk image (`.img`). The studio loads `FILE` into memory and lets you edit every voice and bank parameter in place; saving writes back atomically (and patches the disk-image companion when the source is a multi-disk image pair).
+A workspace-oriented terminal editor for FZ-1 / FZ-10M / FZ-20M sound material. DIRECTORY points at the workspace folder containing `.img` / `.fzf` / `.fzv` / `.wav` files. Omitting DIRECTORY uses the current working directory. Individual files are opened from the Workspace browser inside the TUI.
 
-### Layout
+```sh
+fizzle studio                  # workspace = cwd
+fizzle studio ~/fz-library     # workspace = a directory
+```
 
-Three horizontal zones:
+### The four spaces
 
-- **Header.** Filename, type, voice and bank counts, PCM and total size, plus a `[modified]` indicator when there are unsaved edits.
-- **Upper section.** Tabbed: `Voices` (a read-only table of every voice slot) plus one tab per bank (`Bank 1`, `Bank 2`, etc.). Inside a bank tab: bank-name field at the top, area list in the middle, area-detail editor at the bottom.
-- **Lower section.** Tabbed across three detail panels:
-  - `Voice Details`: DCA envelope, DCF envelope, LFO, plus a footer with voice number, name, and playback mode
-  - `Loop Details`: sustain and release loop selectors, the 8-stage loop table, and a per-stage editor
-  - `Global Effect`: pitch-bend depth and the 3×7 controller-routing matrix (mod wheel / foot pedal / aftertouch × LFO and DCA/DCF/Q targets)
+studio organises around the user's task, not the FZ's data hierarchy. Four spaces are stacked vertically, navigated with `SHIFT+up` / `SHIFT+down` (or Emacs `Ctrl-P` / `Ctrl-N`):
 
-The lower section "follows focus": whichever voice is highlighted in the upper section is what the detail panels bind to.
+- **Workspace.** File browser over a directory of `.img` / `.fzf` / `.fzv` / `.wav` files. Each file is dispatched by extension: `.img` and `.fzf` open as the in-focus container, `.fzv` adds to the Pool, `.wav` adds to the Pool (with a stereo channel prompt when needed).
+- **Pool.** A session-level basket of voices accumulated from the Workspace, the in-focus container's banks, or external samples. Voices persist across container switches.
+- **Layout.** The in-focus container's banks and Areas. Up to 8 banks × 64 Areas each. `Ctrl+D` duplicates an Area for velocity multi-switching; `a` opens the per-Area editor (key range, velocity range, root note, audio output, volume, MIDI channel); `f` opens the per-bank effects editor (bend depth + 3×7 controller modulation matrix).
+- **Sound.** Voice-scoped editing of the currently selected Area. A 2D grid of subsystems by cells: DCA, DCF, LFO, Sample, Loops. The leftmost cell of each row is a braille-rendered visualisation (envelope curve, LFO waveform, sample waveform); subsequent cells are field editors.
 
-### Keymap
+### Key bindings
 
 | Key | Action |
 |-----|--------|
-| `1`..`9` | Switch upper tab (`1` = Voices, `2` = Bank 1, …) |
-| `Alt+1` / `Alt+2` / `Alt+3` | Switch lower tab (Voice Details / Loop Details / Global Effect) |
-| `Tab` | Next field within the current pane |
-| `Shift+Tab` | Cycle panes (DCA, DCF, LFO, footer, upper pane, then back to DCA) |
+| `SHIFT+up` / `SHIFT+down` | Move between spaces |
+| Arrow keys | Cursor navigation within a space |
+| `Enter` | Drill into the focused item |
 | `Space` | Audition the focused voice (second press stops) |
+| `Tab` / `Shift+Tab` | Move focus between fields in the current cell |
 | `Ctrl+S` | Save changes to disk |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
-| `Ctrl+I` | File-info overlay (aggregates, rates, free-slot count) |
-| `Ctrl+H` | Keyboard shortcut overlay |
+| `Ctrl+C` / `Ctrl+V` | Copy / paste between compatible cells |
+| `Ctrl+D` | Duplicate the focused Area in Layout |
+| `Ctrl+E` / `c` | Extract the focused Area's voice into the Pool |
+| `i` | Import a Pool voice into the selected Area |
+| `m` | Move (two-press swap) Areas within a bank |
+| `a` | Edit the focused Area (key range, velocity, root, output, volume, MIDI channel) |
+| `f` | Edit the focused bank's effects (bend + modulation matrix) |
+| `r` / `F2` | Rename the focused name field |
+| `Delete` | Destructive action on the focused item (always confirms) |
+| `?` | Contextual help |
 | `Ctrl+Q` | Quit (prompts if there are unsaved changes) |
 | `Esc` | Dismiss the topmost modal |
 
-Every editable field shows its valid range in its label (`Cutoff (0-127)`, `Level KF (-15..+15)`, etc.). Validation is live: characters that would push the value out of range are silently refused. Tab or Enter commits the field; Escape reverts. A mouse click into a different field also commits the field you're leaving, so a click-then-Ctrl+S doesn't drop the value you just typed.
+### Autosave and crash recovery
 
-Display ranges match the FZ-10M front panel: envelope rates and stop levels are `0-99`, KF/RS fields are `-15..+15`. The studio converts to the underlying byte automatically.
+While a container is dirty, studio writes a `{name}.bak` snapshot next to the source file every 30 seconds. A successful save deletes the snapshot. On open, if a `.bak` exists that's newer than its named container, studio offers Recover (load the snapshot, mark dirty) or Discard (delete the `.bak`).
+
+For the full specification, including the per-cell field layout, the snapshot-test discipline, and the user-journey contracts, see [`pkg/studio/README.md`](../pkg/studio/README.md).
 
 ---
 
