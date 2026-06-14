@@ -9,7 +9,7 @@ the result, and asserts byte equality.
 
 | Directory     | Source fixtures              | Tests                                                                 |
 |---------------|------------------------------|-----------------------------------------------------------------------|
-| `corpus/`     | `testdata/corpus/`           | `fzf info` / `fzv info` per file (227 snapshots).                     |
+| `corpus/`     | `testdata/corpus/`           | `fzf info` / `fzv info` per file (254 snapshots).                     |
 | `synthetic/`  | `testdata/synthetic/`        | `disk ls` per image, `fzf info`/`fzv info` per disk entry, `sfz` parse of JUNGLISM.sfz. |
 
 Subdirectories under each mirror the source fixture's path. A snapshot's

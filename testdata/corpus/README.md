@@ -7,7 +7,7 @@ https://zine.r-massive.com/casio-fz-sampler-archive/.
 
 | Directory                                    | Contents                                                   |
 |----------------------------------------------|------------------------------------------------------------|
-| `casio-fz-1-factory-library/`                | Official Casio factory disks (FL-1 through FL-13, plus FL-A and FL-B). |
+| `casio-fz-1-factory-library/`                | Official Casio factory disks (FL-1 through FL-14, plus FL-A and FL-B). |
 | `casio-fz-1-shareware-library-fzf-format/`   | Shareware archive, CASIO001..CASIO142.                     |
 | `casio-fz1-soundwaves/`                      | Casio Soundwaves Library, organised by instrument family.  |
 

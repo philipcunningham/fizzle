@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased (last updated 2026-05-28)
+## Unreleased (last updated 2026-06-14)
+
+- Expanded the factory-library test corpus with Casio sound disks FL-7 through FL-12 and FL-14 (27 full dumps), completing FL-1 through FL-14 plus FL-A and FL-B. Adds `fzf info` snapshot coverage for all new files and integration assertions exercising multi-disk-sized audio areas, velocity-split kits, and dumps that mix sample rates within a single file.
 
 ## v0.1.0 (2026-05-28)
 
