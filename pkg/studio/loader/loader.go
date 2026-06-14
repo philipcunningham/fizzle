@@ -302,19 +302,20 @@ func loadIMGVoice(path string, img *disk.Image, entry *disk.DirEntry) (*model.Mo
 }
 
 // extractFileBytes walks the DIS extent list and concatenates the
-// referenced sector ranges into a single byte slice. Mirrors the
-// logic in pkg/diskget but writes to memory rather than a file.
+// referenced sector ranges into a single byte slice. Each extent is
+// (startSector, endSector) with endSector inclusive, matching the
+// validation in disk.DecodeDisSector.
 func extractFileBytes(img *disk.Image, dis disk.DisSector, disSectorLoc int) ([]byte, error) {
 	total := dis.PayloadSize()
 	out := make([]byte, 0, total)
 	for _, ext := range dis.Extents {
 		start := int(ext[0])
-		end := start + int(ext[1])
+		end := int(ext[1])
 		// Skip the DIS sector itself when it falls in the first extent.
-		if start <= disSectorLoc && disSectorLoc < end {
+		if start <= disSectorLoc && disSectorLoc <= end {
 			start = disSectorLoc + 1
 		}
-		for s := start; s < end; s++ {
+		for s := start; s <= end; s++ {
 			ref, err := img.SectorRef(s)
 			if err != nil {
 				return nil, err
