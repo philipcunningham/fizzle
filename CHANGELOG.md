@@ -4,6 +4,8 @@
 
 ## v0.2.1 (2026-06-14)
 
+- Fix multi-disk handling in studio.
+
 ## v0.2.0 (2026-06-14)
 
 - `fizzle studio` is now a workspace-oriented Bubble Tea TUI; the previous tview-based studio has been removed. studio takes a workspace directory (defaulting to the current working directory) and opens files from its Workspace browser; individual files are no longer passed on the command line. See [pkg/studio/README.md](pkg/studio/README.md) for the feature set, key bindings, and testing approach.
