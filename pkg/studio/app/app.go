@@ -1922,6 +1922,12 @@ func (a App) handleAudition() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 	data := a.containerModel.Bytes()
+	if fzutil.IsMultiDiskFirstHalf(data) {
+		a.setStatus(status.Warning,
+			"Audition unavailable: this is part of a 2-disk full dump; "+
+				"voice audio is split across both disks")
+		return a, nil
+	}
 	voiceAreaStart := a.containerInfo.BankCount * disk.SectorSize
 	// Refuse audition when the Area is outside the bank's bstep:
 	// without this guard, vp[areaIdx] reads as 0, slot 0 holds Bank
