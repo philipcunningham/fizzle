@@ -61,7 +61,7 @@ func cellFields(r row, col, voiceOff int) []field {
 // unsignedByteAt builds an unsigned 0..max byte field at the given
 // (voiceOff + fieldOff) byte location.
 //
-//nolint:unparam // lo is kept symmetric with uint16At/uint32At for callsite uniformity, even though all current callers pass 0
+//nolint:unparam // lo is kept symmetric with uint16At for callsite uniformity, even though all current callers pass 0
 func unsignedByteAt(label string, voiceOff, fieldOff, lo, hi int) field {
 	abs := voiceOff + fieldOff
 	return field{
@@ -161,40 +161,6 @@ func uint16At(label string, voiceOff, fieldOff, lo, hi int) field {
 			old := make([]byte, 2)
 			copy(old, data[abs:abs+2])
 			if newBuf[0] == old[0] && newBuf[1] == old[1] {
-				return nil
-			}
-			return []model.Patch{{
-				Offset: abs,
-				Old:    old,
-				New:    newBuf[:],
-			}}
-		},
-	}
-}
-
-// uint32At builds a little-endian uint32 field at the given location.
-// Kept as a parallel to uint16At for future voice-header fields that
-// are 32-bit unsigned; the existing 32-bit cells (wave/loop bounds)
-// have their own bounded constructors above.
-//
-//nolint:unused // reserved as the parallel of uint16At for future 32-bit unsigned fields
-func uint32At(label string, voiceOff, fieldOff, lo, hi int) field {
-	abs := voiceOff + fieldOff
-	return field{
-		label: label,
-		kind:  fieldUnsigned,
-		min:   lo, max: hi,
-		read: func(data []byte) int {
-			return int(binary.LittleEndian.Uint32(data[abs:]))
-		},
-		patch: func(data []byte, v int) []model.Patch {
-			v = clampInt(v, lo, hi)
-			var newBuf [4]byte
-			binary.LittleEndian.PutUint32(newBuf[:], uint32(v)) //nolint:gosec // G115: v clamped to lo..hi (caller passes uint32-bounded hi)
-			old := make([]byte, 4)
-			copy(old, data[abs:abs+4])
-			if newBuf[0] == old[0] && newBuf[1] == old[1] &&
-				newBuf[2] == old[2] && newBuf[3] == old[3] {
 				return nil
 			}
 			return []model.Patch{{
@@ -518,17 +484,12 @@ func envelopeStageFields(voiceOff, stage, susFO, endFO, rateBaseFO, stopBaseFO i
 			kind:  fieldUnsigned,
 			min:   0, max: 99,
 			read: func(data []byte) int {
-				mag := int(data[rateAbs] & 0x7F)
-				return (mag * 100) >> 7
+				return disk.RateByteToDisplay(data[rateAbs])
 			},
 			patch: func(data []byte, v int) []model.Patch {
-				v = clampInt(v, 0, 99)
-				mag := uint8((v*128 + 99) / 100) //nolint:gosec // G115: v clamped to 0..99, result fits in 0..128 then capped at 127 below
-				if mag > 127 {
-					mag = 127
-				}
 				existing := data[rateAbs]
-				newByte := (existing & 0x80) | mag
+				// Preserve the direction sign bit; replace the magnitude.
+				newByte := (existing & disk.RateSignBit) | disk.RateDisplayToByte(clampInt(v, 0, 99))
 				if newByte == existing {
 					return nil
 				}
@@ -544,23 +505,10 @@ func envelopeStageFields(voiceOff, stage, susFO, endFO, rateBaseFO, stopBaseFO i
 			kind:  fieldUnsigned,
 			min:   0, max: 99,
 			read: func(data []byte) int {
-				b := data[stopAbs]
-				if b == 0 {
-					return 0
-				}
-				return (int(b)*99 + 254) / 255
+				return disk.StopByteToDisplay(data[stopAbs])
 			},
 			patch: func(data []byte, v int) []model.Patch {
-				v = clampInt(v, 0, 99)
-				var b uint8
-				switch {
-				case v <= 0:
-					b = 0
-				case v >= 99:
-					b = 255
-				default:
-					b = uint8(255*(v-1)/99 + 1)
-				}
+				b := disk.StopDisplayToByte(clampInt(v, 0, 99))
 				existing := data[stopAbs]
 				if b == existing {
 					return nil

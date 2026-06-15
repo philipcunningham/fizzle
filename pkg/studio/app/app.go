@@ -26,6 +26,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/studio/audio"
 	"github.com/philipcunningham/fizzle/pkg/studio/clock"
+	"github.com/philipcunningham/fizzle/pkg/studio/container"
 	"github.com/philipcunningham/fizzle/pkg/studio/loader"
 	"github.com/philipcunningham/fizzle/pkg/studio/model"
 	"github.com/philipcunningham/fizzle/pkg/studio/nav"
@@ -641,20 +642,22 @@ func (a App) writeContainerAsImage(target string) error {
 // survives. diskformat.Format rejects empty / non-printable-ASCII
 // labels so we sanitise instead of letting the user's filename leak
 // into the disk label field unchecked.
+// defaultDiskLabel is the fallback disk label when a filename yields no
+// usable FZ-name characters.
+const defaultDiskLabel = "FZ-DISK"
+
 func sanitizeImageLabel(basename string) string {
 	stem := strings.TrimSuffix(basename, filepath.Ext(basename))
 	var b strings.Builder
 	for i := 0; i < len(stem) && b.Len() < disk.LabelSize; i++ {
-		ch := stem[i]
-		switch {
-		case ch >= 'a' && ch <= 'z':
-			b.WriteByte(ch - 32)
-		case ch >= 'A' && ch <= 'Z', ch >= '0' && ch <= '9', ch == ' ', ch == '-':
-			b.WriteByte(ch)
+		// Same FZ-name char rule as inline rename (upper-case, keep
+		// A-Z/0-9/space/hyphen, drop the rest).
+		if c := normaliseRenameKey(stem[i]); c != 0 {
+			b.WriteByte(c)
 		}
 	}
 	if b.Len() == 0 {
-		return "FZ-DISK"
+		return defaultDiskLabel
 	}
 	return b.String()
 }
@@ -988,38 +991,9 @@ func (a App) swapAreasInBank(bankIdx, srcArea, tgtArea int) App {
 		a.setStatus(status.Warning, "Swap: bank sector out of bounds")
 		return a
 	}
-	// Per-Area byte fields: one byte each, indexed by area.
-	byteFields := []int{
-		disk.BankKeyHighOffset,
-		disk.BankKeyLowOffset,
-		disk.BankVelHighOffset,
-		disk.BankVelLowOffset,
-		disk.BankKeyCentOffset,
-		disk.BankAudioOutOffset,
-		disk.BankVolumeOffset,
-	}
-	patches := []model.Patch{}
-	for _, fieldBase := range byteFields {
-		srcOff := base + fieldBase + srcArea
-		tgtOff := base + fieldBase + tgtArea
-		srcOld := []byte{data[srcOff]}
-		tgtOld := []byte{data[tgtOff]}
-		patches = append(patches,
-			model.Patch{Offset: srcOff, Old: srcOld, New: []byte{tgtOld[0]}},
-			model.Patch{Offset: tgtOff, Old: tgtOld, New: []byte{srcOld[0]}},
-		)
-	}
-	// vp[] is a 2-byte little-endian field per area.
-	srcVPOff := base + disk.BankVoiceNumOffset + disk.VPEntrySize*srcArea
-	tgtVPOff := base + disk.BankVoiceNumOffset + disk.VPEntrySize*tgtArea
-	srcVP := make([]byte, disk.VPEntrySize)
-	tgtVP := make([]byte, disk.VPEntrySize)
-	copy(srcVP, data[srcVPOff:srcVPOff+disk.VPEntrySize])
-	copy(tgtVP, data[tgtVPOff:tgtVPOff+disk.VPEntrySize])
-	patches = append(patches,
-		model.Patch{Offset: srcVPOff, Old: append([]byte(nil), srcVP...), New: append([]byte(nil), tgtVP...)},
-		model.Patch{Offset: tgtVPOff, Old: append([]byte(nil), tgtVP...), New: append([]byte(nil), srcVP...)},
-	)
+	patches := container.SwapAreaPatches(data, container.SwapAreaParams{
+		Base: base, SrcArea: srcArea, TgtArea: tgtArea,
+	})
 	if err := a.containerModel.ApplyBatch(patches); err != nil {
 		a.setStatus(status.Error, fmt.Sprintf("Swap failed: %v", err))
 		return a
@@ -1413,25 +1387,12 @@ func (a App) growBanksTo(targetCount int) (App, bool) {
 		return a, false
 	}
 
-	growSectors := targetCount - a.containerInfo.BankCount
-	growBytes := growSectors * disk.SectorSize
 	insertAt := a.containerInfo.BankCount * disk.SectorSize
 	if insertAt > len(data) {
 		a.setStatus(status.Error, "Grow: bank insertion point past buffer end")
 		return a, false
 	}
-
-	newData := make([]byte, len(data)+growBytes)
-	copy(newData[0:insertAt], data[0:insertAt])
-	// growBytes of zero from make(); seed each new bank's name field
-	// with spaces so it matches the NewUntitled shape.
-	for b := 0; b < growSectors; b++ {
-		base := insertAt + b*disk.SectorSize
-		for i := 0; i < disk.VoiceNameFieldSize; i++ {
-			newData[base+disk.BankNameOffset+i] = ' '
-		}
-	}
-	copy(newData[insertAt+growBytes:], data[insertAt:])
+	newData, growBytes := container.GrowBanks(data, a.containerInfo.BankCount, targetCount)
 	a.containerModel.Replace(newData)
 
 	a.containerInfo.BankCount = targetCount
@@ -1689,104 +1650,11 @@ func bankHasUserName(data []byte, base int) bool {
 // compaction handles the most common "delete the last assignment"
 // case, which is what bites file-size hygiene most.
 func (a App) compactVoiceArea() App {
-	data := a.containerModel.Bytes()
-	bankCount := a.containerInfo.BankCount
-	voiceAreaStart := bankCount * disk.SectorSize
-	audioStart := a.containerInfo.AudioAreaStart
-	if audioStart <= voiceAreaStart || audioStart > len(data) {
+	newData, newAudioStart, changed := container.CompactVoiceArea(
+		a.containerModel.Bytes(), a.containerInfo.BankCount, a.containerInfo.AudioAreaStart)
+	if !changed {
 		return a
 	}
-
-	// Find the highest live voice slot referenced by any bank's vp[].
-	maxLive := -1
-	for b := 0; b < bankCount; b++ {
-		base := b * disk.SectorSize
-		bstepOff := base + disk.BankVoiceCountOffset
-		if bstepOff+2 > len(data) {
-			break
-		}
-		bstep := int(binary.LittleEndian.Uint16(data[bstepOff : bstepOff+2]))
-		for i := 0; i < bstep; i++ {
-			vpOff := base + disk.BankVoiceNumOffset + i*2
-			if vpOff+2 > len(data) {
-				break
-			}
-			vp := binary.LittleEndian.Uint16(data[vpOff : vpOff+2])
-			if int(vp) > maxLive {
-				maxLive = int(vp)
-			}
-		}
-	}
-
-	currentVoiceSectors := (audioStart - voiceAreaStart) / disk.SectorSize
-	if currentVoiceSectors <= 0 {
-		return a
-	}
-	requiredVoiceSectors := 1
-	if maxLive >= 0 {
-		requiredVoiceSectors = disk.VoiceAreaSectors(maxLive + 1)
-	}
-	if requiredVoiceSectors < 1 {
-		requiredVoiceSectors = 1
-	}
-
-	// Find the highest live sample referenced by any live voice's
-	// wave/gen/loop pointers. This anchors the audio-area truncation.
-	maxSample := int64(-1)
-	if maxLive >= 0 {
-		for slot := 0; slot <= maxLive; slot++ {
-			off := disk.VoiceSlotOffset(voiceAreaStart, slot)
-			if off+disk.VoiceHeaderUsed > len(data) {
-				break
-			}
-			for _, fieldOff := range []int{
-				disk.VoiceWaveEndOffset,
-				disk.VoiceGenEndOffset,
-			} {
-				p := int64(binary.LittleEndian.Uint32(data[off+fieldOff:]))
-				if p > maxSample {
-					maxSample = p
-				}
-			}
-			for i := 0; i < 8; i++ {
-				rawEd := binary.LittleEndian.Uint32(data[off+disk.VoiceLoopEd0Offset+i*4:])
-				addr := int64(disk.LoopEndAddress(rawEd))
-				if addr > maxSample {
-					maxSample = addr
-				}
-			}
-		}
-	}
-
-	voiceShrink := (currentVoiceSectors - requiredVoiceSectors) * disk.SectorSize
-	if voiceShrink < 0 {
-		voiceShrink = 0
-	}
-
-	currentAudioBytes := len(data) - audioStart
-	requiredAudioBytes := 0
-	if maxSample >= 0 {
-		requiredAudioBytes = int(maxSample+1) * disk.BytesPerSample
-	}
-	if requiredAudioBytes > currentAudioBytes {
-		requiredAudioBytes = currentAudioBytes
-	}
-	audioShrink := currentAudioBytes - requiredAudioBytes
-	if audioShrink < 0 {
-		audioShrink = 0
-	}
-
-	if voiceShrink == 0 && audioShrink == 0 {
-		return a
-	}
-
-	newAudioStart := audioStart - voiceShrink
-	newTotal := voiceAreaStart + requiredVoiceSectors*disk.SectorSize + requiredAudioBytes
-	newData := make([]byte, newTotal)
-	copy(newData[:voiceAreaStart], data[:voiceAreaStart])
-	copy(newData[voiceAreaStart:newAudioStart],
-		data[voiceAreaStart:voiceAreaStart+requiredVoiceSectors*disk.SectorSize])
-	copy(newData[newAudioStart:], data[audioStart:audioStart+requiredAudioBytes])
 	a.containerModel.Replace(newData)
 	a.containerInfo.AudioAreaStart = newAudioStart
 	a.containerInfo.TotalBytes = int64(len(newData))
@@ -1822,48 +1690,15 @@ func (a App) compactEmptyBanks() App {
 	if a.containerModel == nil {
 		return a
 	}
-	data := a.containerModel.Bytes()
-	keep := make([]int, 0, a.containerInfo.BankCount)
-	for b := 0; b < a.containerInfo.BankCount; b++ {
-		base := b * disk.SectorSize
-		if base+disk.BankVoiceCountOffset+2 > len(data) {
-			break
-		}
-		bstep := int(binary.LittleEndian.Uint16(
-			data[base+disk.BankVoiceCountOffset : base+disk.BankVoiceCountOffset+2]))
-		if bstep > 0 {
-			keep = append(keep, b)
-		}
-	}
-	// Keep at least one bank: an entirely-empty FZF is still a
-	// legitimate "untitled new disk" state, which the loader handles
-	// via its NewUntitled fallback. Pick bank 0 as the placeholder so
-	// the user's existing Bank 0 (which may carry a name even with
-	// bstep=0 from a fresh NewUntitled) survives.
-	if len(keep) == 0 {
-		keep = []int{0}
-	}
-	if len(keep) == a.containerInfo.BankCount {
+	newData, newBankCount, newAudioStart, changed := container.CompactEmptyBanks(
+		a.containerModel.Bytes(), a.containerInfo.BankCount, a.containerInfo.AudioAreaStart)
+	if !changed {
 		return a
 	}
-
-	newBankCount := len(keep)
-	voiceAreaStart := a.containerInfo.BankCount * disk.SectorSize
-	newSize := newBankCount*disk.SectorSize + (len(data) - voiceAreaStart)
-	newData := make([]byte, newSize)
-	// Write kept bank sectors in their original order, packed.
-	for i, oldIdx := range keep {
-		oldBase := oldIdx * disk.SectorSize
-		copy(newData[i*disk.SectorSize:(i+1)*disk.SectorSize],
-			data[oldBase:oldBase+disk.SectorSize])
-	}
-	// Append the voice + audio areas unchanged (just shifted earlier).
-	copy(newData[newBankCount*disk.SectorSize:], data[voiceAreaStart:])
-	a.containerModel.Replace(newData)
-
 	droppedBytes := (a.containerInfo.BankCount - newBankCount) * disk.SectorSize
+	a.containerModel.Replace(newData)
 	a.containerInfo.BankCount = newBankCount
-	a.containerInfo.AudioAreaStart -= droppedBytes
+	a.containerInfo.AudioAreaStart = newAudioStart
 	a.containerInfo.TotalBytes = int64(len(newData))
 	if a.containerInfo.Header != nil {
 		a.containerInfo.Header.NBankSectors = newBankCount
@@ -2124,33 +1959,6 @@ func (a App) handleWorkspaceWavAudition() (App, bool) {
 		a.setStatus(status.Info, "Audition stopped")
 	}
 	return a, true
-}
-
-// bankBstepBumpPatch returns a 2-byte patch that bumps the bank's
-// bstep to areaIdx+1 when areaIdx >= current bstep. The Layout area
-// view treats indices past bstep as empty, so assigning to a slot
-// outside the current count requires a bstep bump to make the new
-// voice visible. Returns (_, false) when no bump is needed.
-func (a App) bankBstepBumpPatch(bankIdx, areaIdx int) (model.Patch, bool) {
-	data := a.containerModel.Bytes()
-	base := bankIdx * disk.SectorSize
-	if base+disk.BankVoiceCountOffset+2 > len(data) {
-		return model.Patch{}, false
-	}
-	cur := int(binary.LittleEndian.Uint16(data[base+disk.BankVoiceCountOffset:]))
-	want := areaIdx + 1
-	if want <= cur {
-		return model.Patch{}, false
-	}
-	old := make([]byte, 2)
-	copy(old, data[base+disk.BankVoiceCountOffset:base+disk.BankVoiceCountOffset+2])
-	newBuf := make([]byte, 2)
-	binary.LittleEndian.PutUint16(newBuf, uint16(want)) //nolint:gosec // G115: want = areaIdx+1; areaIdx is a bank area index bounded by disk.MaxVoices (64), fits uint16.
-	return model.Patch{
-		Offset: base + disk.BankVoiceCountOffset,
-		Old:    old,
-		New:    newBuf,
-	}, true
 }
 
 // doOpenContainer loads + installs the container at path, then
@@ -2591,75 +2399,6 @@ func (a App) allocateVoiceSlot() (App, int) {
 	return a, newSlot
 }
 
-// cloneVoiceHeaderPatch builds a single 256-byte patch that
-// overwrites the voice slot at dstOff with srcHeader.
-func cloneVoiceHeaderPatch(data []byte, dstOff int, srcHeader []byte) model.Patch {
-	oldHdr := make([]byte, disk.VoicePackSize)
-	copy(oldHdr, data[dstOff:dstOff+disk.VoicePackSize])
-	return model.Patch{Offset: dstOff, Old: oldHdr, New: srcHeader}
-}
-
-// setVPEntryPatch builds the 2-byte patch that points vp[areaIdx]
-// at slotIdx for the bank starting at base.
-func setVPEntryPatch(data []byte, base, areaIdx, slotIdx int) model.Patch {
-	off := base + disk.BankVoiceNumOffset + areaIdx*disk.VPEntrySize
-	oldVP := make([]byte, disk.VPEntrySize)
-	copy(oldVP, data[off:off+disk.VPEntrySize])
-	newVP := make([]byte, disk.VPEntrySize)
-	binary.LittleEndian.PutUint16(newVP, uint16(slotIdx)) //nolint:gosec // G115: slotIdx is a voice-slot index bounded by the disk format's voice area capacity (well under uint16 max).
-	return model.Patch{Offset: off, Old: oldVP, New: newVP}
-}
-
-// copyPerAreaMetadataPatches builds patches that copy each of the
-// eight per-area metadata bytes from srcAreaIdx into dstAreaIdx
-// within the bank starting at base. Patches with identical old/new
-// bytes are skipped (ApplyBatch tolerates either but skipping
-// keeps the batch small).
-func copyPerAreaMetadataPatches(data []byte, base, srcAreaIdx, dstAreaIdx int) []model.Patch {
-	patches := make([]model.Patch, 0, len(perAreaMetadataOffsets))
-	for _, arrOff := range perAreaMetadataOffsets {
-		srcByte := data[base+arrOff+srcAreaIdx]
-		dstPos := base + arrOff + dstAreaIdx
-		if dstPos >= len(data) {
-			continue
-		}
-		oldByte := data[dstPos]
-		if srcByte == oldByte {
-			continue
-		}
-		patches = append(patches, model.Patch{
-			Offset: dstPos,
-			Old:    []byte{oldByte},
-			New:    []byte{srcByte},
-		})
-	}
-	return patches
-}
-
-// bumpBstepPatch builds the 2-byte patch that writes newBstep into
-// the bank's bstep field at bstepOff.
-func bumpBstepPatch(data []byte, bstepOff, newBstep int) model.Patch {
-	var newBuf [2]byte
-	binary.LittleEndian.PutUint16(newBuf[:], uint16(newBstep)) //nolint:gosec // G115: bstep is a per-bank area count bounded by disk.MaxVoices (64), fits uint16.
-	oldBuf := make([]byte, 2)
-	copy(oldBuf, data[bstepOff:bstepOff+2])
-	return model.Patch{Offset: bstepOff, Old: oldBuf, New: append([]byte(nil), newBuf[:]...)}
-}
-
-// perAreaMetadataOffsets enumerates the one-byte-per-Area arrays
-// inside a bank sector. Used by duplicateArea and deleteArea to
-// shift / copy metadata in sync with the vp[] array.
-var perAreaMetadataOffsets = []int{
-	disk.BankKeyHighOffset,
-	disk.BankKeyLowOffset,
-	disk.BankVelHighOffset,
-	disk.BankVelLowOffset,
-	disk.BankKeyCentOffset,
-	disk.BankMIDIRecvChanOffset,
-	disk.BankAudioOutOffset,
-	disk.BankVolumeOffset,
-}
-
 // duplicateArea appends a new Area at bstep that clones the source
 // Area's voice and per-area metadata. The new voice header is
 // copied into a fresh slot at the end of the voice area (growing
@@ -2698,13 +2437,9 @@ func (a App) duplicateArea(bankIdx, areaIdx int) App {
 	voiceAreaStart := a.containerInfo.BankCount * disk.SectorSize
 	newOff := disk.VoiceSlotOffset(voiceAreaStart, newSlot)
 
-	// Capacity: header clone + vp entry + per-area metadata
-	// (len(perAreaMetadataOffsets)) + bstep bump.
-	patches := make([]model.Patch, 0, 3+len(perAreaMetadataOffsets))
-	patches = append(patches, cloneVoiceHeaderPatch(data, newOff, srcHeader))
-	patches = append(patches, setVPEntryPatch(data, base, bstep, newSlot))
-	patches = append(patches, copyPerAreaMetadataPatches(data, base, areaIdx, bstep)...)
-	patches = append(patches, bumpBstepPatch(data, base+disk.BankVoiceCountOffset, bstep+1))
+	patches := container.DuplicateAreaPatches(data, container.DuplicateAreaParams{
+		Base: base, NewOff: newOff, SrcAreaIdx: areaIdx, Bstep: bstep, NewSlot: newSlot, SrcHeader: srcHeader,
+	})
 
 	if err := a.containerModel.ApplyBatch(patches); err != nil {
 		a.setStatus(status.Error, fmt.Sprintf("Duplicate failed: %v", err))
@@ -2736,71 +2471,9 @@ func (a App) deleteArea(bankIdx, areaIdx int, name string) App {
 		return a
 	}
 
-	// Per-area byte arrays: each holds one byte per area, 64 entries.
-	byteArrays := []int{
-		disk.BankKeyHighOffset,
-		disk.BankKeyLowOffset,
-		disk.BankVelHighOffset,
-		disk.BankVelLowOffset,
-		disk.BankKeyCentOffset,
-		disk.BankMIDIRecvChanOffset,
-		disk.BankAudioOutOffset,
-		disk.BankVolumeOffset,
-	}
-
-	patches := []model.Patch{}
-
-	// bstep := bstep - 1.
-	var newStepBuf [2]byte
-	binary.LittleEndian.PutUint16(newStepBuf[:], uint16(bstep-1)) //nolint:gosec // G115: bstep is a per-bank area count bounded by disk.MaxVoices (64); bstep-1 fits uint16.
-	oldStep := make([]byte, 2)
-	copy(oldStep, data[bstepOff:bstepOff+2])
-	patches = append(patches, model.Patch{
-		Offset: bstepOff,
-		Old:    oldStep,
-		New:    append([]byte(nil), newStepBuf[:]...),
+	patches := container.DeleteAreaPatches(data, container.DeleteAreaParams{
+		Base: base, AreaIdx: areaIdx, Bstep: bstep,
 	})
-
-	// Shift each per-area byte array. Positions areaIdx..bstep-2 take
-	// the value previously at i+1; position bstep-1 is zeroed.
-	for _, arrOff := range byteArrays {
-		for i := areaIdx; i < bstep; i++ {
-			pos := base + arrOff + i
-			if pos+1 > len(data) {
-				continue
-			}
-			var newByte byte
-			if i < bstep-1 {
-				newByte = data[base+arrOff+i+1]
-			}
-			if newByte == data[pos] {
-				continue
-			}
-			patches = append(patches, model.Patch{
-				Offset: pos,
-				Old:    []byte{data[pos]},
-				New:    []byte{newByte},
-			})
-		}
-	}
-
-	// vp[] is 2 bytes per entry. Same shift as the byte arrays.
-	for i := areaIdx; i < bstep; i++ {
-		pos := base + disk.BankVoiceNumOffset + i*disk.VPEntrySize
-		if pos+disk.VPEntrySize > len(data) {
-			continue
-		}
-		oldVP := make([]byte, disk.VPEntrySize)
-		copy(oldVP, data[pos:pos+disk.VPEntrySize])
-		newVP := make([]byte, disk.VPEntrySize)
-		if i < bstep-1 {
-			copy(newVP, data[base+disk.BankVoiceNumOffset+(i+1)*disk.VPEntrySize:])
-		}
-		if newVP[0] == oldVP[0] && newVP[1] == oldVP[1] {
-			continue
-		}
-		patches = append(patches, model.Patch{Offset: pos, Old: oldVP, New: newVP})
-	}
 
 	if err := a.containerModel.ApplyBatch(patches); err != nil {
 		a.setStatus(status.Error, fmt.Sprintf("Delete failed: %v", err))
@@ -2895,7 +2568,7 @@ func (a App) assignPoolEntryToArea(entry *pool.Entry, bankIdx, areaIdx int) App 
 	// container's audio area.
 	header := make([]byte, disk.VoicePackSize)
 	copy(header, entry.Bytes[:disk.VoicePackSize])
-	rewriteWavePointers(header, newWaveStartSamples)
+	container.RewriteWavePointers(header, newWaveStartSamples)
 
 	// Force the display name.
 	paddedName := disk.PadLabel(entry.Name)
@@ -2933,10 +2606,10 @@ func (a App) assignPoolEntryToArea(entry *pool.Entry, bankIdx, areaIdx int) App 
 		binary.LittleEndian.PutUint16(newVP, uint16(slotIdx)) //nolint:gosec // G115: slotIdx is a voice-slot index bounded by the disk format's voice area capacity (well under uint16 max).
 		patches = append(patches, model.Patch{Offset: vpOff, Old: oldVP, New: newVP})
 	}
-	if bumpPatch, ok := a.bankBstepBumpPatch(bankIdx, areaIdx); ok {
+	if bumpPatch, ok := container.BankBstepBumpPatch(newData, bankIdx, areaIdx); ok {
 		patches = append(patches, bumpPatch)
 	}
-	patches = append(patches, a.defaultBankRangePatches(bankIdx, areaIdx)...)
+	patches = append(patches, container.DefaultBankRangePatches(newData, bankIdx, areaIdx)...)
 	if err := a.containerModel.ApplyBatch(patches); err != nil {
 		a.setStatus(status.Error, fmt.Sprintf("Assign failed: %v", err))
 		return a
@@ -2974,68 +2647,6 @@ func (a App) assignPoolEntryToArea(entry *pool.Entry, bankIdx, areaIdx int) App 
 		fmt.Sprintf("Assigned %q to Bank %d / Area %d",
 			entry.Name, bankIdx+1, areaIdx+1))
 	return a
-}
-
-// rewriteWavePointers shifts the wave/gen/loop pointers in a voice
-// header so they reference samples starting at startSamples in the
-// container's audio area. The pool entry's pointers are FZV-relative
-// (0-based); after the rewrite they are absolute offsets into the
-// shared wave area, matching the convention every other FZF voice
-// follows. Loop-fine bits and skip-loop flags are preserved.
-func rewriteWavePointers(hdr []byte, startSamples uint32) {
-	addToPointer := func(off int) {
-		v := binary.LittleEndian.Uint32(hdr[off : off+4])
-		binary.LittleEndian.PutUint32(hdr[off:off+4], v+startSamples)
-	}
-	addToPointer(disk.VoiceWaveStartOffset)
-	addToPointer(disk.VoiceWaveEndOffset)
-	addToPointer(disk.VoiceGenStartOffset)
-	addToPointer(disk.VoiceGenEndOffset)
-	// Loop start/end pointers share offset semantics but carry a
-	// loop-fine byte (upper 8 bits of loopst) and a skip flag (MSB of
-	// looped) we must not displace.
-	for i := 0; i < 8; i++ {
-		stOff := disk.VoiceLoopSt0Offset + i*4
-		edOff := disk.VoiceLoopEd0Offset + i*4
-		rawSt := binary.LittleEndian.Uint32(hdr[stOff : stOff+4])
-		rawEd := binary.LittleEndian.Uint32(hdr[edOff : edOff+4])
-		stAddr := disk.LoopStartAddress(rawSt) + startSamples
-		edAddr := disk.LoopEndAddress(rawEd) + startSamples
-		// Reassemble: keep loop-fine bits and skip flag from the
-		// original raw values.
-		stFlags := rawSt &^ disk.LoopStartAddressMask
-		edFlags := rawEd &^ disk.LoopEndAddressMask
-		binary.LittleEndian.PutUint32(hdr[stOff:stOff+4], stAddr|stFlags)
-		binary.LittleEndian.PutUint32(hdr[edOff:edOff+4], edAddr|edFlags)
-	}
-}
-
-// defaultBankRangePatches returns patches that set the bank's per-area
-// key range to MIDI 0..127 and velocity range to 1..127 when the
-// existing values are zero (uninitialised). Skips fields that already
-// hold a meaningful range so user customisations are preserved.
-func (a App) defaultBankRangePatches(bankIdx, areaIdx int) []model.Patch {
-	data := a.containerModel.Bytes()
-	base := bankIdx * disk.SectorSize
-	patches := []model.Patch{}
-	setIfZero := func(off int, value byte) {
-		if off >= len(data) {
-			return
-		}
-		if data[off] != 0 {
-			return
-		}
-		patches = append(patches, model.Patch{
-			Offset: off,
-			Old:    []byte{0},
-			New:    []byte{value},
-		})
-	}
-	setIfZero(base+disk.BankKeyLowOffset+areaIdx, 0x00)  // C-1
-	setIfZero(base+disk.BankKeyHighOffset+areaIdx, 0x7F) // G9
-	setIfZero(base+disk.BankVelLowOffset+areaIdx, 0x01)
-	setIfZero(base+disk.BankVelHighOffset+areaIdx, 0x7F)
-	return patches
 }
 
 // View implements tea.Model.

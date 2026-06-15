@@ -21,6 +21,7 @@ import (
 	"charm.land/lipgloss/v2/table"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/studio/fznote"
 	"github.com/philipcunningham/fizzle/pkg/studio/loader"
 	"github.com/philipcunningham/fizzle/pkg/studio/model"
 	"github.com/philipcunningham/fizzle/pkg/studio/nav"
@@ -639,15 +640,7 @@ func (lm Model) areaSummary(bankIdx, areaIdx int) areaSummary {
 	return areaSummary{
 		populated: true,
 		voiceName: name,
-		keyRange:  fmt.Sprintf("%s-%s", noteName(keyLow), noteName(keyHigh)),
+		keyRange:  fmt.Sprintf("%s-%s", fznote.Name(keyLow), fznote.Name(keyHigh)),
 		velRange:  fmt.Sprintf("%d-%d", velLow, velHigh),
 	}
-}
-
-func noteName(midi int) string {
-	if midi < 0 || midi > 127 {
-		return "?"
-	}
-	names := []string{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
-	return fmt.Sprintf("%s%d", names[midi%12], midi/12-1)
 }

@@ -38,3 +38,18 @@ var (
 	WarnText    = lipgloss.NewStyle().Foreground(Warning)
 	ErrorText   = lipgloss.NewStyle().Foreground(Error)
 )
+
+// Field renders a "label: value" line in the studio palette, with a
+// focus caret and an underlined accent value when focused. Shared by
+// the area and effects editors so their field rows render identically.
+func Field(label, value string, focused bool) string {
+	caret := "  "
+	if focused {
+		caret = AccentText.Render("▶ ")
+	}
+	labelStr := PrimaryText.Render(label + ": ")
+	if focused {
+		return caret + labelStr + AccentText.Underline(true).Render(value)
+	}
+	return caret + labelStr + DimText.Render(value)
+}
