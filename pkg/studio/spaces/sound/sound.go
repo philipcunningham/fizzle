@@ -684,14 +684,14 @@ func (sm Model) View(width, height int) string {
 	strip := sm.renderRowStrip(sm.row, sm.col)
 	cell := sm.renderCell(sm.row, sm.col)
 
-	hints := "up/down switch row  •  left/right switch cell  •  Enter to edit"
+	hints := "up/down switch row  •  left/right switch cell  •  enter to edit  •  esc back to layout"
 	hintText := rowHint(sm.row)
 	if sm.editMode {
 		if sm.InNumericEditMode() {
-			hints = "Up/Down ±1  •  Shift ±10  •  PgUp/Dn ±100  •  Alt ±1000  •  type digits to set  •  Enter commit  •  Esc cancel"
+			hints = "up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc cancel"
 			hintText = "Editing a number; step with the modifiers or type the value directly, then commit."
 		} else {
-			hints = "Up/Down adjusts  •  Enter commit  •  Esc cancel"
+			hints = "up/down adjusts  •  enter commit  •  esc cancel"
 			hintText = "Editing a value; cycle through the choices and commit when you're settled."
 		}
 	}

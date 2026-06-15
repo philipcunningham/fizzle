@@ -361,7 +361,7 @@ func (lm Model) VoiceSlotIndex(bankIdx, areaIdx int) int {
 	}
 	slot := 0
 	for b := 0; b < bankIdx; b++ {
-		slot += lm.bankVoiceCount(b)
+		slot += lm.bankAreaCount(b)
 	}
 	return slot + areaIdx
 }
@@ -414,8 +414,9 @@ func (lm Model) viewBankList(width int) string {
 		name = theme.PrimaryText.Render(name)
 	}
 	header := theme.Heading.Render("Layout") + "   " + name +
-		theme.DimText.Render(fmt.Sprintf("   (%d banks, %d voices)",
-			lm.info.BankCount, lm.info.VoiceCount))
+		theme.DimText.Render(fmt.Sprintf("   (%d %s, %d %s)",
+			lm.info.BankCount, plural(lm.info.BankCount, "bank", "banks"),
+			lm.info.VoiceCount, plural(lm.info.VoiceCount, "voice", "voices")))
 
 	// Always render all 8 banks. Banks past info.BankCount are
 	// unmaterialised (they don't yet have a sector in the on-disk
@@ -431,21 +432,29 @@ func (lm Model) viewBankList(width int) string {
 			rows = append(rows, []string{
 				marker,
 				fmt.Sprintf("Bank %d", i+1),
-				"(empty)",
+				emptyLabel,
 				"",
 			})
 			continue
+		}
+		// A materialised bank with zero areas reads "(empty)" too, so
+		// empty banks look the same whether or not they have a sector
+		// yet; the materialised/unmaterialised split is an internal
+		// detail the user shouldn't have to infer (F-C).
+		areaLabel := emptyLabel
+		if c := lm.bankAreaCount(i); c > 0 {
+			areaLabel = fmt.Sprintf("(%d %s)", c, plural(c, "area", "areas"))
 		}
 		rows = append(rows, []string{
 			marker,
 			fmt.Sprintf("Bank %d", i+1),
 			strings.TrimSpace(lm.bankName(i)),
-			fmt.Sprintf("(%d voices)", lm.bankVoiceCount(i)),
+			areaLabel,
 		})
 	}
 	cursor := lm.bankCursor
 	tableBody := newTable().
-		Headers("", "bank", "name", "voices").
+		Headers("", "bank", "name", "areas").
 		Rows(rows...).
 		StyleFunc(func(rowIdx, col int) lipgloss.Style {
 			return cellStyle(rowIdx, col, cursor, 2)
@@ -454,7 +463,7 @@ func (lm Model) viewBankList(width int) string {
 	hintBlock := hint.View(width,
 		"A bank groups up to 64 Areas, each mapping a key and velocity range to a voice. Empty banks fill in on first assignment.")
 	footer := theme.DimText.Render(
-		"up/down move  •  Enter open  •  r rename  •  f effects  •  Del clear bank  •  SHIFT+down to Sound (after Area)")
+		"up/down move  •  enter open  •  r rename  •  f effects  •  del clear bank")
 	return header + "\n\n" + tableBody + "\n\n" + footer + "\n\n" + hintBlock
 }
 
@@ -467,16 +476,22 @@ func (lm Model) viewAreaList(width int) string {
 	// based on areaScrollOffset and the visible-row count.
 	allRows := make([][]string, 64)
 	for i := 0; i < 64; i++ {
+		// Cursor takes precedence over the swap mark (they coincide on
+		// the first `m` press); once the cursor moves to pick a target,
+		// the source row keeps the ⇄ marker so it stays visible.
 		marker := ""
-		if i == lm.areaCursor {
+		switch i {
+		case lm.areaCursor:
 			marker = "▶"
+		case lm.swapSource:
+			marker = "⇄"
 		}
 		area := lm.areaSummary(lm.bankCursor, i)
 		if !area.populated {
 			allRows[i] = []string{
 				marker,
 				fmt.Sprintf("A%02d", i+1),
-				"(empty)",
+				emptyLabel,
 				"",
 				"",
 			}
@@ -517,8 +532,21 @@ func (lm Model) viewAreaList(width int) string {
 	hintBlock := hint.View(width,
 		"Each row is an Area mapping a voice to a key and velocity range; rename starts with the current name selected so the first key replaces it.")
 	footer := theme.DimText.Render(
-		"Enter edit  •  a edit area  •  i import  •  r rename  •  c pool  •  e export  •  m swap  •  Del clear  •  Esc/Left back to banks")
+		"up/down move  •  enter open  •  a area  •  i import  •  ctrl-d dup  •  r rename  •  c pool  •  del clear  •  esc back")
 	return header + "\n\n" + tableBody + "\n\n" + footer + "\n\n" + hintBlock
+}
+
+// emptyLabel is shown for a bank with no areas, whether or not it has
+// a sector yet (F-C).
+const emptyLabel = "(empty)"
+
+// plural returns one when n == 1 and many otherwise, so count labels
+// read "1 bank" / "2 banks" instead of the ungrammatical "1 banks".
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // newTable returns a borderless lipgloss table with the column padding
@@ -566,7 +594,7 @@ func (lm Model) bankName(idx int) string {
 	return strings.TrimRight(strings.Trim(string(raw), "\x00"), " ")
 }
 
-func (lm Model) bankVoiceCount(idx int) int {
+func (lm Model) bankAreaCount(idx int) int {
 	if lm.m == nil {
 		return 0
 	}
@@ -593,7 +621,7 @@ func (lm Model) areaSummary(bankIdx, areaIdx int) areaSummary {
 	if lm.m == nil {
 		return areaSummary{}
 	}
-	if areaIdx >= lm.bankVoiceCount(bankIdx) {
+	if areaIdx >= lm.bankAreaCount(bankIdx) {
 		return areaSummary{}
 	}
 	data := lm.m.Bytes()

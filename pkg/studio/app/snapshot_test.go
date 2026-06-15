@@ -612,7 +612,7 @@ func TestSnapshot_WorkspaceAuditionsWAV(t *testing.T) {
 	a = step(t, a, windowSize(140, 40), keyPress(" "))
 
 	view := renderView(a)
-	if !strings.Contains(view, "Auditioning 808.wav") &&
+	if !strings.Contains(view, "auditioning 808.wav") &&
 		!strings.Contains(view, "Audition WAV failed") &&
 		!strings.Contains(view, "Audition failed") {
 		t.Fatalf("expected an audition status for 808.wav, got:\n%s", view)

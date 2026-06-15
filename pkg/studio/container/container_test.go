@@ -275,3 +275,31 @@ func TestDefaultBankRangePatches(t *testing.T) {
 			data[disk.BankKeyHighOffset], data[disk.BankVelHighOffset], data[disk.BankVelLowOffset])
 	}
 }
+
+// TestCompactedSize_AgreesWithCompactVoiceArea pins that the cheap,
+// non-allocating size predictor returns exactly what CompactVoiceArea
+// would shrink the buffer to, so the free-space display (which uses
+// CompactedSize) matches what a save actually reclaims (N-04).
+func TestCompactedSize_AgreesWithCompactVoiceArea(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name                       string
+		voiceSectors, audioSectors int
+	}{
+		{"orphan voice + audio slack", 2, 1},
+		{"tight", 1, 0},
+		{"audio slack only", 1, 2},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			data := buildOneVoice(c.voiceSectors, c.audioSectors)
+			audioStart := disk.SectorSize + c.voiceSectors*disk.SectorSize
+			out, _, _ := CompactVoiceArea(data, 1, audioStart)
+			if got := CompactedSize(data, 1, audioStart); got != len(out) {
+				t.Errorf("CompactedSize = %d, want %d (len of CompactVoiceArea result)", got, len(out))
+			}
+		})
+	}
+}

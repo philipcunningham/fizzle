@@ -41,6 +41,8 @@ func TestFromKey_TableDrivenBindings(t *testing.T) {
 		{"Audition/space", tea.KeyPressMsg{Code: ' ', Text: " "}, Audition},
 		{"Save/ctrl+s", tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}, Save},
 		{"Quit/ctrl+q", tea.KeyPressMsg{Code: 'q', Mod: tea.ModCtrl}, Quit},
+		// Bare `q` is intentionally NOT a quit (too easy to hit by accident).
+		{"NoQuit/q", tea.KeyPressMsg{Code: 'q', Text: "q"}, NavNone},
 		{"Undo/ctrl+z", tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl}, Undo},
 		{"Redo/ctrl+y", tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl}, Redo},
 		{"Copy/ctrl+c", tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, Copy},

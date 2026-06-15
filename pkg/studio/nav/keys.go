@@ -45,6 +45,9 @@ func FromKey(msg tea.KeyMsg) Action {
 	case "ctrl+s":
 		return Save
 	case "ctrl+q":
+		// Quit is Ctrl-Q only: a bare `q` is too easy to hit by
+		// accident. Back navigation has its own keys (Esc, Left,
+		// SHIFT+up).
 		return Quit
 	case "ctrl+z":
 		return Undo

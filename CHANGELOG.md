@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased (last updated 2026-06-14)
+## Unreleased (last updated 2026-06-16)
+
+- Harden the studio TUI: per-context help, clearer navigation and labels, action confirmations, and CLI-consistent free space.
 
 ## v0.2.1 (2026-06-14)
 

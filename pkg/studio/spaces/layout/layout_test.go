@@ -43,7 +43,7 @@ func TestBank2VoiceNamesUseVPTable(t *testing.T) {
 	// version produced strings with control characters (0x00..0x1f,
 	// 0x7f, high bytes from binary fields).
 	for bankIdx := 0; bankIdx < info.BankCount; bankIdx++ {
-		count := lm.bankVoiceCount(bankIdx)
+		count := lm.bankAreaCount(bankIdx)
 		for areaIdx := 0; areaIdx < count; areaIdx++ {
 			name := lm.VoiceName(bankIdx, areaIdx)
 			if name == "" {

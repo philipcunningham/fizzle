@@ -7,6 +7,7 @@ package app
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -25,6 +26,8 @@ func keyCtrl(c rune) tea.KeyPressMsg {
 // pressRight steps the focused space's cursor n cells to the right
 // by pumping ArrowRight keypresses through the App. Mirrors the
 // keymap (NavRight bound to ArrowRight).
+//
+//nolint:unparam // n kept in the signature for clarity; current cell targets all sit 2 right
 func pressRight(t *testing.T, st journeyState, n int) journeyState {
 	t.Helper()
 	for i := 0; i < n; i++ {
@@ -88,6 +91,24 @@ func TestJourney_Clipboard_StageRoundTrip(t *testing.T) {
 	if post[tgt1Off] != target {
 		t.Errorf("target stage rate after paste = %#x; want %#x (byte copied from voice 0 stage 0)",
 			post[tgt1Off], target)
+	}
+}
+
+// TestJourney_Clipboard_CopyRendersStatus pins N-06: a cell copy is not
+// silent. After Ctrl-C the "Copied ..." confirmation must reach the
+// rendered frame (the report kept seeing copy as having no feedback).
+func TestJourney_Clipboard_CopyRendersStatus(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping journey under -short")
+	}
+	st := newJourneyWithFixture(t, "corpus/casio-fz-1-factory-library/casio-fz-sound-disk-fl-a-piano/Piano.fzf")
+	st = navInto(t, st, 0, 0)
+	st = pressRight(t, st, 2) // land on a DCA stage (copyable)
+
+	st.a = pump(t, st.a, keyCtrl('c'))
+
+	if v := renderView(st.a); !strings.Contains(v, "Copied") {
+		t.Errorf("cell copy status not rendered (N-06):\n%s", v)
 	}
 }
 

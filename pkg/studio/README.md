@@ -81,6 +81,8 @@ Internally a 2D grid of subsystems by cells: DCA, DCF, LFO,
 Sample, Loops rows; per-row cells expose visual representation,
 stage editors (DCA/DCF), shape and depths (LFO), name / rate /
 gen / root / tune / playback (Sample), and 8 loop cells (Loops).
+`Esc` returns to the originating Layout Area (`SHIFT+up` also steps
+back up through the spaces).
 
 ## Key bindings
 
@@ -91,14 +93,15 @@ gen / root / tune / playback (Sample), and 8 loop cells (Loops).
 | `Ctrl-Z`                  | Undo.                                                                   |
 | `Ctrl-Y` / `Ctrl-Shift-Z` | Redo.                                                                   |
 | `SHIFT+?`                 | Open the Help modal.                                                    |
-| `Esc`                     | Dismiss the topmost modal; cancel rename.                               |
+| `Esc`                     | Dismiss the topmost modal; cancel rename; in Sound, return to Layout.   |
 | `Space`                   | Audition the selected voice (one-shot, no envelope or filter shaping).  |
 | `Enter`                   | Drill into the focused item; commit rename.                             |
 | `Tab` / `Shift+Tab`       | Move focus to next / previous field within the current cell.            |
 | `F2` / `r`                | Rename the focused name field.                                          |
 | `Delete`                  | Destructive action on the focused item (confirms before acting).        |
 | `Ctrl-D`                  | Duplicate the focused Area in Layout.                                   |
-| `Ctrl-E` / `c`            | Extract the focused Area's voice to the Pool.                           |
+| `Ctrl-E` / `c`            | Send the focused Area's voice to the Pool.                              |
+| `Ctrl-C` / `Ctrl-V`       | Copy / paste a Sound cell value between compatible cells.               |
 | `i`                       | Import a Pool voice into the selected Area.                             |
 | `m`                       | Move (two-press swap) the selected Area with another in the same bank.  |
 | `a`                       | Edit the focused Area's key/velocity range and per-Area config.         |
@@ -160,6 +163,17 @@ Only one container is in focus at a time. The voice pool persists
 across container switches; the undo / redo stacks are per-container
 and survive switching away and back as long as the container has
 not been closed.
+
+### Free-space figure
+
+The "Free" indicator shows the space the disk will have **after a
+save**, not its current on-disk size: studio compacts on save, so the
+figure already excludes reclaimable slack (orphan audio left by an
+import you then undid, for example). One consequence is that for a
+disk created by another tool that still carries slack, studio's "Free"
+can read higher than `fizzle disk ls` reports for the same file, since
+the CLI measures the file as it currently sits on disk. The two agree
+for any studio-saved disk, and both use binary (÷1024) KB / MB units.
 
 ## Package layout
 

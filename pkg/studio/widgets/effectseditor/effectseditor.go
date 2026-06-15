@@ -226,10 +226,14 @@ func (m Model) View() string {
 		line.WriteString(theme.PrimaryText.Render(fmt.Sprintf("%-*s", matrixLabelWidth, rowLabels[r])))
 		for c := 0; c < 7; c++ {
 			idx := 1 + r*7 + c
-			cell := fmt.Sprintf(" %*d", matrixColWidth-1, m.cells[idx])
 			if m.field == idx {
+				// Bracket the focused cell so focus reads on shape, not
+				// colour alone (N-02), while keeping the 6-char column
+				// width: "[" + 4-wide value + "]".
+				cell := fmt.Sprintf("[%*d]", matrixColWidth-2, m.cells[idx])
 				line.WriteString(theme.AccentText.Underline(true).Render(cell))
 			} else {
+				cell := fmt.Sprintf(" %*d", matrixColWidth-1, m.cells[idx])
 				line.WriteString(theme.DimText.Render(cell))
 			}
 		}
@@ -241,7 +245,7 @@ func (m Model) View() string {
 	matrix := strings.Join(matrixLines, "\n")
 
 	hint := theme.DimText.Render(
-		"Tab cycle  •  Up/Down step  •  Shift+Up/Down ±10  •  Enter commit  •  Esc cancel")
+		"tab cycle field  •  up/down step  •  shift+up/down big step  •  enter commit  •  esc cancel")
 
 	body := strings.Join([]string{
 		title,

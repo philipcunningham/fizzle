@@ -125,13 +125,13 @@ func (c *Clipboard) Kind() ClipboardKind {
 	return c.kind
 }
 
-// Summary returns a short human-readable description of what is on
-// the clipboard, suitable for the status line.
+// Summary returns the copy-confirmation status line naming what was
+// just copied to the clipboard (N-06), e.g. "Copied DCA envelope".
 func (c *Clipboard) Summary() string {
 	if c == nil || c.kind == ClipboardKindNone {
 		return ""
 	}
-	return "Clipboard: " + kindLabel(c.kind, c.envelopeFromDCF)
+	return "Copied " + kindLabel(c.kind, c.envelopeFromDCF)
 }
 
 // kindLabel returns the user-facing label for a clipboard kind, used
