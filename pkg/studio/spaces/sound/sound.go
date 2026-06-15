@@ -259,6 +259,18 @@ func (sm *Model) applyNav(a nav.Action) string {
 	return ""
 }
 
+// commit applies a patch batch to the model and refreshes the
+// containerBytes alias. Every edit path goes through here so the alias
+// (documented as "refreshed on every Apply") can never drift out of
+// sync with the model's bytes.
+func (sm *Model) commit(patches []model.Patch) error {
+	if err := sm.m.ApplyBatch(patches); err != nil {
+		return err
+	}
+	sm.containerBytes = sm.m.Bytes()
+	return nil
+}
+
 func (sm *Model) applyEdit(a nav.Action) string {
 	fields := cellFields(sm.row, sm.col, sm.voiceOff)
 	if len(fields) == 0 {
@@ -282,10 +294,9 @@ func (sm *Model) applyEdit(a nav.Action) string {
 		}
 		// f.patch returned no patches: nothing changed; that's ok.
 		if len(patches) > 0 {
-			if err := sm.m.ApplyBatch(patches); err != nil {
+			if err := sm.commit(patches); err != nil {
 				return fmt.Sprintf("Commit failed: %v", err)
 			}
-			sm.containerBytes = sm.m.Bytes()
 		}
 		// Move to next field in the cell; exit if last.
 		if sm.fieldIdx+1 < len(fields) {
@@ -391,10 +402,9 @@ func (sm *Model) ConsumeTextKey(keyStr string) string {
 	case "enter":
 		patches := f.patchText(sm.containerBytes, sm.draft)
 		if len(patches) > 0 {
-			if err := sm.m.ApplyBatch(patches); err != nil {
+			if err := sm.commit(patches); err != nil {
 				return fmt.Sprintf("Commit failed: %v", err)
 			}
-			sm.containerBytes = sm.m.Bytes()
 		}
 		sm.editMode = false
 		sm.draft = ""
@@ -562,10 +572,9 @@ func (sm *Model) adjustNumericField(f field, delta int) string {
 	if len(patches) == 0 {
 		return ""
 	}
-	if err := sm.m.ApplyBatch(patches); err != nil {
+	if err := sm.commit(patches); err != nil {
 		return fmt.Sprintf("Adjust failed: %v", err)
 	}
-	sm.containerBytes = sm.m.Bytes()
 	return ""
 }
 
@@ -581,10 +590,9 @@ func (sm *Model) commitNumericDraft(f field, fields []field) string {
 	}
 	patches := f.patch(sm.containerBytes, n)
 	if len(patches) > 0 {
-		if err := sm.m.ApplyBatch(patches); err != nil {
+		if err := sm.commit(patches); err != nil {
 			return fmt.Sprintf("Commit failed: %v", err)
 		}
-		sm.containerBytes = sm.m.Bytes()
 	}
 	return sm.advanceFieldOrExit(fields)
 }
@@ -642,10 +650,9 @@ func (sm *Model) adjustField(fields []field, delta int) string {
 	if len(patches) == 0 {
 		return ""
 	}
-	if err := sm.m.ApplyBatch(patches); err != nil {
+	if err := sm.commit(patches); err != nil {
 		return fmt.Sprintf("Adjust failed: %v", err)
 	}
-	sm.containerBytes = sm.m.Bytes()
 	return ""
 }
 
@@ -840,24 +847,33 @@ func (sm Model) renderLFOCell(voice []byte, col int) string {
 	return sm.renderFieldsList(rowLFO, col)
 }
 
+// genSamples extracts the voice's gen-range PCM (int16 frames) from the
+// shared wave area, returning the decoded samples and the gen-start
+// sample index (needed to translate absolute loop pointers into
+// slice-relative indices). Sample pointers count int16 frames, so the
+// byte offset is pointer*2 from the wave-area start. An out-of-bounds or
+// empty range yields an empty slice.
+func (sm Model) genSamples(voice []byte) (samples []int16, genStart int) {
+	genStart = int(binary.LittleEndian.Uint32(voice[disk.VoiceWaveStartOffset:]))
+	genEnd := int(binary.LittleEndian.Uint32(voice[disk.VoiceWaveEndOffset:]))
+	startByte := sm.audioArea + genStart*2
+	endByte := sm.audioArea + genEnd*2
+	data := sm.containerBytes
+	samples = []int16{}
+	if startByte >= 0 && endByte <= len(data) && endByte > startByte {
+		samples = make([]int16, (endByte-startByte)/2)
+		for i := range samples {
+			samples[i] = int16(binary.LittleEndian.Uint16(data[startByte+i*2:])) //nolint:gosec // G115: PCM samples are signed 16-bit; reinterpreting the unsigned read as int16 preserves the audio value.
+		}
+	}
+	return samples, genStart
+}
+
 func (sm Model) renderSampleCell(voice []byte, col int) string {
 	if col == 0 {
-		genStart := int(binary.LittleEndian.Uint32(voice[disk.VoiceWaveStartOffset:]))
-		genEnd := int(binary.LittleEndian.Uint32(voice[disk.VoiceWaveEndOffset:]))
-		// Extract the sample data span from the wave area. Sample
-		// pointers count sample frames (int16), so byte offset is
-		// pointer * 2 from the wave area start.
-		waveAreaStart := sm.audioArea
-		startByte := waveAreaStart + genStart*2
-		endByte := waveAreaStart + genEnd*2
-		data := sm.containerBytes
-		samples := []int16{}
-		if startByte >= 0 && endByte <= len(data) && endByte > startByte {
-			samples = make([]int16, (endByte-startByte)/2)
-			for i := range samples {
-				samples[i] = int16(binary.LittleEndian.Uint16(data[startByte+i*2:])) //nolint:gosec // G115: PCM samples are signed 16-bit; reinterpreting the unsigned read as int16 preserves the audio value.
-			}
-		}
+		// genStart is discarded here: only renderLoopsVisual needs it (to
+		// translate absolute loop pointers into slice-relative indices).
+		samples, _ := sm.genSamples(voice)
 		return cellHeading("Sample waveform") + "\n\n" + samplevisual.View(samplevisual.Sample{
 			Data:     samples,
 			GenStart: 0,
@@ -882,20 +898,7 @@ func (sm Model) renderLoopsCell(voice []byte, col int) string {
 // columns when samplevisual is given LoopStarts/LoopEnds relative to
 // that slice.
 func (sm Model) renderLoopsVisual(voice []byte) string {
-	genStartSamples := int(binary.LittleEndian.Uint32(voice[disk.VoiceWaveStartOffset:]))
-	genEndSamples := int(binary.LittleEndian.Uint32(voice[disk.VoiceWaveEndOffset:]))
-
-	waveAreaStart := sm.audioArea
-	startByte := waveAreaStart + genStartSamples*2
-	endByte := waveAreaStart + genEndSamples*2
-	data := sm.containerBytes
-	samples := []int16{}
-	if startByte >= 0 && endByte <= len(data) && endByte > startByte {
-		samples = make([]int16, (endByte-startByte)/2)
-		for i := range samples {
-			samples[i] = int16(binary.LittleEndian.Uint16(data[startByte+i*2:])) //nolint:gosec // G115: PCM samples are signed 16-bit; reinterpreting the unsigned read as int16 preserves the audio value.
-		}
-	}
+	samples, genStartSamples := sm.genSamples(voice)
 
 	// Loop pointers in the header are absolute sample addresses into
 	// the shared wave area (same coordinate space as wave_start /

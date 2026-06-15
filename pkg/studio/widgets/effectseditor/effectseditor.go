@@ -123,10 +123,6 @@ func (SeedValues) OffsetAt(i int) int {
 	return cellOffset[i]
 }
 
-// NumCells reports the modal's editable cell count (for callers that
-// want to iterate without importing the numCells constant).
-func NumCells() int { return numCells }
-
 // New returns a closed modal.
 func New() Model { return Model{} }
 
@@ -212,7 +208,7 @@ func (m Model) View() string {
 
 	// Bend row.
 	bendVal := fmt.Sprintf("%d (%.2f semitones)", m.cells[0], float64(m.cells[0])/8.0)
-	bendLine := renderField("Bend Depth", bendVal, m.field == 0)
+	bendLine := theme.Field("Bend Depth", bendVal, m.field == 0)
 
 	// Modulation matrix: 3 rows × 7 cols, hand-rolled with fixed-width
 	// columns. Each numeric cell is right-aligned in 5 chars + a
@@ -261,19 +257,4 @@ func (m Model) View() string {
 		BorderForeground(theme.Border).
 		Padding(1, 3).
 		Render(body)
-}
-
-// renderField is one editable line. The focused field gets an accent
-// caret; the unfocused gets dim. Mirrors the area-editor's helper so
-// the two modals read consistently.
-func renderField(label, value string, focused bool) string {
-	caret := "  "
-	if focused {
-		caret = theme.AccentText.Render("▶ ")
-	}
-	labelStr := theme.PrimaryText.Render(label + ": ")
-	if focused {
-		return caret + labelStr + theme.AccentText.Underline(true).Render(value)
-	}
-	return caret + labelStr + theme.DimText.Render(value)
 }

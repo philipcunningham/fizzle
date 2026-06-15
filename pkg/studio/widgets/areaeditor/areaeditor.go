@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/studio/fznote"
 	"github.com/philipcunningham/fizzle/pkg/studio/theme"
 )
 
@@ -383,14 +384,14 @@ func (m Model) View() string {
 		"",
 		keyboard,
 		"",
-		renderField("Key Low  ", fmt.Sprintf("%d (%s)", m.keyLow, noteName(m.keyLow)), m.field == FieldKeyLow),
-		renderField("Key High ", fmt.Sprintf("%d (%s)", m.keyHigh, noteName(m.keyHigh)), m.field == FieldKeyHigh),
-		renderField("Key Orig ", fmt.Sprintf("%d (%s)", m.keyOrig, noteName(m.keyOrig)), m.field == FieldKeyOrig),
-		renderField("Vel Low  ", fmt.Sprintf("%d", m.velLow), m.field == FieldVelLow),
-		renderField("Vel High ", fmt.Sprintf("%d", m.velHigh), m.field == FieldVelHigh),
-		renderField("Volume   ", fmt.Sprintf("%d", m.volume), m.field == FieldVolume),
-		renderField("Output   ", audioOutLabel(m.audioOut), m.field == FieldAudioOut),
-		renderField("MIDI Chan", fmt.Sprintf("%d", m.midiChan+1), m.field == FieldMIDIChan),
+		theme.Field("Key Low  ", fmt.Sprintf("%d (%s)", m.keyLow, fznote.Name(m.keyLow)), m.field == FieldKeyLow),
+		theme.Field("Key High ", fmt.Sprintf("%d (%s)", m.keyHigh, fznote.Name(m.keyHigh)), m.field == FieldKeyHigh),
+		theme.Field("Key Orig ", fmt.Sprintf("%d (%s)", m.keyOrig, fznote.Name(m.keyOrig)), m.field == FieldKeyOrig),
+		theme.Field("Vel Low  ", fmt.Sprintf("%d", m.velLow), m.field == FieldVelLow),
+		theme.Field("Vel High ", fmt.Sprintf("%d", m.velHigh), m.field == FieldVelHigh),
+		theme.Field("Volume   ", fmt.Sprintf("%d", m.volume), m.field == FieldVolume),
+		theme.Field("Output   ", audioOutLabel(m.audioOut), m.field == FieldAudioOut),
+		theme.Field("MIDI Chan", fmt.Sprintf("%d", m.midiChan+1), m.field == FieldMIDIChan),
 		"",
 		theme.DimText.Render("Tab cycle field  •  Up/Down step  •  Shift+Up/Down big step  •  Enter commit  •  Esc cancel"),
 	}
@@ -412,20 +413,6 @@ func audioOutLabel(v int) string {
 		return "poly"
 	}
 	return disk.FormatAudioOut(uint8(v)) //nolint:gosec // G115: v is the gchn byte read from disk (range 0..255)
-}
-
-// renderField is one editable line. The focused field gets an accent
-// caret; the unfocused gets dim.
-func renderField(label, value string, focused bool) string {
-	caret := "  "
-	if focused {
-		caret = theme.AccentText.Render("▶ ")
-	}
-	labelStr := theme.PrimaryText.Render(label + ": ")
-	if focused {
-		return caret + labelStr + theme.AccentText.Underline(true).Render(value)
-	}
-	return caret + labelStr + theme.DimText.Render(value)
 }
 
 // renderKeyboard draws an "accurate" piano (no in-band coloring on
@@ -619,17 +606,3 @@ var (
 	// focused span.
 	rangeAccent = lipgloss.NewStyle().Foreground(theme.Secondary)
 )
-
-// noteName returns a short MIDI-to-note label like "C4", "F#3".
-// Scientific Pitch Notation: MIDI 60 = C4 (middle C); MIDI 0 = C-1
-// (the "-1" is a negative octave number, not a separator). Kept in
-// sync with the noteName helper in pkg/studio/spaces/layout.
-func noteName(midi int) string {
-	names := []string{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
-	if midi < 0 || midi > 127 {
-		return "?"
-	}
-	pc := midi % 12
-	octave := midi/12 - 1
-	return fmt.Sprintf("%s%d", names[pc], octave)
-}

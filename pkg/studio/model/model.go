@@ -34,11 +34,6 @@ type Model struct {
 	dirty bool
 }
 
-// New returns an empty Model with no path and no bytes. Useful for
-// callers that want to populate Bytes() and Path() manually (for
-// example the untitled-on-launch flow).
-func New() *Model { return &Model{} }
-
 // FromBytes wraps an existing byte slice as a Model with the given
 // path. The model takes ownership of the slice; callers should not
 // mutate the slice after handing it over.
