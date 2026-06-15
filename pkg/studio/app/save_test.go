@@ -1146,3 +1146,50 @@ func TestNewDisk_DirtyContainer_PromptsBeforeDiscard(t *testing.T) {
 		t.Fatalf("container swapped before confirmation; Path=%q", a.containerInfo.Path)
 	}
 }
+
+// TestSaveAsModal_ShowsResolvedTarget pins N-07: the Save-As dialog
+// previews the resolved destination path and the appended .img
+// extension, so the user knows where and as what the file is written.
+func TestSaveAsModal_ShowsResolvedTarget(t *testing.T) {
+	a, _ := newTestAppEmpty(t)
+	a.saveAsActive = true
+	a.saveAsBuffer = "mydisk"
+
+	modal := a.renderSaveAsModal()
+	if !strings.Contains(modal, "Saves to:") {
+		t.Errorf("save-as modal does not show the destination:\n%s", modal)
+	}
+	if !strings.Contains(modal, "mydisk.img") {
+		t.Errorf("save-as modal does not preview the .img extension:\n%s", modal)
+	}
+	// The dialog is really "name this new disk", not a save-a-copy
+	// feature, so it must not be titled the misleading "Save As".
+	if !strings.Contains(modal, "Name new disk") {
+		t.Errorf("modal should be titled 'Name new disk':\n%s", modal)
+	}
+	if strings.Contains(modal, "Save As") {
+		t.Errorf("modal must not use the misleading 'Save As' label:\n%s", modal)
+	}
+}
+
+// TestQuitConfirm_SaysDisk pins F-D: the unsaved-changes prompt speaks
+// the user's word ("disk"), not the codebase's internal "container".
+func TestQuitConfirm_SaysDisk(t *testing.T) {
+	a, _ := newTestAppEmpty(t)
+	a = pump(t, a, tea.WindowSizeMsg{Width: 140, Height: 40})
+	// Force a dirty state so Ctrl-Q opens the confirm modal.
+	data := a.containerModel.Bytes()
+	if err := a.containerModel.Apply(modelApplyDirtyByte(t, data)); err != nil {
+		t.Fatalf("seed dirty: %v", err)
+	}
+	updated, _ := a.Update(tea.KeyPressMsg{Code: 'q', Mod: tea.ModCtrl})
+	a, _ = updated.(App)
+
+	view := a.confirm.View()
+	if !strings.Contains(view, "disk") {
+		t.Errorf("unsaved-changes prompt should say 'disk':\n%s", view)
+	}
+	if strings.Contains(view, "container") {
+		t.Errorf("unsaved-changes prompt leaks the internal word 'container':\n%s", view)
+	}
+}

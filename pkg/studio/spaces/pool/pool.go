@@ -263,6 +263,20 @@ func (m *Model) Entries() []Entry { return m.entries }
 // Workspace browser. Returns an error if the pool is empty or the
 // write fails. The pool itself is not mutated.
 func (m *Model) Export(toDir string) (string, error) {
+	target, err := m.ExportTarget(toDir)
+	if err != nil {
+		return "", err
+	}
+	if err := m.ExportTo(target); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
+// ExportTarget returns the absolute path Export would write to for the
+// focused entry, without writing anything. The App uses it to check
+// for an existing file and prompt before overwriting (N-05).
+func (m *Model) ExportTarget(toDir string) (string, error) {
 	entry := m.Selected()
 	if entry == nil {
 		return "", errors.New("pool is empty; nothing to export")
@@ -271,11 +285,20 @@ func (m *Model) Export(toDir string) (string, error) {
 	if stem == "" {
 		stem = "VOICE"
 	}
-	target := filepath.Join(toDir, stem+".fzv")
-	if err := os.WriteFile(target, entry.Bytes, 0o644); err != nil {
-		return "", fmt.Errorf("write %s: %w", target, err)
+	return filepath.Join(toDir, stem+".fzv"), nil
+}
+
+// ExportTo writes the focused entry's FZV bytes to target. The pool is
+// not mutated.
+func (m *Model) ExportTo(target string) error {
+	entry := m.Selected()
+	if entry == nil {
+		return errors.New("pool is empty; nothing to export")
 	}
-	return target, nil
+	if err := os.WriteFile(target, entry.Bytes, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", target, err)
+	}
+	return nil
 }
 
 // sanitizeFZVStem turns a voice display name into a safe filename
@@ -416,12 +439,16 @@ func (m *Model) View(width, _ int) string {
 	// Mode-aware footer. In picker mode the banner above already
 	// states "Enter assigns / Esc cancels"; the cheatsheet line below
 	// only surfaces the always-available actions.
-	footerText := "Space to audition  •  e to export .fzv  •  Del to remove"
+	footerText := "space to audition  •  e to export .fzv  •  del to remove"
 	hintText := "The pool holds voices imported, copied from Layout, or read from the loaded disk; assign any of them to a Layout Area."
 	if m.InPickerMode() {
+		// Lead with the picker's two primary actions (assign / cancel)
+		// and push the destructive del to the end, so the modal whose
+		// whole purpose is "pick one" says which key picks (N-03).
+		footerText = "enter to assign  •  esc to cancel  •  space to audition  •  del to remove"
 		hintText = "Picker mode: pick the voice to drop into " + m.pickerTarget + "; auditioning still works for preview."
 	} else {
-		footerText += "  •  press 'i' on an Area in Layout to import"
+		footerText += "  •  press 'i' on an area in layout to import"
 	}
 	hintBlock := hint.View(width, hintText)
 	footer := theme.DimText.Render(footerText)
@@ -436,7 +463,7 @@ func (m *Model) renderTarget() string {
 	}
 	return theme.Heading.Render("Picking voice for ") +
 		theme.AccentText.Render(m.pickerTarget) +
-		theme.DimText.Render("  •  Enter assigns  •  Esc cancels")
+		theme.DimText.Render("  •  enter assigns  •  esc cancels")
 }
 
 func joinVertical(parts ...string) string {

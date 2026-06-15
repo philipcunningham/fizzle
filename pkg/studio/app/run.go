@@ -5,6 +5,8 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/philipcunningham/fizzle/pkg/logger"
 )
 
 // Run launches the studio TUI with directory as its workspace
@@ -21,6 +23,13 @@ func Run(directory string) error {
 	if err != nil {
 		return err
 	}
+	// Silence library logging for the lifetime of the TUI. Otherwise a
+	// stray log.Info() from a library call (e.g. diskformat.Format on
+	// the new-disk save path) writes to stderr and bleeds onto the
+	// rendered screen, since the TUI owns the terminal (F-A).
+	restoreLog := logger.Silence()
+	defer restoreLog()
+
 	app := New(workspace)
 	p := tea.NewProgram(app)
 	if _, err := p.Run(); err != nil {

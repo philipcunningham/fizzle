@@ -24,7 +24,7 @@ import (
 )
 
 // swapPerAreaFields are the per-area byte fields SwapAreaPatches swaps.
-// NOTE: BankMIDIRecvChanOffset is intentionally absent — area swap does
+// NOTE: BankMIDIRecvChanOffset is intentionally absent: area swap does
 // not move the per-area MIDI receive channel (see the studio report's
 // REMAIN-008). Do not "complete" this list without a behaviour decision.
 var swapPerAreaFields = []int{
@@ -84,38 +84,16 @@ func SwapAreaPatches(data []byte, p SwapAreaParams) []model.Patch {
 // (data, audioAreaStart, false): the original slice unchanged, so a caller
 // that overlooks the changed flag does a wasteful copy rather than a wipe.
 func CompactVoiceArea(data []byte, bankCount, audioAreaStart int) (newData []byte, newAudioStart int, changed bool) {
-	voiceAreaStart := bankCount * disk.SectorSize
-	if audioAreaStart <= voiceAreaStart || audioAreaStart > len(data) {
+	voiceAreaStart, requiredVoiceSectors, requiredAudioBytes, ok := compactPlan(data, bankCount, audioAreaStart)
+	if !ok {
 		return data, audioAreaStart, false
 	}
 	currentVoiceSectors := (audioAreaStart - voiceAreaStart) / disk.SectorSize
-	if currentVoiceSectors <= 0 {
-		return data, audioAreaStart, false
-	}
-
-	maxLive := maxReferencedSlot(data, bankCount)
-	requiredVoiceSectors := 1
-	if maxLive >= 0 {
-		requiredVoiceSectors = disk.VoiceAreaSectors(maxLive + 1)
-	}
-	if requiredVoiceSectors < 1 {
-		requiredVoiceSectors = 1
-	}
-
-	maxSample := maxLiveSample(data, voiceAreaStart, maxLive)
-
 	voiceShrink := (currentVoiceSectors - requiredVoiceSectors) * disk.SectorSize
 	if voiceShrink < 0 {
 		voiceShrink = 0
 	}
 	currentAudioBytes := len(data) - audioAreaStart
-	requiredAudioBytes := 0
-	if maxSample >= 0 {
-		requiredAudioBytes = int(maxSample+1) * disk.BytesPerSample
-	}
-	if requiredAudioBytes > currentAudioBytes {
-		requiredAudioBytes = currentAudioBytes
-	}
 	audioShrink := currentAudioBytes - requiredAudioBytes
 	if audioShrink < 0 {
 		audioShrink = 0
@@ -132,6 +110,51 @@ func CompactVoiceArea(data []byte, bankCount, audioAreaStart int) (newData []byt
 		data[voiceAreaStart:voiceAreaStart+requiredVoiceSectors*disk.SectorSize])
 	copy(out[newAudioStart:], data[audioAreaStart:audioAreaStart+requiredAudioBytes])
 	return out, newAudioStart, true
+}
+
+// compactPlan computes the post-compaction geometry of the voice and
+// audio areas without allocating. ok is false for a degenerate layout
+// (no audio area yet, or sizes out of range), in which case callers
+// leave the buffer unchanged.
+func compactPlan(data []byte, bankCount, audioAreaStart int) (voiceAreaStart, requiredVoiceSectors, requiredAudioBytes int, ok bool) {
+	voiceAreaStart = bankCount * disk.SectorSize
+	if audioAreaStart <= voiceAreaStart || audioAreaStart > len(data) {
+		return voiceAreaStart, 0, 0, false
+	}
+	if (audioAreaStart-voiceAreaStart)/disk.SectorSize <= 0 {
+		return voiceAreaStart, 0, 0, false
+	}
+	maxLive := maxReferencedSlot(data, bankCount)
+	requiredVoiceSectors = 1
+	if maxLive >= 0 {
+		requiredVoiceSectors = disk.VoiceAreaSectors(maxLive + 1)
+	}
+	if requiredVoiceSectors < 1 {
+		requiredVoiceSectors = 1
+	}
+	maxSample := maxLiveSample(data, voiceAreaStart, maxLive)
+	currentAudioBytes := len(data) - audioAreaStart
+	requiredAudioBytes = 0
+	if maxSample >= 0 {
+		requiredAudioBytes = int(maxSample+1) * disk.BytesPerSample
+	}
+	if requiredAudioBytes > currentAudioBytes {
+		requiredAudioBytes = currentAudioBytes
+	}
+	return voiceAreaStart, requiredVoiceSectors, requiredAudioBytes, true
+}
+
+// CompactedSize returns the byte length CompactVoiceArea would shrink
+// the container to right now, computed without allocating. The App uses
+// it for the free-space figure so reclaimable orphan audio (for example
+// after an import is undone) is reflected immediately, not only once a
+// save compacts it (N-04).
+func CompactedSize(data []byte, bankCount, audioAreaStart int) int {
+	voiceAreaStart, vsec, abytes, ok := compactPlan(data, bankCount, audioAreaStart)
+	if !ok {
+		return len(data)
+	}
+	return voiceAreaStart + vsec*disk.SectorSize + abytes
 }
 
 // CompactEmptyBanks removes every bank sector with bstep=0 (both

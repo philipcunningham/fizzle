@@ -4,17 +4,17 @@
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Layout   <workspace>/Drums.fzf   (4 banks, 24 voices)                                                                        │ │ W │
 │                                                                                                                              │ │ P │
-│     bank    name     voices                                                                                                  │ │ L │
-│  ▶  Bank 1  DRUMS 1  (61 voices)                                                                                             │ │ S │
-│     Bank 2  DRUMS 2  (61 voices)                                                                                             │ └───┘
-│     Bank 3  DRUMS 3  (30 voices)                                                                                             │
-│     Bank 4  DRUMS 4  (29 voices)                                                                                             │ Free: 270 KB
+│     bank    name     areas                                                                                                   │ │ L │
+│  ▶  Bank 1  DRUMS 1  (61 areas)                                                                                              │ │ S │
+│     Bank 2  DRUMS 2  (61 areas)                                                                                              │ └───┘
+│     Bank 3  DRUMS 3  (30 areas)                                                                                              │
+│     Bank 4  DRUMS 4  (29 areas)                                                                                              │ Free: 267 KB
 │     Bank 5  (empty)                                                                                                          │
 │     Bank 6  (empty)                                                                                                          │
 │     Bank 7  (empty)                                                                                                          │
 │     Bank 8  (empty)                                                                                                          │
 │                                                                                                                              │
-│ up/down move  •  Enter open  •  r rename  •  f effects  •  Del clear bank  •  SHIFT+down to Sound (after Area)               │
+│ up/down move  •  enter open  •  r rename  •  f effects  •  del clear bank                                                    │
 │                                                                                                                              │
 │ A bank groups up to 64 Areas, each mapping a key and velocity range to a voice. Empty banks fill in on first assignment.     │
 │                                                                                                                              │
@@ -26,7 +26,7 @@
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestTooSmallSnapshot - 1]
@@ -41,9 +41,10 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 
 
 
+                                        fizzle studio
+                                        Casio FZ series sampler disk editor (FZ-1, FZ-10M, FZ-20M)
 
-
-                                                  Studio requires 140 columns by 30 rows.
-                                                  Current: 139 by 29.
-                                                  Resize the terminal to continue.
+                                        Studio requires 140 columns by 30 rows.
+                                        Current: 139 by 29.
+                                        Resize the terminal to continue, or press Ctrl-Q to quit.
 ---

@@ -393,7 +393,7 @@ func (m Model) View() string {
 		theme.Field("Output   ", audioOutLabel(m.audioOut), m.field == FieldAudioOut),
 		theme.Field("MIDI Chan", fmt.Sprintf("%d", m.midiChan+1), m.field == FieldMIDIChan),
 		"",
-		theme.DimText.Render("Tab cycle field  •  Up/Down step  •  Shift+Up/Down big step  •  Enter commit  •  Esc cancel"),
+		theme.DimText.Render("tab cycle field  •  up/down step  •  shift+up/down big step  •  enter commit  •  esc cancel"),
 	}
 	body := strings.Join(lines, "\n")
 	return lipgloss.NewStyle().

@@ -582,8 +582,8 @@ func TestClipboard_VisualCellsNotCopyable(t *testing.T) {
 }
 
 // TestClipboard_Summary checks the user-facing label strings appear
-// in the spec'd format ("Clipboard: <type>") so the status line is
-// readable.
+// in the copy-confirmation status ("Copied <type>") so the status line
+// is readable.
 func TestClipboard_Summary(t *testing.T) {
 	src, _, _ := bindTwo(t)
 

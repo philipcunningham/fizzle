@@ -4,11 +4,11 @@
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Workspace   <workspace>                                                                                                      │ │ W │
 │                                                                                                                              │ │ P │
-│          name       type                                                                                                     │ │ L │
-│  ▶  [F]  Piano.fzf  dump                                                                                                     │ │ S │
+│          name       type  size                                                                                               │ │ L │
+│  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  Enter to descend or open  •  Left or Esc to go up  •  Ctrl-R refresh  •  SHIFT+down to Pool                 │
-│                                                                                                                              │ Free: 1271 KB
+│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
 │                                                                                                                              │
@@ -36,7 +36,7 @@
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_LayoutAfterOpeningPiano - 1]
@@ -44,17 +44,17 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Layout   <workspace>/Piano.fzf   (3 banks, 42 voices)                                                                        │ │ W │
 │                                                                                                                              │ │ P │
-│     bank    name      voices                                                                                                 │ │ L │
-│  ▶  Bank 1  PIANO  1  (14 voices)                                                                                            │ │ S │
-│     Bank 2  PIANO  2  (14 voices)                                                                                            │ └───┘
-│     Bank 3  PIANO  3  (14 voices)                                                                                            │
-│     Bank 4  (empty)                                                                                                          │ Free: 244 KB
+│     bank    name      areas                                                                                                  │ │ L │
+│  ▶  Bank 1  PIANO  1  (14 areas)                                                                                             │ │ S │
+│     Bank 2  PIANO  2  (14 areas)                                                                                             │ └───┘
+│     Bank 3  PIANO  3  (14 areas)                                                                                             │
+│     Bank 4  (empty)                                                                                                          │ Free: 241 KB
 │     Bank 5  (empty)                                                                                                          │
 │     Bank 6  (empty)                                                                                                          │
 │     Bank 7  (empty)                                                                                                          │
 │     Bank 8  (empty)                                                                                                          │
 │                                                                                                                              │
-│ up/down move  •  Enter open  •  r rename  •  f effects  •  Del clear bank  •  SHIFT+down to Sound (after Area)               │
+│ up/down move  •  enter open  •  r rename  •  f effects  •  del clear bank                                                    │
 │                                                                                                                              │
 │ A bank groups up to 64 Areas, each mapping a key and velocity range to a voice. Empty banks fill in on first assignment.     │
 │                                                                                                                              │
@@ -76,7 +76,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 Opened <workspace>/Piano.fzf (3 banks, 42 voices)
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_LayoutBank2AreaList - 1]
@@ -88,7 +88,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │     #    voice         keys     vel                                                                                          │ │ S │
 │  ▶  A01  PIANO 2 C2 1  A0-C2    1-127                                                                                        │ └───┘
 │     A02  PIANO 2 C2 2  C#2-D2   1-127                                                                                        │
-│     A03  PIANO 2 F#2   D#2-G#2  1-127                                                                                        │ Free: 244 KB
+│     A03  PIANO 2 F#2   D#2-G#2  1-127                                                                                        │ Free: 241 KB
 │     A04  PIANO 2 C3    A2-D3    1-127                                                                                        │
 │     A05  PIANO 2 F#3   D#3-G#3  1-127                                                                                        │
 │     A06  PIANO 2 C4    A3-D4    1-127                                                                                        │
@@ -108,15 +108,15 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │     A20  (empty)                                                                                                             │
 │ ▼ more below (44 hidden)                                                                                                     │
 │                                                                                                                              │
-│ Enter edit  •  a edit area  •  i import  •  r rename  •  c pool  •  e export  •  m swap  •  Del clear  •  Esc/Left back to   │
-│ banks                                                                                                                        │
+│ up/down move  •  enter open  •  a area  •  i import  •  ctrl-d dup  •  r rename  •  c pool  •  del clear  •  esc back        │
 │                                                                                                                              │
 │ Each row is an Area mapping a voice to a key and velocity range; rename starts with the current name selected so the first   │
 │ key replaces it.                                                                                                             │
+│                                                                                                                              │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 Opened Bank 2
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_WorkspaceCursorMovesDown - 1]
@@ -124,11 +124,11 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Workspace   <workspace>                                                                                                      │ │ W │
 │                                                                                                                              │ │ P │
-│          name   type                                                                                                         │ │ L │
-│     [F]  a.fzf  dump                                                                                                         │ │ S │
-│  ▶  [F]  b.fzf  dump                                                                                                         │ └───┘
+│          name   type  size                                                                                                   │ │ L │
+│     [F]  a.fzf  dump  11 B                                                                                                   │ │ S │
+│  ▶  [F]  b.fzf  dump  11 B                                                                                                   │ └───┘
 │                                                                                                                              │
-│ up/down move  •  Enter to descend or open  •  Left or Esc to go up  •  Ctrl-R refresh  •  SHIFT+down to Pool                 │ Free: 1271 KB
+│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │ Free: 1.2 MB
 │                                                                                                                              │
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
@@ -156,7 +156,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_WorkspaceTraversesIntoSubdirectory - 1]
@@ -164,11 +164,11 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Workspace   <workspace>/samples                                                                                              │ │ W │
 │                                                                                                                              │ │ P │
-│          name        type                                                                                                    │ │ L │
-│  ▶  [V]  nested.fzv  voice                                                                                                   │ │ S │
+│          name        type   size                                                                                             │ │ L │
+│  ▶  [V]  nested.fzv  voice  1 B                                                                                              │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  Enter to descend or open  •  Left or Esc to go up  •  Ctrl-R refresh  •  SHIFT+down to Pool                 │
-│                                                                                                                              │ Free: 1271 KB
+│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
 │                                                                                                                              │
@@ -196,61 +196,57 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_SmallTerminalNotice - 1]
 
+fizzle studio
+Casio FZ series sampler disk editor (FZ-1, FZ-10M, FZ-20M)
 
 Studio requires 140 columns by 30 rows.
 Current: 30 by 8.
-Resize the terminal to continue.
+Resize the terminal to continue, or press Ctrl-Q to quit.
 ---
 
 [TestSnapshot_HelpModalOpen - 1]
- fizzle studio                  ╭─────────────────────────────────────────────────────────────────────────╮
-┌───────────────────────────────│                                                                         │────────────────────┐ ┌───┐
-│ Workspace   <workspace>       │  Studio Help                                                            │                    │ │ W │
-│                               │                                                                         │                    │ │ P │
-│          name       type      │  Spaces                                                                 │                    │ │ L │
-│  ▶  [F]  Piano.fzf  dump      │   W  Workspace  directory browser                                       │                    │ │ S │
-│                               │   P  Pool       basket of voices                                        │                    │ └───┘
-│ up/down move  •  Enter to desc│   L  Layout     in-focus disk: banks + Areas                            │ool                 │
-│                               │   S  Sound      sculpt the selected voice                               │                    │ Free: 1271 KB
-│ Browse disks, dumps, voices, a│                                                                         │ol.                 │
-│                               │  Navigation                                                             │                    │
-│                               │     arrows           move cursor within space                           │                    │
-│                               │     SHIFT+up / down  move between spaces                                │                    │
+ fizzle studio
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
+│ Workspace   <workspace>                                                                                                      │ │ W │
+│                                                                                                                              │ │ P │
+│          name       type  size                                                                                               │ │ L │
+│  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
+│                                                                                                                              │ └───┘
+│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│                                                                                                                              │ Free: 1.2 MB
+│ Browse disks, dumps, voices, a╭─────────────────────────────────────────────────────────────────────────╮ol.                 │
 │                               │                                                                         │                    │
-│                               │  Layout                                                                 │                    │
-│                               │     Enter          open a bank, then an Area for editing                │                    │
-│                               │     i              import a voice from the pool into the focused Area   │                    │
-│                               │     r (or F2)      rename the focused voice                             │                    │
-│                               │     c (or Ctrl-E)  copy the focused Area's voice into the pool          │                    │
-│                               │     Delete         clear the focused Area                               │                    │
+│                               │  Workspace Help                                                         │                    │
+│                               │  Casio FZ series sampler disk editor (FZ-1, FZ-10M, FZ-20M)             │                    │
 │                               │                                                                         │                    │
-│                               │  Sound (numeric edit mode)                                              │                    │
-│                               │     ↑ / ↓        step value ±1                                          │                    │
-│                               │     Shift+↑ / ↓  step value ±10                                         │                    │
-│                               │     PgUp / PgDn  step value ±100                                        │                    │
-│                               │     Alt+↑ / ↓    step value ±1000                                       │                    │
-│                               │     0-9 (or -)   type a value directly; Enter commits                   │                    │
+│                               │  Glossary                                                               │                    │
+│                               │  Disk        an FZ floppy image (.img) you load into the editor         │                    │
+│                               │  Full dump   a disk's complete contents (.fzf): all banks and voices    │                    │
+│                               │  Bank        one of 8 performance sets; groups up to 64 Areas           │                    │
+│                               │  Area        a key and velocity zone within a bank, mapped to a voice   │                    │
+│                               │  Voice       one sampled sound (.fzv): audio plus its parameters        │                    │
+│                               │  Pool        a holding basket of voices you can drop into Areas         │                    │
 │                               │                                                                         │                    │
-│                               │  Actions                                                                │                    │
-│                               │     Space            audition the selected voice                        │                    │
-│                               │     Enter            drill in / commit                                  │                    │
-│                               │     Esc              dismiss / cancel                                   │                    │
-│                               │     Ctrl-Z / Ctrl-Y  undo / redo                                        │                    │
-└───────────────────────────────│     n                new disk (untitled FZF)                            │────────────────────┘
-                                │     e                export focused Pool entry to .fzv                  │
-                                │     Ctrl-R           refresh Workspace listing                          │
-arrows cursor  •  SHIFT+up/down │     Ctrl-S           save                                               │o  •  ? help  •  Ctrl-Q quit
-                                │     Ctrl-Q           quit                                               │
-                                │     ?                this help                                          │
-                                │                                                                         │
-                                │  Esc to close                                                           │
-                                │                                                                         │
-                                ╰─────────────────────────────────────────────────────────────────────────╯
+│                               │  enter        open a disk, or descend into a folder                     │                    │
+│                               │  left / esc   go up a directory                                         │                    │
+│                               │  ctrl-r       refresh the listing                                       │                    │
+│                               │  n            new disk (untitled FZF)                                   │                    │
+│                               │                                                                         │                    │
+│                               │  esc to close                                                           │                    │
+│                               │                                                                         │                    │
+│                               ╰─────────────────────────────────────────────────────────────────────────╯                    │
+│                                                                                                                              │
+│                                                                                                                              │
+│                                                                                                                              │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_PoolEmpty - 1]
@@ -262,7 +258,7 @@ arrows cursor  •  SHIFT+up/down │     Ctrl-S           save                 
 │                                                                                                                              │ │ S │
 │ Pool is empty. Add voices from the Workspace's file browser,                                                                 │ └───┘
 │ or extract from an open disk's bank (Ctrl-E in Layout).                                                                      │
-│                                                                                                                              │ Free: 1271 KB
+│                                                                                                                              │ Free: 1.2 MB
 │                                                                                                                              │
 │                                                                                                                              │
 │                                                                                                                              │
@@ -290,7 +286,7 @@ arrows cursor  •  SHIFT+up/down │     Ctrl-S           save                 
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_SoundAfterDrillingIntoArea - 1]
@@ -302,7 +298,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │   DCF                                                                                                                        │ │ S │
 │   LFO                                                                                                                        │ └───┘
 │   Sample                                                                                                                     │
-│   Loops                                                                                                                      │ Free: 244 KB
+│   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
 │   vis    [lvlKF/VF]    rateKF/VF    s0    s1    s2    s3    s4    s5    s6    s7                                             │
 │                                                                                                                              │
@@ -310,7 +306,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │    DCA level KF  +0                                                                                                          │
 │    DCA level VF  +95                                                                                                         │
 │                                                                                                                              │
-│ up/down switch row  •  left/right switch cell  •  Enter to edit                                                              │
+│ up/down switch row  •  left/right switch cell  •  enter to edit  •  esc back to layout                                       │
 │                                                                                                                              │
 │ DCA: per-stage envelope shaping the voice's amplitude over time.                                                             │
 │                                                                                                                              │
@@ -330,7 +326,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 Opened Bank 1
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_SoundNavigateRight - 1]
@@ -342,7 +338,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │   DCF                                                                                                                        │ │ S │
 │   LFO                                                                                                                        │ └───┘
 │   Sample                                                                                                                     │
-│   Loops                                                                                                                      │ Free: 244 KB
+│   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
 │   vis    lvlKF/VF    [rateKF/VF]    s0    s1    s2    s3    s4    s5    s6    s7                                             │
 │                                                                                                                              │
@@ -350,7 +346,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │    DCA rate KF  +0                                                                                                           │
 │    DCA rate VF  +0                                                                                                           │
 │                                                                                                                              │
-│ up/down switch row  •  left/right switch cell  •  Enter to edit                                                              │
+│ up/down switch row  •  left/right switch cell  •  enter to edit  •  esc back to layout                                       │
 │                                                                                                                              │
 │ DCA: per-stage envelope shaping the voice's amplitude over time.                                                             │
 │                                                                                                                              │
@@ -370,7 +366,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 Opened Bank 1
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_SaveAsModalOpen - 1]
@@ -378,27 +374,27 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Workspace   <workspace>                                                                                                      │ │ W │
 │                                                                                                                              │ │ P │
-│          name       type                                                                                                     │ │ L │
-│  ▶  [F]  Piano.fzf  dump                                                                                                     │ │ S │
+│          name       type  size                                                                                               │ │ L │
+│  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  Enter to descend or open  •  Left or Esc to go up  •  Ctrl-R refresh  •  SHIFT+down to Pool                 │
-│                                                                                                                              │ Free: 1271 KB
+│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
 │                                                                                                                              │
 │                                                                                                                              │
 │                                                                                                                              │
-│                                                                                                                              │
-│                                                   ╭──────────────────────────────────╮                                       │
-│                                                   │                                  │                                       │
-│                                                   │   Save As                        │                                       │
-│                                                   │                                  │                                       │
-│                                                   │   Filename: _                    │                                       │
-│                                                   │                                  │                                       │
-│                                                   │   Enter to save, Esc to cancel   │                                       │
-│                                                   │                                  │                                       │
-│                                                   ╰──────────────────────────────────╯                                       │
-│                                                                                                                              │
+│                                           ╭─────────────────────────────────────────────────╮                                │
+│                                           │                                                 │                                │
+│                                           │   Name new disk                                 │                                │
+│                                           │                                                 │                                │
+│                                           │   Filename: _                                   │                                │
+│                                           │   Saves to: <workspace>                         │                                │
+│                                           │   (.img is appended if you omit an extension)   │                                │
+│                                           │                                                 │                                │
+│                                           │   Enter to save, Esc to cancel                  │                                │
+│                                           │                                                 │                                │
+│                                           ╰─────────────────────────────────────────────────╯                                │
 │                                                                                                                              │
 │                                                                                                                              │
 │                                                                                                                              │
@@ -409,8 +405,8 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │                                                                                                                              │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
-Save-as: type filename, Enter to commit, Esc to cancel
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+Name the new disk: type a filename, then Enter to save
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_SaveAsModalWithFilename - 1]
@@ -418,27 +414,27 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Workspace   <workspace>                                                                                                      │ │ W │
 │                                                                                                                              │ │ P │
-│          name       type                                                                                                     │ │ L │
-│  ▶  [F]  Piano.fzf  dump                                                                                                     │ │ S │
+│          name       type  size                                                                                               │ │ L │
+│  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  Enter to descend or open  •  Left or Esc to go up  •  Ctrl-R refresh  •  SHIFT+down to Pool                 │
-│                                                                                                                              │ Free: 1271 KB
+│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
 │                                                                                                                              │
 │                                                                                                                              │
 │                                                                                                                              │
-│                                                                                                                              │
-│                                                   ╭──────────────────────────────────╮                                       │
-│                                                   │                                  │                                       │
-│                                                   │   Save As                        │                                       │
-│                                                   │                                  │                                       │
-│                                                   │   Filename: MyDisk_              │                                       │
-│                                                   │                                  │                                       │
-│                                                   │   Enter to save, Esc to cancel   │                                       │
-│                                                   │                                  │                                       │
-│                                                   ╰──────────────────────────────────╯                                       │
-│                                                                                                                              │
+│                                           ╭─────────────────────────────────────────────────╮                                │
+│                                           │                                                 │                                │
+│                                           │   Name new disk                                 │                                │
+│                                           │                                                 │                                │
+│                                           │   Filename: MyDisk_                             │                                │
+│                                           │   Saves to: <workspace>/MyDisk.img              │                                │
+│                                           │   (.img is appended if you omit an extension)   │                                │
+│                                           │                                                 │                                │
+│                                           │   Enter to save, Esc to cancel                  │                                │
+│                                           │                                                 │                                │
+│                                           ╰─────────────────────────────────────────────────╯                                │
 │                                                                                                                              │
 │                                                                                                                              │
 │                                                                                                                              │
@@ -449,8 +445,8 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │                                                                                                                              │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
-Save-as: type filename, Enter to commit, Esc to cancel
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+Name the new disk: type a filename, then Enter to save
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_UndoOnUntitled - 1]
@@ -458,11 +454,11 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Workspace   <workspace>                                                                                                      │ │ W │
 │                                                                                                                              │ │ P │
-│          name       type                                                                                                     │ │ L │
-│  ▶  [F]  Piano.fzf  dump                                                                                                     │ │ S │
+│          name       type  size                                                                                               │ │ L │
+│  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  Enter to descend or open  •  Left or Esc to go up  •  Ctrl-R refresh  •  SHIFT+down to Pool                 │
-│                                                                                                                              │ Free: 1271 KB
+│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
 │                                                                                                                              │
@@ -490,7 +486,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 Nothing to undo
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_SoundEnvelopeStageRoleLabel - 1]
@@ -502,7 +498,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │   DCF                                                                                                                        │ │ S │
 │   LFO                                                                                                                        │ └───┘
 │   Sample                                                                                                                     │
-│   Loops                                                                                                                      │ Free: 244 KB
+│   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
 │   vis    lvlKF/VF    rateKF/VF    [s0]    s1    s2    s3    s4    s5    s6    s7                                             │
 │                                                                                                                              │
@@ -511,7 +507,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │    Rate        99                                                                                                            │
 │    Stop level  99                                                                                                            │
 │                                                                                                                              │
-│ up/down switch row  •  left/right switch cell  •  Enter to edit                                                              │
+│ up/down switch row  •  left/right switch cell  •  enter to edit  •  esc back to layout                                       │
 │                                                                                                                              │
 │ DCA: per-stage envelope shaping the voice's amplitude over time.                                                             │
 │                                                                                                                              │
@@ -530,7 +526,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 Opened Bank 1
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_SoundLoopsVisual - 1]
@@ -542,7 +538,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │   DCF                                                                                                                        │ │ S │
 │   LFO                                                                                                                        │ └───┘
 │   Sample                                                                                                                     │
-│ ▶ Loops                                                                                                                      │ Free: 244 KB
+│ ▶ Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
 │   [vis]    ptrs    L0    L1    L2    L3    L4    L5    L6    L7                                                              │
 │                                                                                                                              │
@@ -558,7 +554,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │  ⠇                                                                                                                           │
 │ range 0..51200    loop 1: 50561..50835                                                                                       │
 │                                                                                                                              │
-│ up/down switch row  •  left/right switch cell  •  Enter to edit                                                              │
+│ up/down switch row  •  left/right switch cell  •  enter to edit  •  esc back to layout                                       │
 │                                                                                                                              │
 │ Loops: start, end, and crossfade settings for the sustaining loop region.                                                    │
 │                                                                                                                              │
@@ -570,7 +566,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 Opened Bank 1
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_SoundEditMode - 1]
@@ -582,7 +578,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │   DCF                                                                                                                        │ │ S │
 │   LFO                                                                                                                        │ └───┘
 │   Sample                                                                                                                     │
-│   Loops                                                                                                                      │ Free: 244 KB
+│   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
 │   vis    [lvlKF/VF]    rateKF/VF    s0    s1    s2    s3    s4    s5    s6    s7                                             │
 │                                                                                                                              │
@@ -590,7 +586,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │  ▶  DCA level KF  +0                                                                                                         │
 │     DCA level VF  +95                                                                                                        │
 │                                                                                                                              │
-│ Up/Down ±1  •  Shift ±10  •  PgUp/Dn ±100  •  Alt ±1000  •  type digits to set  •  Enter commit  •  Esc cancel               │
+│ up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc cancel               │
 │                                                                                                                              │
 │ Editing a number; step with the modifiers or type the value directly, then commit.                                           │
 │                                                                                                                              │
@@ -610,7 +606,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 Editing DCA level KF: Up/Down adjusts, Tab next field, Enter commit, Esc cancel
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_SoundEditModeAdjustValue - 1]
@@ -622,7 +618,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │   DCF                                                                                                                        │ │ S │
 │   LFO                                                                                                                        │ └───┘
 │   Sample                                                                                                                     │
-│   Loops                                                                                                                      │ Free: 244 KB
+│   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
 │   vis    [lvlKF/VF]    rateKF/VF    s0    s1    s2    s3    s4    s5    s6    s7                                             │
 │                                                                                                                              │
@@ -630,7 +626,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │  ▶  DCA level KF  +1                                                                                                         │
 │     DCA level VF  +95                                                                                                        │
 │                                                                                                                              │
-│ Up/Down ±1  •  Shift ±10  •  PgUp/Dn ±100  •  Alt ±1000  •  type digits to set  •  Enter commit  •  Esc cancel               │
+│ up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc cancel               │
 │                                                                                                                              │
 │ Editing a number; step with the modifiers or type the value directly, then commit.                                           │
 │                                                                                                                              │
@@ -650,7 +646,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ● modified
 Editing DCA level KF: Up/Down adjusts, Tab next field, Enter commit, Esc cancel
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_DirtyMarkerVisible - 1]
@@ -662,7 +658,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │   DCF                                                                                                                        │ │ S │
 │   LFO                                                                                                                        │ └───┘
 │   Sample                                                                                                                     │
-│   Loops                                                                                                                      │ Free: 244 KB
+│   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
 │   vis    [lvlKF/VF]    rateKF/VF    s0    s1    s2    s3    s4    s5    s6    s7                                             │
 │                                                                                                                              │
@@ -670,7 +666,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │    DCA level KF  +1                                                                                                          │
 │    DCA level VF  +95                                                                                                         │
 │                                                                                                                              │
-│ up/down switch row  •  left/right switch cell  •  Enter to edit                                                              │
+│ up/down switch row  •  left/right switch cell  •  enter to edit  •  esc back to layout                                       │
 │                                                                                                                              │
 │ DCA: per-stage envelope shaping the voice's amplitude over time.                                                             │
 │                                                                                                                              │
@@ -690,7 +686,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ● modified
 Edit cancelled
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_AuditionWithSelection - 1]
@@ -702,7 +698,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │     #    voice         keys     vel                                                                                          │ │ S │
 │  ▶  A01  PIANO 1 C2 1  A0-C2    1-127                                                                                        │ └───┘
 │     A02  PIANO 1 C2 2  C#2-D2   1-127                                                                                        │
-│     A03  PIANO 1 F#2   D#2-G#2  1-127                                                                                        │ Free: 244 KB
+│     A03  PIANO 1 F#2   D#2-G#2  1-127                                                                                        │ Free: 241 KB
 │     A04  PIANO 1 C3    A2-D3    1-127                                                                                        │
 │     A05  PIANO 1 F#3   D#3-G#3  1-127                                                                                        │
 │     A06  PIANO 1 C4    A3-D4    1-127                                                                                        │
@@ -722,15 +718,15 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │     A20  (empty)                                                                                                             │
 │ ▼ more below (44 hidden)                                                                                                     │
 │                                                                                                                              │
-│ Enter edit  •  a edit area  •  i import  •  r rename  •  c pool  •  e export  •  m swap  •  Del clear  •  Esc/Left back to   │
-│ banks                                                                                                                        │
+│ up/down move  •  enter open  •  a area  •  i import  •  ctrl-d dup  •  r rename  •  c pool  •  del clear  •  esc back        │
 │                                                                                                                              │
 │ Each row is an Area mapping a voice to a key and velocity range; rename starts with the current name selected so the first   │
 │ key replaces it.                                                                                                             │
+│                                                                                                                              │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
-Auditioning Bank 1 / Area 1
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+♪ auditioning PIANO 1 C2 1
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_WorkspaceHidesUnsupportedFiles - 1]
@@ -738,14 +734,14 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Workspace   <workspace>                                                                                                      │ │ W │
 │                                                                                                                              │ │ P │
-│          name          type                                                                                                  │ │ L │
+│          name          type    size                                                                                          │ │ L │
 │  ▶  [/]  subdir/       dir                                                                                                   │ │ S │
-│     [V]  a-voice.fzv   voice                                                                                                 │ └───┘
-│     [W]  b-sample.wav  sample                                                                                                │
-│     [D]  c-disk.img    disk                                                                                                  │ Free: 1271 KB
-│     [F]  d-dump.fzf    dump                                                                                                  │
+│     [V]  a-voice.fzv   voice   1 B                                                                                           │ └───┘
+│     [W]  b-sample.wav  sample  1 B                                                                                           │
+│     [D]  c-disk.img    disk    1 B (?)                                                                                       │ Free: 1.2 MB
+│     [F]  d-dump.fzf    dump    1 B                                                                                           │
 │                                                                                                                              │
-│ up/down move  •  Enter to descend or open  •  Left or Esc to go up  •  Ctrl-R refresh  •  SHIFT+down to Pool                 │
+│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
 │                                                                                                                              │
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
@@ -770,7 +766,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_WorkspaceAuditionsWAV - 1]
@@ -778,11 +774,11 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Workspace   <workspace>                                                                                                      │ │ W │
 │                                                                                                                              │ │ P │
-│          name     type                                                                                                       │ │ L │
-│  ▶  [W]  808.wav  sample                                                                                                     │ │ S │
+│          name     type    size                                                                                               │ │ L │
+│  ▶  [W]  808.wav  sample  299.3 KB                                                                                           │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  Enter to descend or open  •  Left or Esc to go up  •  Ctrl-R refresh  •  SHIFT+down to Pool                 │
-│                                                                                                                              │ Free: 1271 KB
+│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
 │                                                                                                                              │
@@ -809,8 +805,8 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │                                                                                                                              │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
-Auditioning 808.wav
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+♪ auditioning 808.wav
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_LayoutImportOpensPickerOnPool - 1]
@@ -818,12 +814,12 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Pool   (1 entry)                                                                                                             │ │ W │
 │                                                                                                                              │ │ P │
-│ Picking voice for Bank 1 / Area 1  •  Enter assigns  •  Esc cancels                                                          │ │ L │
+│ Picking voice for Bank 1 / Area 1  •  enter assigns  •  esc cancels                                                          │ │ L │
 │                                                                                                                              │ │ S │
 │     #   name  source                                                                                                         │ └───┘
 │  ▶   1  808   wav                                                                                                            │
-│                                                                                                                              │ Free: 1271 KB
-│ Space to audition  •  e to export .fzv  •  Del to remove                                                                     │
+│                                                                                                                              │ Free: 1.2 MB
+│ enter to assign  •  esc to cancel  •  space to audition  •  del to remove                                                    │
 │                                                                                                                              │
 │ Picker mode: pick the voice to drop into Bank 1 / Area 1; auditioning still works for preview.                               │
 │                                                                                                                              │
@@ -850,7 +846,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 Pick a voice, Enter to assign, Esc to cancel
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_AssignKeepsLayoutCursorOnArea - 1]
@@ -862,7 +858,7 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │     #    voice    keys    vel                                                                                                │ │ S │
 │     A01  (empty)                                                                                                             │ └───┘
 │     A02  (empty)                                                                                                             │
-│  ▶  A03  808      C-1-G9  1-127                                                                                              │ Free: 1108 KB
+│  ▶  A03  808      C-1-G9  1-127                                                                                              │ Free: 1.1 MB
 │     A04  (empty)                                                                                                             │
 │     A05  (empty)                                                                                                             │
 │     A06  (empty)                                                                                                             │
@@ -882,15 +878,15 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 │     A20  (empty)                                                                                                             │
 │ ▼ more below (44 hidden)                                                                                                     │
 │                                                                                                                              │
-│ Enter edit  •  a edit area  •  i import  •  r rename  •  c pool  •  e export  •  m swap  •  Del clear  •  Esc/Left back to   │
-│ banks                                                                                                                        │
+│ up/down move  •  enter open  •  a area  •  i import  •  ctrl-d dup  •  r rename  •  c pool  •  del clear  •  esc back        │
 │                                                                                                                              │
 │ Each row is an Area mapping a voice to a key and velocity range; rename starts with the current name selected so the first   │
 │ key replaces it.                                                                                                             │
+│                                                                                                                              │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ● modified
-Assigned "808" to Bank 1 / Area 3
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+Imported "808" into Bank 1 / Area 3
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---
 
 [TestSnapshot_AuditionWithoutSelection - 1]
@@ -898,11 +894,11 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ ┌───┐
 │ Workspace   <workspace>                                                                                                      │ │ W │
 │                                                                                                                              │ │ P │
-│          name       type                                                                                                     │ │ L │
-│  ▶  [F]  Piano.fzf  dump                                                                                                     │ │ S │
+│          name       type  size                                                                                               │ │ L │
+│  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  Enter to descend or open  •  Left or Esc to go up  •  Ctrl-R refresh  •  SHIFT+down to Pool                 │
-│                                                                                                                              │ Free: 1271 KB
+│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
 │                                                                                                                              │
@@ -930,5 +926,5 @@ arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new di
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 Audition: select an Area in Layout first
-arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit
+shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit
 ---

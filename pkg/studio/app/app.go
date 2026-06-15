@@ -353,7 +353,7 @@ func (a App) handleSaveAsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyEsc:
 		a.saveAsActive = false
 		a.saveAsBuffer = ""
-		a.setStatus(status.Info, "Save-as cancelled")
+		a.setStatus(status.Info, "New disk cancelled")
 		return a, nil
 	case keyEnter:
 		return a.commitSaveAs()
@@ -523,15 +523,27 @@ func (a App) commitBankRename() (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-func (a App) commitSaveAs() (tea.Model, tea.Cmd) {
-	name := strings.TrimSpace(a.saveAsBuffer)
+// saveAsResolvedName applies the default .img extension to a save-as
+// buffer (unless the user already typed .img/.fzf), so commitSaveAs
+// and the modal preview agree on the exact filename. Returns "" for an
+// empty buffer.
+func saveAsResolvedName(buffer string) string {
+	name := strings.TrimSpace(buffer)
 	if name == "" {
-		a.setStatus(status.Warning, "Save-as: filename cannot be empty")
-		return a, nil
+		return ""
 	}
 	if !strings.HasSuffix(strings.ToLower(name), ".img") &&
 		!strings.HasSuffix(strings.ToLower(name), ".fzf") {
 		name += ".img"
+	}
+	return name
+}
+
+func (a App) commitSaveAs() (tea.Model, tea.Cmd) {
+	name := saveAsResolvedName(a.saveAsBuffer)
+	if name == "" {
+		a.setStatus(status.Warning, "Disk name cannot be empty")
+		return a, nil
 	}
 	target := filepath.Join(a.directory, name)
 	if _, err := os.Stat(target); err == nil {
@@ -549,7 +561,7 @@ func (a App) commitSaveAs() (tea.Model, tea.Cmd) {
 				if result == 1 {
 					return a.doSaveTo(target)
 				}
-				a.setStatus(status.Info, "Save-as cancelled")
+				a.setStatus(status.Info, "New disk cancelled")
 				return a, nil
 			})
 		return a, nil
@@ -560,7 +572,7 @@ func (a App) commitSaveAs() (tea.Model, tea.Cmd) {
 func (a App) doSaveTo(target string) (App, tea.Cmd) {
 	a = a.prepareForSave()
 	if err := a.writeContainerToPath(target); err != nil {
-		a.setStatus(status.Error, fmt.Sprintf("Save-as failed: %v", err))
+		a.setStatus(status.Error, fmt.Sprintf("Save failed: %v", err))
 		return a, nil
 	}
 	a.containerInfo.Path = target
@@ -824,6 +836,15 @@ func (a App) routeAction(action nav.Action) (tea.Model, tea.Cmd) {
 		a.status.Cancel()
 		return a, nil
 	}
+	// Sound is entered as a space switch from a Layout Area, so the
+	// Sound space cannot itself reverse the back keys. Route Cancel
+	// (Esc) up to Layout, which retains its cursor on the originating
+	// Area. Cell edit-mode keys are consumed before routeAction, so
+	// reaching here means the row list, where Esc would otherwise be
+	// inert (the F-03 nav trap).
+	if action == nav.Cancel && a.current == minimap.Sound {
+		return a.navUp()
+	}
 	switch action {
 	case nav.Quit:
 		return a.handleQuit()
@@ -934,7 +955,7 @@ func (a App) handleQuit() (tea.Model, tea.Cmd) {
 	a.openConfirm(
 		confirm.Prompt{
 			Title: unsavedChangesTitle,
-			Body:  "Edits to this container haven't been saved.",
+			Body:  "Edits to this disk haven't been saved.",
 			Options: []confirm.Option{
 				{Label: cancelLabel, Result: 0},
 				{Label: "Quit anyway", Result: 1},
@@ -956,14 +977,51 @@ func (a App) handleQuit() (tea.Model, tea.Cmd) {
 // FZF voice-extract code path the pool already owns through
 // MirrorContainerVoices.
 func (a App) handleExport() (tea.Model, tea.Cmd) {
-	path, err := a.pool.Export(a.workspace.Directory())
+	target, err := a.pool.ExportTarget(a.workspace.Directory())
 	if err != nil {
 		a.setStatus(status.Error, fmt.Sprintf("Export failed: %v", err))
 		return a, nil
 	}
-	a.workspace.Refresh()
-	a.setStatus(status.Success, fmt.Sprintf("Exported %s", path))
+	a = a.exportWithOverwriteGuard(target, func() error { return a.pool.ExportTo(target) })
 	return a, nil
+}
+
+// exportWithOverwriteGuard writes via doWrite, but when target already
+// exists it first asks the user to confirm the overwrite. A filesystem
+// write is outside the undo stack, so an accidental clobber of an
+// unrelated workspace file would be unrecoverable (N-05). On success it
+// refreshes the Workspace listing and reports the resolved path.
+func (a App) exportWithOverwriteGuard(target string, doWrite func() error) App {
+	commit := func(aa App) App {
+		if err := doWrite(); err != nil {
+			aa.setStatus(status.Error, fmt.Sprintf("Export failed: %v", err))
+			return aa
+		}
+		aa.workspace.Refresh()
+		aa.setStatus(status.Success, fmt.Sprintf("Exported %s", target))
+		return aa
+	}
+	if _, err := os.Stat(target); err != nil {
+		// Target doesn't exist (or can't be stat'd): write directly.
+		return commit(a)
+	}
+	a.openConfirm(
+		confirm.Prompt{
+			Title: "Overwrite file?",
+			Body:  fmt.Sprintf("%s already exists. Overwrite it?", target),
+			Options: []confirm.Option{
+				{Label: cancelLabel, Result: 0},
+				{Label: "Overwrite", Result: 1},
+			},
+		},
+		func(result int) (App, tea.Cmd) {
+			if result == 1 {
+				return commit(a), nil
+			}
+			a.setStatus(status.Info, "Export cancelled")
+			return a, nil
+		})
+	return a
 }
 
 // swapAreasInBank exchanges two Areas within the same bank: their
@@ -975,7 +1033,7 @@ func (a App) handleExport() (tea.Model, tea.Cmd) {
 // single step.
 func (a App) swapAreasInBank(bankIdx, srcArea, tgtArea int) App {
 	if a.containerModel == nil {
-		a.setStatus(status.Warning, "Swap: no container loaded")
+		a.setStatus(status.Warning, "Swap: no disk loaded")
 		return a
 	}
 	if srcArea == tgtArea {
@@ -1021,7 +1079,7 @@ func patchByte(data []byte, off int, newVal uint8) model.Patch {
 // materialised yet, the same way openAreaEditor does.
 func (a App) openEffectsEditor(bankIdx int) App {
 	if a.containerModel == nil {
-		a.setStatus(status.Warning, "Edit effects: no container loaded")
+		a.setStatus(status.Warning, "Edit effects: no disk loaded")
 		return a
 	}
 	if bankIdx >= a.containerInfo.BankCount {
@@ -1162,7 +1220,7 @@ func (a App) deleteBank(bankIdx int) App {
 // we open with sensible defaults; saving auto-grows as needed.
 func (a App) openAreaEditor(bankIdx, areaIdx int) App {
 	if a.containerModel == nil {
-		a.setStatus(status.Warning, "Edit area: no container loaded")
+		a.setStatus(status.Warning, "Edit area: no disk loaded")
 		return a
 	}
 	seed := areaeditor.SeedValues{
@@ -1273,7 +1331,7 @@ func (a App) commitAreaEditor() (tea.Model, tea.Cmd) {
 // container itself is untouched.
 func (a App) exportAreaToWorkspace(bankIdx, areaIdx int) App {
 	if a.containerModel == nil {
-		a.setStatus(status.Warning, "Export: no container loaded")
+		a.setStatus(status.Warning, "Export: no disk loaded")
 		return a
 	}
 	data := a.containerModel.Bytes()
@@ -1305,13 +1363,12 @@ func (a App) exportAreaToWorkspace(bankIdx, areaIdx int) App {
 		stem = fmt.Sprintf("BANK%d-AREA%02d", bankIdx+1, areaIdx+1)
 	}
 	target := filepath.Join(a.workspace.Directory(), stem+".fzv")
-	if err := os.WriteFile(target, fzv, 0o644); err != nil {
-		a.setStatus(status.Error, fmt.Sprintf("Export failed: %v", err))
-		return a
-	}
-	a.workspace.Refresh()
-	a.setStatus(status.Success, fmt.Sprintf("Exported %s", target))
-	return a
+	return a.exportWithOverwriteGuard(target, func() error {
+		if err := os.WriteFile(target, fzv, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", target, err)
+		}
+		return nil
+	})
 }
 
 // sanitizeFZVStemForExport mirrors pool.sanitizeFZVStem inside the
@@ -1366,7 +1423,7 @@ func (a App) growBanksTo(targetCount int) (App, bool) {
 		return a, true
 	}
 	if a.containerModel == nil {
-		a.setStatus(status.Warning, "No container to grow")
+		a.setStatus(status.Warning, "No disk to grow")
 		return a, false
 	}
 	if a.containerInfo.WrappedVoice {
@@ -1452,13 +1509,13 @@ func (a App) installUntitledContainer() App {
 
 func (a App) handleSave() (tea.Model, tea.Cmd) {
 	if a.containerModel == nil {
-		a.setStatus(status.Warning, "No container to save")
+		a.setStatus(status.Warning, "No disk to save")
 		return a, nil
 	}
 	if a.containerModel.Path() == "" {
 		a.saveAsActive = true
 		a.saveAsBuffer = ""
-		a.setStatus(status.Info, "Save-as: type filename, Enter to commit, Esc to cancel")
+		a.setStatus(status.Info, "Name the new disk: type a filename, then Enter to save")
 		return a, nil
 	}
 	a = a.prepareForSave()
@@ -1810,7 +1867,11 @@ func (a App) handleAudition() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 	if audio.CurrentVoiceID() == voiceID {
-		a.setStatus(status.Success, fmt.Sprintf("Auditioning Bank %d / Area %d", bankIdx+1, areaIdx+1))
+		name := strings.TrimSpace(a.layout.VoiceName(bankIdx, areaIdx))
+		if name == "" {
+			name = fmt.Sprintf("Bank %d / Area %d", bankIdx+1, areaIdx+1)
+		}
+		a.setStatus(status.Success, fmt.Sprintf("♪ auditioning %s", name))
 	} else {
 		a.setStatus(status.Info, "Audition stopped")
 	}
@@ -1824,12 +1885,12 @@ func (a App) handleAudition() (tea.Model, tea.Cmd) {
 // uniformly across the three container origins.
 func (a App) containerAudioArea() ([]byte, error) {
 	if a.containerModel == nil {
-		return nil, errors.New("no container loaded")
+		return nil, errors.New("no disk loaded")
 	}
 	data := a.containerModel.Bytes()
 	audioStart := a.containerInfo.AudioAreaStart
 	if audioStart <= 0 || audioStart > len(data) {
-		return nil, fmt.Errorf("container audio area out of range: start=%d size=%d",
+		return nil, fmt.Errorf("disk audio area out of range: start=%d size=%d",
 			audioStart, len(data))
 	}
 	return data[audioStart:], nil
@@ -1954,7 +2015,7 @@ func (a App) handleWorkspaceWavAudition() (App, bool) {
 		return a, true
 	}
 	if audio.CurrentVoiceID() == voiceID {
-		a.setStatus(status.Success, fmt.Sprintf("Auditioning %s", filepath.Base(path)))
+		a.setStatus(status.Success, fmt.Sprintf("♪ auditioning %s", filepath.Base(path)))
 	} else {
 		a.setStatus(status.Info, "Audition stopped")
 	}
@@ -1996,8 +2057,9 @@ func (a App) loadAndInstallContainer(path string) (App, bool) {
 	a.current = minimap.Layout
 	a.minimap.Current = a.current
 	a.setStatus(status.Success,
-		fmt.Sprintf("Opened %s (%d banks, %d voices)",
-			path, info.BankCount, info.VoiceCount))
+		fmt.Sprintf("Opened %s (%d %s, %d %s)",
+			path, info.BankCount, plural(info.BankCount, "bank", "banks"),
+			info.VoiceCount, plural(info.VoiceCount, "voice", "voices")))
 	return a, true
 }
 
@@ -2094,7 +2156,7 @@ func (a App) handleWorkspaceIntent(intent workspace.Intent) App {
 				confirm.Prompt{
 					Title: unsavedChangesTitle,
 					Body: fmt.Sprintf(
-						"The current container has unsaved edits. Open %s anyway?",
+						"The current disk has unsaved edits. Open %s anyway?",
 						filepath.Base(path)),
 					Options: []confirm.Option{
 						{Label: "Save and switch", Result: 2},
@@ -2161,7 +2223,7 @@ func (a App) handleLayoutIntent(intent layout.Intent) App {
 	case layout.IntentExtractToPool:
 		off, ok := a.layout.VoiceOffset(intent.BankIdx, intent.AreaIdx)
 		if !ok {
-			a.setStatus(status.Warning, "Copy to pool: voice slot out of bounds")
+			a.setStatus(status.Warning, "Send to pool: voice slot out of bounds")
 			return a
 		}
 		data := a.containerModel.Bytes()
@@ -2171,7 +2233,7 @@ func (a App) handleLayoutIntent(intent layout.Intent) App {
 		source := fmt.Sprintf("bank %d / area %d", intent.BankIdx+1, intent.AreaIdx+1)
 		a.pool.AddFromAreaVoice(name, source, voiceBytes)
 		a.setStatus(status.Success,
-			fmt.Sprintf("Copied %q to pool", name))
+			fmt.Sprintf("Sent %q to pool", name))
 	case layout.IntentExportArea:
 		a = a.exportAreaToWorkspace(intent.BankIdx, intent.AreaIdx)
 	case layout.IntentSwapAreas:
@@ -2278,7 +2340,7 @@ func (a App) handlePoolIntent(intent pool.Intent) App {
 		}
 		if audio.CurrentVoiceID() == voiceID {
 			a.setStatus(status.Success,
-				fmt.Sprintf("Auditioning pool entry %q", intent.Entry.Name))
+				fmt.Sprintf("♪ auditioning %q", intent.Entry.Name))
 		} else {
 			a.setStatus(status.Info, "Audition stopped")
 		}
@@ -2525,7 +2587,7 @@ func (a App) assignPoolEntryToArea(entry *pool.Entry, bankIdx, areaIdx int) App 
 	voiceAreaStart := a.containerInfo.BankCount * disk.SectorSize
 	audioStart := a.containerInfo.AudioAreaStart
 	if audioStart <= 0 || audioStart > len(data) {
-		a.setStatus(status.Error, "Assign: container audio area not configured")
+		a.setStatus(status.Error, "Assign: disk audio area not configured")
 		return a
 	}
 
@@ -2644,19 +2706,57 @@ func (a App) assignPoolEntryToArea(entry *pool.Entry, bankIdx, areaIdx int) App 
 	a.layout.RefreshContainer(a.containerModel, a.containerInfo)
 
 	a.setStatus(status.Success,
-		fmt.Sprintf("Assigned %q to Bank %d / Area %d",
+		fmt.Sprintf("Imported %q into Bank %d / Area %d",
 			entry.Name, bankIdx+1, areaIdx+1))
 	return a
+}
+
+// plural returns one when n == 1 and many otherwise, so count labels
+// read "1 bank" / "2 banks" instead of the ungrammatical "1 banks".
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
+// freeSpaceLabel formats a free-space byte count compactly enough to
+// fit the 12-column minimap rail (at most "X.X MB" or "NNN KB", six
+// cells), always with a unit, rolling to MB at 1000 KB so the KB form
+// never reaches four digits. Without the roll-up a value like 1205 KB
+// renders as "Free: 1205 KB" (13 cells) and a 140-column terminal clips
+// the unit to "1205" (R-01).
+func freeSpaceLabel(freeBytes int64) string {
+	if freeBytes < 0 {
+		freeBytes = 0
+	}
+	kb := freeBytes / 1024
+	if kb >= 1000 {
+		return fmt.Sprintf("%.1f MB", float64(freeBytes)/(1024*1024))
+	}
+	return fmt.Sprintf("%d KB", kb)
+}
+
+// freeSpaceBytes returns the bytes still available for file data on an
+// FZ floppy holding a dump of totalBytes. It uses disk.UsableDataSize
+// (physical capacity minus the two reserved sectors), the same basis
+// the CLI's disk-listing free-space figure uses, so the TUI and CLI
+// agree (F-08). The result may be negative when a dump exceeds floppy
+// capacity; callers clamp for display.
+func freeSpaceBytes(totalBytes int64) int64 {
+	return int64(disk.UsableDataSize) - totalBytes
 }
 
 // View implements tea.Model.
 func (a App) View() tea.View {
 	if a.tooSmall {
 		msg := fmt.Sprintf(
-			"Studio requires %d columns by %d rows.\n"+
+			"fizzle studio\n"+
+				"%s\n\n"+
+				"Studio requires %d columns by %d rows.\n"+
 				"Current: %d by %d.\n"+
-				"Resize the terminal to continue.",
-			minCols, minRows, a.width, a.height)
+				"Resize the terminal to continue, or press Ctrl-Q to quit.",
+			help.ProductTagline, minCols, minRows, a.width, a.height)
 		styled := theme.SilverText.Render(msg)
 		v := tea.NewView(centre(styled, a.width, a.height))
 		v.AltScreen = true
@@ -2688,12 +2788,28 @@ func (a App) View() tea.View {
 
 	rightCol := mini
 	if a.containerInfo.TotalBytes > 0 {
-		const fzDiskBytes int64 = 1310720 // FZ-1 floppy capacity: 1.25 MB
-		free := fzDiskBytes - a.containerInfo.TotalBytes
-		freeText := fmt.Sprintf("Free: %d KB", (free+512)/1024)
+		// Base free on the size a save would compact to, not the raw
+		// in-memory length, so reclaimable orphan audio (e.g. after an
+		// import is undone) is reflected immediately (N-04). This is a
+		// deliberate divergence from `disk ls`: the CLI reports a static
+		// file's CURRENT free, while studio shows the free the disk will
+		// have once saved (studio compacts on save). The two figures
+		// match for any studio-saved disk; they differ only for a disk
+		// made elsewhere that still carries reclaimable slack (R-02,
+		// kept by design). Both format with binary (÷1024) units, so the
+		// unit convention is identical at every scale.
+		used := a.containerInfo.TotalBytes
+		if a.containerModel != nil {
+			used = int64(container.CompactedSize(a.containerModel.Bytes(),
+				a.containerInfo.BankCount, a.containerInfo.AudioAreaStart))
+		}
+		// Count exactly what a save allocates: one DIS (directory) sector
+		// per file plus the file's data sectors (see diskadd.AddBytes).
+		usedSectors := 1 + disk.SectorsNeeded(int(used))
+		free := freeSpaceBytes(int64(usedSectors) * int64(disk.SectorSize))
+		freeText := "Free: " + freeSpaceLabel(free)
 		freeStyle := theme.DimText
 		if free <= 0 {
-			freeText = "Free: 0 KB"
 			freeStyle = theme.ErrorText
 		} else if free < 64*1024 {
 			// <64 KB headroom: highlight in warning amber so the user
@@ -2711,7 +2827,7 @@ func (a App) View() tea.View {
 	}
 
 	footer := theme.DimText.Render(
-		"arrows cursor  •  SHIFT+up/down between spaces  •  Enter open  •  n new disk  •  Ctrl-S save  •  Ctrl-Z undo  •  ? help  •  Ctrl-Q quit")
+		"shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  •  ctrl-q quit")
 	statusLine := a.status.View()
 	toastLine := a.toast.View()
 
@@ -2741,7 +2857,7 @@ func (a App) View() tea.View {
 	case a.confirm.IsOpen():
 		overlay = a.confirm.View()
 	case a.help.IsOpen():
-		overlay = a.help.View()
+		overlay = a.help.View(a.current)
 	}
 	if overlay != "" {
 		body = overlayCentered(body, overlay, a.width, a.height)
@@ -2788,7 +2904,7 @@ func (a App) renderRenameModal() string {
 	} else {
 		field += theme.AccentText.Render(value) + theme.DimText.Render("_")
 	}
-	hint := theme.DimText.Render("Enter saves  •  Esc cancels  •  max 12 chars")
+	hint := theme.DimText.Render("enter saves  •  esc cancels  •  max 12 chars")
 	body := title + "\n\n" + field + "\n\n" + hint
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -2798,10 +2914,20 @@ func (a App) renderRenameModal() string {
 }
 
 func (a App) renderSaveAsModal() string {
-	prompt := theme.Heading.Render("Save As") + "\n\n" +
+	// Preview the exact path that will be written: the resolved name
+	// (with the default .img appended) joined to the workspace dir, so
+	// the user sees the destination and extension before committing.
+	resolved := saveAsResolvedName(a.saveAsBuffer)
+	dest := a.directory
+	if resolved != "" {
+		dest = filepath.Join(a.directory, resolved)
+	}
+	prompt := theme.Heading.Render("Name new disk") + "\n\n" +
 		theme.PrimaryText.Render("Filename: ") +
 		theme.AccentText.Render(a.saveAsBuffer) +
-		theme.DimText.Render("_") + "\n\n" +
+		theme.DimText.Render("_") + "\n" +
+		theme.DimText.Render("Saves to: "+dest) + "\n" +
+		theme.DimText.Render("(.img is appended if you omit an extension)") + "\n\n" +
 		theme.DimText.Render("Enter to save, Esc to cancel")
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

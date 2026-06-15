@@ -3,10 +3,39 @@ package workspace
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/studio/nav"
 )
+
+// TestWorkspace_ShowsSizeAndFlagsInvalidDisk pins F-04: each file row
+// carries a size, and an .img whose length is not a valid disk image
+// size is flagged so junk and real disks are distinguishable without
+// opening them.
+func TestWorkspace_ShowsSizeAndFlagsInvalidDisk(t *testing.T) {
+	dir := t.TempDir()
+	// A valid-size disk and a too-small (junk) disk.
+	if err := os.WriteFile(filepath.Join(dir, "good.img"), make([]byte, disk.ImageSize), 0o644); err != nil { //nolint:gosec // G703: t.TempDir fixture
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "junk.img"), make([]byte, 200), 0o644); err != nil { //nolint:gosec // G703: t.TempDir fixture
+		t.Fatal(err)
+	}
+
+	m := New(dir)
+	rendered := m.View(140, 40)
+
+	// A formatted size appears (the valid disk is 1.2 MB).
+	if !strings.Contains(rendered, "MB") && !strings.Contains(rendered, "KB") {
+		t.Errorf("workspace listing shows no file sizes:\n%s", rendered)
+	}
+	// The junk .img is flagged as an invalid size.
+	if !strings.Contains(rendered, sizeFlag) {
+		t.Errorf("invalid-size .img is not flagged with %q:\n%s", sizeFlag, rendered)
+	}
+}
 
 // writeFixture creates an empty file at path with permissive permissions
 // suitable for a test temp directory. gosec G703 is suppressed because

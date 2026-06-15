@@ -17,10 +17,16 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 
+	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/render"
 	"github.com/philipcunningham/fizzle/pkg/studio/nav"
 	"github.com/philipcunningham/fizzle/pkg/studio/theme"
 	"github.com/philipcunningham/fizzle/pkg/studio/widgets/hint"
 )
+
+// sizeFlag marks a row whose on-disk length is not a valid image size,
+// so the user can spot junk .img files without opening them (F-04).
+const sizeFlag = "(?)"
 
 // FileKind tags each row by the action a Confirm gesture produces.
 type FileKind int
@@ -86,6 +92,7 @@ type Entry struct {
 	Name string
 	Path string
 	Kind FileKind
+	Size int64 // file size in bytes; -1 for directories
 }
 
 // Model is the Workspace space state.
@@ -136,10 +143,17 @@ func (m *Model) reload() {
 		if kind == KindUnknown {
 			continue
 		}
+		size := int64(-1)
+		if !f.IsDir() {
+			if info, err := f.Info(); err == nil {
+				size = info.Size()
+			}
+		}
 		entries = append(entries, Entry{
 			Name: name,
 			Path: filepath.Join(m.cwd, name),
 			Kind: kind,
+			Size: size,
 		})
 	}
 	sort.SliceStable(entries, func(i, j int) bool {
@@ -267,7 +281,7 @@ func (m Model) View(width, _ int) string {
 	hintBlock := hint.View(width,
 		"Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.")
 	footer := theme.DimText.Render(
-		"up/down move  •  Enter to descend or open  •  Left or Esc to go up  •  Ctrl-R refresh  •  SHIFT+down to Pool")
+		"up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool")
 	return lipgloss.JoinVertical(lipgloss.Left, header, "", body, "", footer, "", hintBlock)
 }
 
@@ -302,7 +316,7 @@ func (m Model) renderBody() string {
 		if e.Kind == KindDir {
 			name += "/"
 		}
-		rows = append(rows, []string{marker, kindBadge(e.Kind), name, kindLabel(e.Kind)})
+		rows = append(rows, []string{marker, kindBadge(e.Kind), name, kindLabel(e.Kind), sizeCell(e)})
 	}
 	cursor := m.cursor
 	return table.New().
@@ -310,7 +324,7 @@ func (m Model) renderBody() string {
 		BorderTop(false).BorderBottom(false).
 		BorderLeft(false).BorderRight(false).
 		BorderHeader(false).BorderColumn(false).BorderRow(false).
-		Headers("", "", "name", "type").
+		Headers("", "", "name", "type", "size").
 		Rows(rows...).
 		StyleFunc(func(rowIdx, col int) lipgloss.Style {
 			if rowIdx == table.HeaderRow {
@@ -331,6 +345,22 @@ func (m Model) renderBody() string {
 			return theme.DimText.Padding(0, 1)
 		}).
 		Render()
+}
+
+// sizeCell renders the size column for one entry: blank for
+// directories, a human-readable byte size for files, with a flag
+// appended when an .img file's length is not a valid disk image size
+// (F-04). FormatBytes is the same formatter the CLI uses, so the TUI
+// and CLI agree on units.
+func sizeCell(e Entry) string {
+	if e.Kind == KindDir || e.Size < 0 {
+		return ""
+	}
+	s := render.FormatBytes(int(e.Size))
+	if e.Kind == KindDisk && e.Size != int64(disk.ImageSize) {
+		s += " " + sizeFlag
+	}
+	return s
 }
 
 func kindBadge(k FileKind) string {
