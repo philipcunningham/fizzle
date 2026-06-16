@@ -94,3 +94,25 @@ func TestApp_PlainQKey_DoesNotQuit(t *testing.T) {
 		}
 	}
 }
+
+// TestApp_SoundEnterCommitExitsEditMode pins UXA: committing a field with
+// Enter returns to nav mode, so a following arrow navigates the grid
+// instead of adjusting the just-committed field's value.
+func TestApp_SoundEnterCommitExitsEditMode(t *testing.T) {
+	st := newJourneyWithFixture(t, pianoFixture)
+	st.a.current = minimap.Layout
+	st.a.minimap.Current = minimap.Layout
+	st.a = pump(t, st.a, keyPress(testKeyEnter), keyPress(testKeyEnter)) // into Sound
+	if st.a.current != minimap.Sound {
+		t.Fatalf("setup: not in Sound, got %v", st.a.current)
+	}
+	// Edit the focused cell's field, then commit with Enter.
+	st.a = pump(t, st.a, keyPress(testKeyEnter)) // begin editing
+	if !st.a.sound.InEditMode() {
+		t.Fatalf("setup: expected to be editing after Enter")
+	}
+	st.a = pump(t, st.a, keyPress(testKeyEnter)) // commit
+	if st.a.sound.InEditMode() {
+		t.Error("Enter-commit left the editor in edit mode (UXA sticky edit)")
+	}
+}

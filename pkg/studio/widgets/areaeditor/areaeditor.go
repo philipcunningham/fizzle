@@ -7,6 +7,7 @@ package areaeditor
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -58,6 +59,10 @@ type Model struct {
 	midiChan        int
 
 	field Field
+
+	// digits is the in-progress type-to-set buffer for the focused
+	// numeric field, cleared whenever focus moves or a step key is used.
+	digits string
 
 	// origin* hold the values at modal open, so commit can detect
 	// no-ops and skip writing.
@@ -116,6 +121,7 @@ func (m *Model) Open(bankIdx, areaIdx int, vals SeedValues) {
 	m.originAudioOut = m.audioOut
 	m.originMIDIChan = m.midiChan
 	m.field = FieldKeyLow
+	m.digits = ""
 }
 
 // Close clears modal state. Caller is responsible for committing
@@ -178,17 +184,88 @@ func (m Model) Changed() bool {
 func (m *Model) HandleKey(s string) {
 	switch s {
 	case "tab":
+		m.digits = ""
 		m.field = (m.field + 1) % numFields
 	case "shift+tab":
+		m.digits = ""
 		m.field = (m.field - 1 + numFields) % numFields
 	case "up":
+		m.digits = ""
 		m.step(+1)
 	case "down":
+		m.digits = ""
 		m.step(-1)
 	case "shift+up":
+		m.digits = ""
 		m.step(+m.bigStep())
 	case "shift+down":
+		m.digits = ""
 		m.step(-m.bigStep())
+	case "backspace":
+		if m.digits != "" {
+			m.digits = m.digits[:len(m.digits)-1]
+			m.applyDigits()
+		}
+	default:
+		// Type-to-set on the numeric fields, matching the Sound editor
+		// (UXE). Audio out (a bitmask cycle) and the MIDI channel
+		// (displayed 1..16) keep stepping, where typing is ambiguous.
+		if len(s) == 1 && s[0] >= '0' && s[0] <= '9' && m.acceptsTypedDigits() {
+			m.digits += s
+			m.applyDigits()
+		}
+	}
+}
+
+// acceptsTypedDigits reports whether the focused field is a plain 0..127
+// numeric field that type-to-set can drive directly.
+func (m Model) acceptsTypedDigits() bool {
+	switch m.field { //nolint:exhaustive // only the plain numeric fields accept typed digits; default covers the rest
+	case FieldKeyLow, FieldKeyHigh, FieldKeyOrig, FieldVelLow, FieldVelHigh, FieldVolume:
+		return true
+	default:
+		return false
+	}
+}
+
+// applyDigits parses the type-to-set buffer and writes it to the focused
+// field, applying the same clamps and cross-field invariants as step.
+func (m *Model) applyDigits() {
+	v := 0
+	if m.digits != "" {
+		n, err := strconv.Atoi(m.digits)
+		if err != nil {
+			return
+		}
+		v = n
+	}
+	switch m.field {
+	case FieldKeyLow:
+		m.keyLow = clampKey(v)
+		if m.keyLow > m.keyHigh {
+			m.keyHigh = m.keyLow
+		}
+	case FieldKeyHigh:
+		m.keyHigh = clampKey(v)
+		if m.keyHigh < m.keyLow {
+			m.keyLow = m.keyHigh
+		}
+	case FieldKeyOrig:
+		m.keyOrig = clampKey(v)
+	case FieldVelLow:
+		m.velLow = clampByte(v)
+		if m.velLow > m.velHigh {
+			m.velHigh = m.velLow
+		}
+	case FieldVelHigh:
+		m.velHigh = clampByte(v)
+		if m.velHigh < m.velLow {
+			m.velLow = m.velHigh
+		}
+	case FieldVolume:
+		m.volume = clampByte(v)
+	case FieldAudioOut, FieldMIDIChan, numFields:
+		// Not type-settable; reached only if acceptsTypedDigits drifts.
 	}
 }
 
@@ -393,7 +470,7 @@ func (m Model) View() string {
 		theme.Field("Output   ", audioOutLabel(m.audioOut), m.field == FieldAudioOut),
 		theme.Field("MIDI Chan", fmt.Sprintf("%d", m.midiChan+1), m.field == FieldMIDIChan),
 		"",
-		theme.DimText.Render("tab cycle field  •  up/down step  •  shift+up/down big step  •  enter commit  •  esc cancel"),
+		theme.DimText.Render("tab cycle field  •  up/down step  •  shift+up/down big step  •  type digits to set  •  enter commit  •  esc cancel"),
 	}
 	body := strings.Join(lines, "\n")
 	return lipgloss.NewStyle().

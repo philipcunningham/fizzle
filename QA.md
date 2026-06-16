@@ -861,8 +861,9 @@ fizzle studio /tmp/qa-studio
    to a non-default value. Sound, LFO row: change Rate (cell
    `[shape]`) to a non-default value.
 3. Layout, bank list: press `r` (or `F2`) on Bank 1 to rename. Type
-   a name with mixed case (e.g. `Test Edit`) and confirm Tab
-   preserves case after commit (no auto-upper-case).
+   a name (e.g. `Test Edit`) and commit. Bank names use the FZ-1's
+   name set and auto-uppercase, so it commits as `TEST EDIT` (the same
+   rule voice renames use).
 4. Layout, area list: press `a` on the Area you edited in step 2 to
    open the per-Area editor; change Volume and MIDI Channel.
 5. Sound, Loops row: select that voice's loop cell. Walk Sustain
@@ -880,7 +881,7 @@ fizzle studio /tmp/qa-studio
 
 - Every edit from steps 2 to 6 is visible and unchanged in the studio
   after the relaunch.
-- Bank name preserves the typed mixed case.
+- Bank name persists (uppercased, e.g. `TEST EDIT`).
 - The modified indicator is absent on relaunch.
 
 **Pass criteria (on hardware):**

@@ -61,5 +61,11 @@ jobs:
       - name: Integration test
         run: make integration-test
 
+      # Feature specs drive the studio TUI through a real PTY (creack/pty),
+      # which is UNIX-only — skip on Windows.
+      - name: Feature specs (TTY)
+        if: matrix.os != 'windows-latest'
+        run: make feature-test
+
       - name: Fuzz seed validation
         run: make fuzz-seed

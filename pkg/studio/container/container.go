@@ -418,6 +418,33 @@ func DefaultBankRangePatches(data []byte, bankIdx, areaIdx int) []model.Patch {
 	return patches
 }
 
+// IsBareSingleVoice reports whether the container holds exactly one voice
+// and no bank metadata that a single FZV file cannot represent (no bank
+// names). This is the only state in which a wrapped single-voice .img can
+// be saved back faithfully as a bare FZV; any richer content (a second
+// voice, or a bank name) must be promoted to a full dump on save so it
+// isn't dropped (UXF / UXD).
+func IsBareSingleVoice(data []byte, bankCount int) bool {
+	// maxReferencedSlot: -1 = no voices, 0 = exactly one (slot 0),
+	// >0 = multiple. Only the single-voice case can round-trip as an FZV.
+	if maxReferencedSlot(data, bankCount) != 0 {
+		return false
+	}
+	for b := 0; b < bankCount; b++ {
+		base := b * disk.SectorSize
+		off := base + disk.BankNameOffset
+		if off+disk.VoiceNameFieldSize > len(data) {
+			continue
+		}
+		for i := 0; i < disk.VoiceNameFieldSize; i++ {
+			if c := data[off+i]; c != ' ' && c != 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // maxReferencedSlot returns the highest voice-slot index referenced by
 // any bank's vp[] table, or -1 when no bank references any slot.
 func maxReferencedSlot(data []byte, bankCount int) int {

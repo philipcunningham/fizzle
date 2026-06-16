@@ -303,3 +303,48 @@ func TestCompactedSize_AgreesWithCompactVoiceArea(t *testing.T) {
 		})
 	}
 }
+
+// TestIsBareSingleVoice pins the predicate that decides whether a wrapped
+// single-voice disk can save faithfully as an FZV (UXF/UXD).
+func TestIsBareSingleVoice(t *testing.T) {
+	t.Parallel()
+	// One bank, bstep=1, vp[0]=0 (one voice), blank name => bare single voice.
+	bare := make([]byte, 2*disk.SectorSize)
+	binary.LittleEndian.PutUint16(bare[disk.BankVoiceCountOffset:], 1)
+	binary.LittleEndian.PutUint16(bare[disk.BankVoiceNumOffset:], 0)
+	for i := 0; i < disk.VoiceNameFieldSize; i++ {
+		bare[disk.BankNameOffset+i] = ' '
+	}
+	if !IsBareSingleVoice(bare, 1) {
+		t.Error("one blank-named voice should be a bare single voice")
+	}
+
+	// Two voices => not bare.
+	twoVoices := append([]byte(nil), bare...)
+	binary.LittleEndian.PutUint16(twoVoices[disk.BankVoiceCountOffset:], 2)
+	binary.LittleEndian.PutUint16(twoVoices[disk.BankVoiceNumOffset+disk.VPEntrySize:], 1)
+	if IsBareSingleVoice(twoVoices, 1) {
+		t.Error("two voices should not be a bare single voice")
+	}
+
+	// Named bank => not bare (a single FZV can't store a bank name).
+	named := append([]byte(nil), bare...)
+	copy(named[disk.BankNameOffset:], "MYBANK")
+	if IsBareSingleVoice(named, 1) {
+		t.Error("a named bank should not be a bare single voice")
+	}
+
+	// Multi-bank (bankCount=2): a name in the SECOND bank must also
+	// disqualify, locking the per-bank name scan rather than only checking
+	// bank 0. Bank 0 stays blank with its single voice; bank 1 is named.
+	secondNamed := make([]byte, 3*disk.SectorSize)
+	binary.LittleEndian.PutUint16(secondNamed[disk.BankVoiceCountOffset:], 1)
+	binary.LittleEndian.PutUint16(secondNamed[disk.BankVoiceNumOffset:], 0)
+	for i := 0; i < disk.VoiceNameFieldSize; i++ {
+		secondNamed[disk.BankNameOffset+i] = ' '
+	}
+	copy(secondNamed[disk.SectorSize+disk.BankNameOffset:], "BANK2")
+	if IsBareSingleVoice(secondNamed, 2) {
+		t.Error("a name in the second bank should not be a bare single voice")
+	}
+}
