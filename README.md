@@ -96,7 +96,7 @@ Long conversions respect Ctrl+C: cancel a running `sfz convert` and the command 
 
 ## Studio: the interactive TUI
 
-![fizzle studio](studio.gif)
+![fizzle studio](studio.png)
 
 ```sh
 fizzle studio                    # use the current directory as workspace
