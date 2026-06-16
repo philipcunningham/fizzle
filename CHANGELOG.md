@@ -2,6 +2,8 @@
 
 ## Unreleased (last updated 2026-06-16)
 
+## v0.3.1 (2026-06-16)
+
 - Fix studio data loss: imported voices and bank renames now persist when saving new or single-voice disks.
 - Add PTY-driven feature specs (`make feature-test`) covering save/reload round-trips.
 
