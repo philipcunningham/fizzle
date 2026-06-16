@@ -626,21 +626,22 @@ func (a App) writeContainerAsImage(target string) error {
 		return fmt.Errorf("format new image: %w", err)
 	}
 	payload := a.containerModel.Bytes()
-	// An empty FZF (no voices in any bank) cannot be embedded as a
-	// FULL-DATA-FZ entry: the FZ-1 firmware requires bstep>=1, and
-	// the fzutil parser enforces that on reload. Skip AddBytes for
-	// the empty case; the IMG is a valid blank floppy and the loader
-	// returns a fresh editable container on reopen. As soon as the
-	// user adds a voice and re-saves, AddBytes runs and a real
-	// FULL-DATA-FZ lands in the directory.
-	if a.containerInfo.VoiceCount > 0 {
-		waveSectors := disk.SectorsNeeded(int(a.containerInfo.PCMBytes))
+	// Embed a FULL-DATA-FZ entry only when the bytes actually parse as a
+	// dump with voices. ParseFZFHeader derives the counts the loader will
+	// read back (it errors on bstep==0 / no voices), so the decision and
+	// the metadata can't drift from a stale cached VoiceCount, which
+	// stays 0 on a header-less new disk and used to drop the import (UXF).
+	// An empty disk fails to parse and is left a valid blank floppy; the
+	// loader returns a fresh editable container on reopen.
+	if hdr, hErr := fzutil.ParseFZFHeader(payload); hErr == nil {
+		pcmBytes := len(payload) - hdr.VoiceAreaStart - hdr.NVoice*disk.VoicePackSize
+		if pcmBytes < 0 {
+			pcmBytes = 0
+		}
 		name := disk.PadLabel(disk.FullDumpName)
 		if err := diskadd.AddBytes(target, payload, name,
 			disk.TypeFullDump, 0,
-			a.containerInfo.BankCount,
-			a.containerInfo.VoiceCount,
-			waveSectors); err != nil {
+			hdr.NBankSectors, hdr.NVoice, disk.SectorsNeeded(pcmBytes)); err != nil {
 			return fmt.Errorf("add FULL-DATA-FZ: %w", err)
 		}
 	}
@@ -1521,9 +1522,14 @@ func (a App) handleSave() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 	a = a.prepareForSave()
+	wasWrapped := a.containerInfo.WrappedVoice
+	promotes := wasWrapped && !a.wrapsAsBareVoice()
 	if err := a.persistContainer(a.containerModel.Path()); err != nil {
 		a.setStatus(status.Error, fmt.Sprintf("Save failed: %v", err))
 		return a, nil
+	}
+	if promotes {
+		a = a.reflectPromotion()
 	}
 	// Save committed; remove the autosave snapshot so the next launch
 	// doesn't offer recovery against bytes the user already wrote.
@@ -1767,6 +1773,27 @@ func (a App) compactEmptyBanks() App {
 	return a
 }
 
+// wrapsAsBareVoice reports whether the container should be written back
+// as a bare FZV (the faithful single-voice round-trip): only when it is
+// a wrapped single-voice .img that still holds exactly one voice and no
+// bank names. Any richer content is promoted to a full dump on save.
+func (a App) wrapsAsBareVoice() bool {
+	return a.containerInfo.WrappedVoice &&
+		container.IsBareSingleVoice(a.containerModel.Bytes(), a.containerInfo.BankCount)
+}
+
+// reflectPromotion updates the in-memory format flags after a save that
+// promoted a wrapped single-voice container to a full dump, so a
+// subsequent in-place save targets the new FULL-DATA-FZ entry instead of
+// trying to replace the gone FZV entry.
+func (a App) reflectPromotion() App {
+	if a.containerInfo.WrappedVoice && !a.wrapsAsBareVoice() {
+		a.containerInfo.WrappedVoice = false
+		a.containerInfo.DiskEntryName = disk.FullDumpName
+	}
+	return a
+}
+
 func (a App) saveContainerToImage(path string) error {
 	img, err := disk.OpenImage(path)
 	if err != nil {
@@ -1777,17 +1804,22 @@ func (a App) saveContainerToImage(path string) error {
 		name = disk.FullDumpName
 	}
 	payload := a.containerModel.Bytes()
-	if a.containerInfo.WrappedVoice {
-		// Synthetic single-voice FZF: drop the bank sector to recover
-		// the FZV layout the .img expects. The voice header's wave /
-		// gen pointers stayed 0-relative to the FZV's audio area
-		// during editing, so the bytes after the leading bank sector
-		// are already a valid FZV payload.
+	if a.wrapsAsBareVoice() {
+		// Faithful single-voice round-trip: drop the synthetic bank
+		// sector to recover the FZV layout the .img expects. The voice
+		// header's wave / gen pointers stayed 0-relative to the FZV's
+		// audio area during editing, so the bytes after the leading bank
+		// sector are already a valid FZV payload.
 		if len(payload) < disk.SectorSize {
 			return fmt.Errorf("save: wrapped voice too small (%d bytes)", len(payload))
 		}
 		payload = payload[disk.SectorSize:]
 	}
+	// Otherwise the full FZF bytes go through ReplaceInMemory, whose
+	// detectFile names the entry: a richer wrapped container (a second
+	// voice, or a bank name) is detected as a full dump and the old FZV
+	// entry (name) is replaced by a FULL-DATA-FZ one, so nothing is
+	// dropped (UXF / UXD).
 	if err := diskadd.ReplaceInMemory(img, name, payload, 0); err != nil {
 		return fmt.Errorf("replace %s: %w", name, err)
 	}

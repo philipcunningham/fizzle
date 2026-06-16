@@ -586,7 +586,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │  ▶  DCA level KF  +0                                                                                                         │
 │     DCA level VF  +95                                                                                                        │
 │                                                                                                                              │
-│ up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc cancel               │
+│ up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc close                │
 │                                                                                                                              │
 │ Editing a number; step with the modifiers or type the value directly, then commit.                                           │
 │                                                                                                                              │
@@ -626,7 +626,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │  ▶  DCA level KF  +1                                                                                                         │
 │     DCA level VF  +95                                                                                                        │
 │                                                                                                                              │
-│ up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc cancel               │
+│ up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc close                │
 │                                                                                                                              │
 │ Editing a number; step with the modifiers or type the value directly, then commit.                                           │
 │                                                                                                                              │

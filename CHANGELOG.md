@@ -2,6 +2,9 @@
 
 ## Unreleased (last updated 2026-06-16)
 
+- Fix studio data loss: imported voices and bank renames now persist when saving new or single-voice disks.
+- Add PTY-driven feature specs (`make feature-test`) covering save/reload round-trips.
+
 ## v0.3.0 (2026-06-16)
 
 - Harden the studio TUI: per-context help, clearer navigation and labels, action confirmations, and CLI-consistent free space.

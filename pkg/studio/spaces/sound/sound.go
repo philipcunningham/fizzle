@@ -285,7 +285,10 @@ func (sm *Model) applyEdit(a nav.Action) string {
 		sm.draft = ""
 		return msgEditCancelled
 	case nav.Confirm:
-		// Commit and exit edit mode.
+		// Commit the current field and exit edit mode, so a following
+		// arrow navigates the grid rather than adjusting the just-
+		// committed value (UXA). Move between fields within a multi-field
+		// cell with Left/Right while editing; Enter ends the cell edit.
 		var patches []model.Patch
 		if f.kind == fieldText {
 			patches = f.patchText(sm.containerBytes, sm.draft)
@@ -297,19 +300,6 @@ func (sm *Model) applyEdit(a nav.Action) string {
 			if err := sm.commit(patches); err != nil {
 				return fmt.Sprintf("Commit failed: %v", err)
 			}
-		}
-		// Move to next field in the cell; exit if last.
-		if sm.fieldIdx+1 < len(fields) {
-			sm.fieldIdx++
-			next := fields[sm.fieldIdx]
-			if next.kind == fieldText {
-				sm.draft = next.readText(sm.containerBytes)
-				sm.draftFresh = true
-			} else {
-				sm.draft = ""
-				sm.draftFresh = false
-			}
-			return fmt.Sprintf("Editing %s", next.label)
 		}
 		sm.editMode = false
 		sm.draft = ""
@@ -490,10 +480,11 @@ func (sm *Model) ConsumeNumericKey(keyStr string) string {
 		return msgEditCancelled
 	case "enter":
 		if sm.numericDraft != "" {
-			return sm.commitNumericDraft(f, fields)
+			return sm.commitNumericDraft(f)
 		}
-		// No draft: commit-and-advance, the existing Enter semantics.
-		return sm.commitAndAdvance(f, fields)
+		// No draft: the value is already in the buffer from live step
+		// adjusts; just end the edit (UXA).
+		return sm.endEdit()
 	case "backspace":
 		if sm.numericDraft != "" && len(sm.numericDraft) > 0 {
 			sm.numericDraft = sm.numericDraft[:len(sm.numericDraft)-1]
@@ -578,7 +569,7 @@ func (sm *Model) adjustNumericField(f field, delta int) string {
 	return ""
 }
 
-func (sm *Model) commitNumericDraft(f field, fields []field) string {
+func (sm *Model) commitNumericDraft(f field) string {
 	draft := sm.numericDraft
 	sm.numericDraft = ""
 	n, err := strconv.Atoi(draft)
@@ -594,29 +585,14 @@ func (sm *Model) commitNumericDraft(f field, fields []field) string {
 			return fmt.Sprintf("Commit failed: %v", err)
 		}
 	}
-	return sm.advanceFieldOrExit(fields)
+	return sm.endEdit()
 }
 
-// commitAndAdvance mirrors the existing nav.Confirm semantics: no
-// pending draft, just commit the current value (which is already in
-// the buffer thanks to step-adjusts running immediately) and move on
-// to the next field within the cell. Exits edit mode if this was the
-// last field.
-func (sm *Model) commitAndAdvance(_ field, fields []field) string {
-	return sm.advanceFieldOrExit(fields)
-}
-
-func (sm *Model) advanceFieldOrExit(fields []field) string {
-	if sm.fieldIdx+1 < len(fields) {
-		sm.fieldIdx++
-		next := fields[sm.fieldIdx]
-		if next.kind == fieldText {
-			sm.draft = next.readText(sm.containerBytes)
-		} else {
-			sm.draft = ""
-		}
-		return fmt.Sprintf("Editing %s", next.label)
-	}
+// endEdit returns the editor to nav mode after a commit, so a following
+// arrow navigates the grid rather than adjusting the just-committed value
+// (UXA). Field-to-field movement within a multi-field cell stays on
+// Left/Right while editing.
+func (sm *Model) endEdit() string {
 	sm.editMode = false
 	sm.draft = ""
 	return "Committed"
@@ -688,10 +664,10 @@ func (sm Model) View(width, height int) string {
 	hintText := rowHint(sm.row)
 	if sm.editMode {
 		if sm.InNumericEditMode() {
-			hints = "up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc cancel"
+			hints = "up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc close"
 			hintText = "Editing a number; step with the modifiers or type the value directly, then commit."
 		} else {
-			hints = "up/down adjusts  •  enter commit  •  esc cancel"
+			hints = "up/down adjusts  •  enter commit  •  esc close"
 			hintText = "Editing a value; cycle through the choices and commit when you're settled."
 		}
 	}
