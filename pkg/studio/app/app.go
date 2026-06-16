@@ -839,10 +839,12 @@ func (a App) routeAction(action nav.Action) (tea.Model, tea.Cmd) {
 	// Sound is entered as a space switch from a Layout Area, so the
 	// Sound space cannot itself reverse the back keys. Route Cancel
 	// (Esc) up to Layout, which retains its cursor on the originating
-	// Area. Cell edit-mode keys are consumed before routeAction, so
-	// reaching here means the row list, where Esc would otherwise be
-	// inert (the F-03 nav trap).
-	if action == nav.Cancel && a.current == minimap.Sound {
+	// Area (the F-03 nav trap). Only when NOT editing a cell: while a
+	// field editor is open, Esc must cancel the edit and stay in Sound.
+	// Text and numeric fields are consumed before routeAction, but enum
+	// fields are not, so guard on InEditMode rather than assuming the
+	// row list.
+	if action == nav.Cancel && a.current == minimap.Sound && !a.sound.InEditMode() {
 		return a.navUp()
 	}
 	switch action {
