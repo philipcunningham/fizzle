@@ -88,6 +88,7 @@ var (
 		{"i", "import a pool voice into the focused Area"},
 		{"r (or f2)", "rename the focused voice"},
 		{"c (or ctrl-e)", "send the focused Area's voice to the pool"},
+		{"e", "export the focused Area's voice to a .fzv file"},
 		{"ctrl-d", "duplicate the focused Area into a new voice slot"},
 		{"a", "edit the focused Area's key/velocity range and config"},
 		{"f", "edit the focused bank's effects (bend and mod matrix)"},
