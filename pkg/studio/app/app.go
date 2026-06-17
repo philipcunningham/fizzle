@@ -128,11 +128,13 @@ type App struct {
 	// bank name field. renameBank discriminates the target: true =
 	// bank name field at renameTarget.BankIdx; false = voice header
 	// at (BankIdx, AreaIdx).
-	renameActive bool
-	renameBank   bool
-	renameTarget pickerTarget // reuse the (BankIdx, AreaIdx) shape
-	renameBuffer string
-	renameFresh  bool // first printable keystroke clears the buffer
+	renameActive    bool
+	renameBank      bool
+	renameDiskLabel bool         // rename modal targets the disk label (F-QA-21)
+	renameTarget    pickerTarget // reuse the (BankIdx, AreaIdx) shape
+	renameBuffer    string
+	renameFresh     bool // first printable keystroke clears the buffer
+	diskLabelDirty  bool // an unsaved disk-label edit is pending
 
 	// Area editor modal: piano visualisation with live preview of
 	// the key range as the user edits low/high. Spike scope.
@@ -308,6 +310,24 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.handleConfirmKey(msg)
 		}
 
+		// Tab / Shift+Tab move between fields within a Sound cell edit,
+		// matching the Area editor's field navigation (F-QA-2). Handled
+		// before the text/numeric routing so the keys never reach a draft.
+		if a.current == minimap.Sound && a.sound.InEditMode() {
+			switch msg.String() {
+			case "tab":
+				if s := a.sound.MoveFieldInEdit(1); s != "" {
+					a.setStatus(status.Info, s)
+				}
+				return a, nil
+			case "shift+tab":
+				if s := a.sound.MoveFieldInEdit(-1); s != "" {
+					a.setStatus(status.Info, s)
+				}
+				return a, nil
+			}
+		}
+
 		// Sound text-edit mode: route raw key presses (printable
 		// characters, Backspace, Enter, Esc) directly to Sound so the
 		// user can type voice / sample names. The nav.Action layer
@@ -383,6 +403,7 @@ func (a App) handleRenameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyEsc:
 		a.renameActive = false
 		a.renameBank = false
+		a.renameDiskLabel = false
 		a.renameBuffer = ""
 		a.renameFresh = false
 		a.setStatus(status.Info, "Rename cancelled")
@@ -405,7 +426,16 @@ func (a App) handleRenameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if kp, ok := msg.(tea.KeyPressMsg); ok {
 		text := kp.Key().Text
 		if len(text) == 1 {
-			ch := normaliseRenameKey(text[0])
+			var ch byte
+			if a.renameDiskLabel {
+				// Disk labels preserve case and accept any printable ASCII
+				// (the FZ shows them verbatim, e.g. "Techno Split").
+				if c := text[0]; c >= 0x20 && c <= 0x7e {
+					ch = c
+				}
+			} else {
+				ch = normaliseRenameKey(text[0])
+			}
 			if ch != 0 {
 				if a.renameFresh {
 					a.renameBuffer = ""
@@ -417,6 +447,47 @@ func (a App) handleRenameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
+	return a, nil
+}
+
+// startDiskLabelRename opens the rename modal targeting the disk label
+// (F-QA-21). Allowed for .img disks and untitled containers (which save
+// as .img); a loaded .fzf dump has no disk label to edit.
+func (a App) startDiskLabelRename() (tea.Model, tea.Cmd) {
+	if a.containerModel == nil {
+		a.setStatus(status.Warning, "No disk loaded")
+		return a, nil
+	}
+	if a.containerInfo.Format != loader.FormatIMG && a.containerModel.Path() != "" {
+		a.setStatus(status.Info, "Disk label applies to .img disks only")
+		return a, nil
+	}
+	a.renameActive = true
+	a.renameBank = false
+	a.renameDiskLabel = true
+	a.renameBuffer = a.containerInfo.DiskLabel
+	a.renameFresh = true
+	a.setStatus(status.Info, "Rename disk label: type a name, Enter saves, Esc cancels")
+	return a, nil
+}
+
+// commitDiskLabelRename records the edited disk label in containerInfo
+// and marks it dirty; Save writes it to the .img. The label is not part
+// of the FZF payload, so it lives outside the model's undo/dirty state.
+func (a App) commitDiskLabelRename() (tea.Model, tea.Cmd) {
+	label := strings.TrimRight(a.renameBuffer, " ")
+	a.renameActive = false
+	a.renameDiskLabel = false
+	a.renameBuffer = ""
+	a.renameFresh = false
+	if label == "" {
+		a.setStatus(status.Info, "Disk label unchanged (empty name ignored)")
+		return a, nil
+	}
+	a.containerInfo.DiskLabel = label
+	a.diskLabelDirty = true
+	a.layout.RefreshContainer(a.containerModel, a.containerInfo)
+	a.setStatus(status.Success, fmt.Sprintf("Disk label set to %q (Ctrl-S to save)", label))
 	return a, nil
 }
 
@@ -433,17 +504,22 @@ func normaliseRenameKey(b byte) byte {
 		return b - 32
 	case b >= '0' && b <= '9':
 		return b
-	case b == ' ' || b == '-':
+	case b == ' ' || b == '-' || b == '/':
+		// '/' is part of the FZ name charset: shipped banks use it
+		// (e.g. NSTY/DWN/PPG), so renaming must be able to type it back.
 		return b
 	}
 	return 0
 }
 
 func (a App) commitRename() (tea.Model, tea.Cmd) {
+	if a.renameDiskLabel {
+		return a.commitDiskLabelRename()
+	}
 	if a.renameBank {
 		return a.commitBankRename()
 	}
-	off, ok := a.layout.VoiceOffset(a.renameTarget.BankIdx, a.renameTarget.AreaIdx)
+	off, ok := a.layout.VoicePointerOffset(a.renameTarget.BankIdx, a.renameTarget.AreaIdx)
 	if !ok {
 		a.setStatus(status.Warning, "Rename: voice slot out of bounds")
 		a.renameActive = false
@@ -589,6 +665,7 @@ func (a App) doSaveTo(target string) (App, tea.Cmd) {
 	}
 	a.saveAsActive = false
 	a.saveAsBuffer = ""
+	a.diskLabelDirty = false
 	a.setStatus(status.Success, fmt.Sprintf("Saved %s", target))
 	cmd := a.toast.Set("Saved!")
 	return a, cmd
@@ -621,7 +698,12 @@ func (a App) writeContainerAsImage(target string) error {
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("stat target: %w", err)
 	}
+	// Prefer a user-set disk label (F-QA-21, preserves case/spaces); fall
+	// back to deriving one from the filename.
 	label := sanitizeImageLabel(filepath.Base(target))
+	if a.containerInfo.DiskLabel != "" {
+		label = a.containerInfo.DiskLabel
+	}
 	if err := diskformat.Format(target, label); err != nil {
 		return fmt.Errorf("format new image: %w", err)
 	}
@@ -886,6 +968,8 @@ func (a App) routeAction(action nav.Action) (tea.Model, tea.Cmd) {
 		return a.handleCopy()
 	case nav.Paste:
 		return a.handlePaste()
+	case nav.RenameDisk:
+		return a.startDiskLabelRename()
 	case nav.SpaceUp:
 		if a.pickingFor != nil {
 			a.setStatus(status.Info, "Esc to cancel the import first")
@@ -901,6 +985,7 @@ func (a App) routeAction(action nav.Action) (tea.Model, tea.Cmd) {
 	case nav.NavNone:
 		return a, nil
 	case nav.NavUp, nav.NavDown, nav.NavLeft, nav.NavRight,
+		nav.NavTop, nav.NavBottom, nav.NavPageUp, nav.NavPageDown,
 		nav.Rename, nav.Confirm, nav.Cancel,
 		nav.Delete, nav.Duplicate, nav.Extract, nav.Import, nav.Move,
 		nav.EditArea, nav.EditEffects:
@@ -922,9 +1007,12 @@ func (a App) handleCopy() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 	msg := a.sound.Copy(&a.clipboard)
-	if msg != "" {
-		a.setStatus(status.Info, msg)
+	if msg == "" {
+		// Copy returns "" only for a cell with nothing copyable (the
+		// KF/rate columns); say so instead of a silent no-op (F-QA-25).
+		msg = "Nothing to copy in this cell (try an envelope stage or the whole envelope)"
 	}
+	a.setStatus(status.Info, msg)
 	return a, nil
 }
 
@@ -1161,23 +1249,27 @@ func (a App) commitEffectsEditor() (tea.Model, tea.Cmd) {
 }
 
 // confirmDeleteBank opens the confirmation modal for a delete-bank
-// gesture. On confirm we zero the whole bank sector (bstep, vp[],
-// per-area metadata, name, effect data, everything in that 1024
-// bytes) so the bank reads as empty. Save-time compactEmptyBanks
-// drops it from the file if it ends up as a trailing bank; middle
-// banks stay materialised with bstep=0.
+// gesture. On confirm we remove the bank entirely and compact the
+// remaining banks (see deleteBank): the bank's slot disappears and any
+// later banks shift up one position. The modal warns about that shift
+// so the renumber isn't a surprise.
 func (a App) confirmDeleteBank(bankIdx int) App {
 	if bankIdx < 0 || bankIdx >= a.containerInfo.BankCount {
 		return a
 	}
-	bankName := a.layout.BankName(bankIdx)
-	body := fmt.Sprintf("Clear all area assignments, name, and effects on Bank %d?", bankIdx+1)
-	if bankName != "" {
-		body = fmt.Sprintf("Clear all area assignments, name, and effects on Bank %d (%q)?", bankIdx+1, bankName)
+	if a.nonEmptyBanksExcluding(bankIdx) == 0 {
+		a.setStatus(status.Warning, "Can't delete the only bank on the disk")
+		return a
 	}
+	bankName := a.layout.BankName(bankIdx)
+	subject := fmt.Sprintf("Bank %d", bankIdx+1)
+	if bankName != "" {
+		subject = fmt.Sprintf("Bank %d (%q)", bankIdx+1, bankName)
+	}
+	body := fmt.Sprintf("Delete %s? This removes the bank and shifts any later banks up one slot.", subject)
 	a.openConfirm(
 		confirm.Prompt{
-			Title:   fmt.Sprintf("Delete Bank %d", bankIdx+1),
+			Title:   fmt.Sprintf("Delete Bank %d?", bankIdx+1),
 			Body:    body,
 			Options: []confirm.Option{{Label: cancelLabel, Result: 0}, {Label: "Delete", Result: 1}},
 		},
@@ -1191,29 +1283,117 @@ func (a App) confirmDeleteBank(bankIdx int) App {
 	return a
 }
 
-// deleteBank zeroes the bank's 1024-byte sector in one ApplyBatch
-// patch.
+// deleteBank removes a bank by shifting every later bank's sector up one
+// slot and zeroing the now-vacant trailing sector. Because that is a
+// batch of fixed-length patches (no buffer resize), it commits as a
+// single undoable step: Ctrl-Z restores the bank. The trailing empty
+// bank is reclaimed by save-time compaction (compactEmptyBanks), which
+// also shrinks the audio area; meanwhile bank 0 always keeps a valid
+// bstep in memory, so the other banks stay unpackable (no
+// "invalid bstep 0"). Deleting the last remaining non-empty bank is
+// refused: an FZ full dump must keep at least one bank.
 func (a App) deleteBank(bankIdx int) App {
 	data := a.containerModel.Bytes()
-	base := bankIdx * disk.SectorSize
-	if base+disk.SectorSize > len(data) {
+	n := a.containerInfo.BankCount
+	if bankIdx < 0 || bankIdx >= n || n*disk.SectorSize > len(data) {
 		a.setStatus(status.Warning, "Delete bank: bank out of bounds")
 		return a
 	}
-	old := make([]byte, disk.SectorSize)
-	copy(old, data[base:base+disk.SectorSize])
-	zeros := make([]byte, disk.SectorSize)
-	if err := a.containerModel.Apply(model.Patch{
-		Offset: base,
-		Old:    old,
-		New:    zeros,
-	}); err != nil {
+	if a.nonEmptyBanksExcluding(bankIdx) == 0 {
+		a.setStatus(status.Warning, "Can't delete the only bank on the disk")
+		return a
+	}
+	sector := func(idx int) []byte {
+		off := idx * disk.SectorSize
+		cp := make([]byte, disk.SectorSize)
+		copy(cp, data[off:off+disk.SectorSize])
+		return cp
+	}
+	patches := make([]model.Patch, 0, n-bankIdx)
+	for b := bankIdx; b < n-1; b++ {
+		patches = append(patches, model.Patch{
+			Offset: b * disk.SectorSize,
+			Old:    sector(b),
+			New:    sector(b + 1),
+		})
+	}
+	patches = append(patches, model.Patch{
+		Offset: (n - 1) * disk.SectorSize,
+		Old:    sector(n - 1),
+		New:    make([]byte, disk.SectorSize),
+	})
+	if err := a.containerModel.ApplyBatch(patches); err != nil {
 		a.setStatus(status.Error, fmt.Sprintf("Delete bank failed: %v", err))
 		return a
 	}
 	a.layout.RefreshContainer(a.containerModel, a.containerInfo)
-	a.setStatus(status.Success, fmt.Sprintf("Cleared Bank %d", bankIdx+1))
+	a.setStatus(status.Success,
+		fmt.Sprintf("Deleted Bank %d; later banks shifted up", bankIdx+1))
 	return a
+}
+
+// areaByteFieldPatch builds a single-byte patch for a per-area bank
+// field (fieldOff is the field's area-0 offset within the bank sector;
+// areaIdx is added to reach this area's slot). Returns ok=false when out
+// of bounds.
+func areaByteFieldPatch(data []byte, bankIdx, fieldOff, areaIdx int, val byte) (model.Patch, bool) {
+	off := bankIdx*disk.SectorSize + fieldOff + areaIdx
+	if off < 0 || off >= len(data) {
+		return model.Patch{}, false
+	}
+	return model.Patch{Offset: off, Old: []byte{data[off]}, New: []byte{val}}, true
+}
+
+// bankBstep returns the number of materialised areas in a bank (its
+// bstep field), or 0 when out of bounds.
+func (a App) bankBstep(bankIdx int) int {
+	data := a.containerModel.Bytes()
+	off := bankIdx*disk.SectorSize + disk.BankVoiceCountOffset
+	if off+2 > len(data) {
+		return 0
+	}
+	return int(binary.LittleEndian.Uint16(data[off : off+2]))
+}
+
+// isAreaEmpty reports whether an area renders as "(empty)" in the Layout
+// list: it lies beyond the bank's materialised areas, or its vp[] pointer
+// resolves to a NoSound (placeholder) voice slot. Mirrors areaSummary's
+// empty detection so the editors agree with what the list shows.
+func (a App) isAreaEmpty(bankIdx, areaIdx int) bool {
+	if areaIdx >= a.bankBstep(bankIdx) {
+		return true
+	}
+	data := a.containerModel.Bytes()
+	slot, ok := disk.BankVPLookup(data, bankIdx, areaIdx)
+	if !ok {
+		return true
+	}
+	off := disk.VoiceSlotOffset(a.containerInfo.BankCount*disk.SectorSize, slot)
+	if off+disk.VoiceLoopModeOffset+2 > len(data) {
+		return true
+	}
+	return binary.LittleEndian.Uint16(data[off+disk.VoiceLoopModeOffset:]) == disk.PlaybackModeNoSound
+}
+
+// nonEmptyBanksExcluding counts banks with a non-zero bstep (i.e. banks
+// that would survive compaction), ignoring the bank at skipIdx. Used to
+// refuse deleting the last remaining bank.
+func (a App) nonEmptyBanksExcluding(skipIdx int) int {
+	data := a.containerModel.Bytes()
+	n := 0
+	for b := 0; b < a.containerInfo.BankCount; b++ {
+		if b == skipIdx {
+			continue
+		}
+		off := b*disk.SectorSize + disk.BankVoiceCountOffset
+		if off+2 > len(data) {
+			break
+		}
+		if binary.LittleEndian.Uint16(data[off:off+2]) > 0 {
+			n++
+		}
+	}
+	return n
 }
 
 // openAreaEditor seeds the modal from the current bank-sector
@@ -1332,32 +1512,48 @@ func (a App) commitAreaEditor() (tea.Model, tea.Cmd) {
 // FZV are 0-relative (the format other FZ tools expect for a
 // standalone voice). Errors surface as a status message; the
 // container itself is untouched.
+// fzvForArea returns the complete FZV (header + audio) for the voice the
+// area's vp[] pointer references, using the same unpack path as export.
+// On failure it returns a human-readable reason and ok=false. Shared by
+// area-export and extract-to-pool so both produce identical, full voices
+// for the correct slot (guards F-QA-8 / F-QA-15).
+func (a App) fzvForArea(bankIdx, areaIdx int) (fzv []byte, reason string, ok bool) {
+	data := a.containerModel.Bytes()
+	slot, ok := disk.BankVPLookup(data, bankIdx, areaIdx)
+	if !ok {
+		return nil, "vp[] lookup out of bounds", false
+	}
+	voices, slotIndices, err := voiceunpack.UnpackDataFromBytes(data)
+	if err != nil {
+		return nil, fmt.Sprintf("%v", err), false
+	}
+	// Find the FZV whose origin slot matches our target.
+	for i, s := range slotIndices {
+		if s == slot {
+			return voices[i], "", true
+		}
+	}
+	return nil, "voice slot is empty", false
+}
+
 func (a App) exportAreaToWorkspace(bankIdx, areaIdx int) App {
 	if a.containerModel == nil {
 		a.setStatus(status.Warning, "Export: no disk loaded")
 		return a
 	}
-	data := a.containerModel.Bytes()
-	slot, ok := disk.BankVPLookup(data, bankIdx, areaIdx)
+	// Deliberately disk-level (stricter than audition's per-voice guard):
+	// on a 2-disk split first half we refuse export for every voice, not
+	// just those whose audio spans disks. A partial .fzv is worse than no
+	// file, and the blanket refusal needs no per-voice boundary analysis.
+	if fzutil.IsMultiDiskFirstHalf(a.containerModel.Bytes()) {
+		a.setStatus(status.Warning,
+			"Export unavailable: this is part of a 2-disk full dump; "+
+				"voice audio is split across both disks")
+		return a
+	}
+	fzv, reason, ok := a.fzvForArea(bankIdx, areaIdx)
 	if !ok {
-		a.setStatus(status.Warning, "Export: vp[] lookup out of bounds")
-		return a
-	}
-	voices, slotIndices, err := voiceunpack.UnpackDataFromBytes(data)
-	if err != nil {
-		a.setStatus(status.Error, fmt.Sprintf("Export failed: %v", err))
-		return a
-	}
-	// Find the FZV whose origin slot matches our target.
-	var fzv []byte
-	for i, s := range slotIndices {
-		if s == slot {
-			fzv = voices[i]
-			break
-		}
-	}
-	if fzv == nil {
-		a.setStatus(status.Warning, "Export: voice slot is empty")
+		a.setStatus(status.Warning, "Export: "+reason)
 		return a
 	}
 	name := a.layout.VoiceName(bankIdx, areaIdx)
@@ -1471,8 +1667,15 @@ func (a App) growBanksTo(targetCount int) (App, bool) {
 // imports survive (we only flush bank-mirrored entries via
 // MirrorContainerVoices(nil)) so a user can stage voices, hit `n`,
 // and assign them into a clean canvas.
+// hasUnsavedChanges reports whether the container has edits not yet
+// written: either model-buffer edits or a pending disk-label change
+// (the label lives outside the model, so it needs its own flag).
+func (a App) hasUnsavedChanges() bool {
+	return (a.containerModel != nil && a.containerModel.Dirty()) || a.diskLabelDirty
+}
+
 func (a App) handleNewDisk() (tea.Model, tea.Cmd) {
-	if a.containerModel != nil && a.containerModel.Dirty() {
+	if a.hasUnsavedChanges() {
 		a.openConfirm(
 			confirm.Prompt{
 				Title: unsavedChangesTitle,
@@ -1501,6 +1704,7 @@ func (a App) installUntitledContainer() App {
 	m, info := loader.NewUntitled()
 	a.containerModel = m
 	a.containerInfo = info
+	a.diskLabelDirty = false
 	a.layout.SetContainer(m, info)
 	a.sound.Unbind()
 	a.pool.MirrorContainerVoices(nil)
@@ -1531,6 +1735,7 @@ func (a App) handleSave() (tea.Model, tea.Cmd) {
 	if promotes {
 		a = a.reflectPromotion()
 	}
+	a.diskLabelDirty = false
 	// Save committed; remove the autosave snapshot so the next launch
 	// doesn't offer recovery against bytes the user already wrote.
 	a.clearAutoSaveBackup(a.containerModel.Path())
@@ -1798,6 +2003,11 @@ func (a App) saveContainerToImage(path string) error {
 	img, err := disk.OpenImage(path)
 	if err != nil {
 		return fmt.Errorf("open image: %w", err)
+	}
+	// Persist the (possibly edited) disk label. Re-writing the loaded
+	// label is a no-op; an edit (F-QA-21) takes effect here.
+	if a.containerInfo.DiskLabel != "" {
+		img.SetLabel(a.containerInfo.DiskLabel)
 	}
 	name := a.containerInfo.DiskEntryName
 	if name == "" {
@@ -2083,6 +2293,7 @@ func (a App) loadAndInstallContainer(path string) (App, bool) {
 	}
 	a.containerModel = m
 	a.containerInfo = info
+	a.diskLabelDirty = false
 	a.layout.SetContainer(m, info)
 	a.sound.Unbind()
 	// Pool is intentionally NOT touched on disk-open: it accumulates
@@ -2177,6 +2388,14 @@ func (a App) forwardToSpace(action nav.Action) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// poolDisplayName is the short, user-facing name for a pooled file: the
+// base filename without its extension (".../amen 01.wav" -> "amen 01"),
+// so pool confirmations read cleanly instead of echoing a full path.
+func poolDisplayName(path string) string {
+	base := filepath.Base(path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
 func (a App) handleWorkspaceIntent(intent workspace.Intent) App {
 	switch intent.Kind {
 	case workspace.IntentOpenContainer:
@@ -2184,7 +2403,7 @@ func (a App) handleWorkspaceIntent(intent workspace.Intent) App {
 		// unsaved edits, prompt before swapping it for the new one.
 		// Cancel keeps the user where they were; Discard swaps;
 		// Save persists then swaps.
-		if a.containerModel != nil && a.containerModel.Dirty() {
+		if a.hasUnsavedChanges() {
 			path := intent.Path
 			a.openConfirm(
 				confirm.Prompt{
@@ -2227,14 +2446,14 @@ func (a App) handleWorkspaceIntent(intent workspace.Intent) App {
 			a.setStatus(status.Error, fmt.Sprintf("Add to pool failed: %v", err))
 		} else {
 			a.setStatus(status.Success,
-				fmt.Sprintf("Added %s to pool", intent.Path))
+				fmt.Sprintf("Pooled %q", poolDisplayName(intent.Path)))
 		}
 	case workspace.IntentAddSampleToPool:
 		err := a.pool.AddWAV(intent.Path, -1)
 		switch {
 		case err == nil:
 			a.setStatus(status.Success,
-				fmt.Sprintf("Wrapped %s and added to pool", intent.Path))
+				fmt.Sprintf("Pooled %q", poolDisplayName(intent.Path)))
 		case errors.Is(err, pool.ErrStereoNeedsChoice):
 			a = a.promptStereoChannelChoice(intent.Path)
 		default:
@@ -2249,23 +2468,33 @@ func (a App) handleWorkspaceIntent(intent workspace.Intent) App {
 func (a App) handleLayoutIntent(intent layout.Intent) App {
 	switch intent.Kind {
 	case layout.IntentOpenSound:
+		// F-QA-3: an "(empty)" area's vp[] resolves to slot 0, so opening
+		// the Sound editor there would silently edit an unrelated voice.
+		// Refuse, matching what the list shows.
+		if a.isAreaEmpty(intent.BankIdx, intent.AreaIdx) {
+			a.setStatus(status.Info, "This area is empty; assign a voice (i) before editing it")
+			return a
+		}
 		voiceArea := a.containerInfo.BankCount * 1024
 		a.sound.Bind(a.containerModel, a.containerInfo.BankCount, voiceArea,
 			a.audioAreaStart(), intent.BankIdx, intent.AreaIdx)
 		a.current = minimap.Sound
 		a.minimap.Current = a.current
 	case layout.IntentExtractToPool:
-		off, ok := a.layout.VoiceOffset(intent.BankIdx, intent.AreaIdx)
-		if !ok {
-			a.setStatus(status.Warning, "Send to pool: voice slot out of bounds")
+		if fzutil.IsMultiDiskFirstHalf(a.containerModel.Bytes()) {
+			a.setStatus(status.Warning,
+				"Send to pool unavailable: this is part of a 2-disk full dump; "+
+					"voice audio is split across both disks")
 			return a
 		}
-		data := a.containerModel.Bytes()
-		voiceBytes := make([]byte, disk.VoicePackSize)
-		copy(voiceBytes, data[off:off+disk.VoicePackSize])
+		fzv, reason, ok := a.fzvForArea(intent.BankIdx, intent.AreaIdx)
+		if !ok {
+			a.setStatus(status.Warning, "Send to pool: "+reason)
+			return a
+		}
 		name := a.layout.VoiceName(intent.BankIdx, intent.AreaIdx)
 		source := fmt.Sprintf("bank %d / area %d", intent.BankIdx+1, intent.AreaIdx+1)
-		a.pool.AddFromAreaVoice(name, source, voiceBytes)
+		a.pool.AddFromAreaVoice(name, source, fzv)
 		a.setStatus(status.Success,
 			fmt.Sprintf("Sent %q to pool", name))
 	case layout.IntentExportArea:
@@ -2288,7 +2517,7 @@ func (a App) handleLayoutIntent(intent layout.Intent) App {
 			confirm.Prompt{
 				Title: "Delete Area?",
 				Body: fmt.Sprintf(
-					"Clear the voice at Bank %d / Area %d (%q).",
+					"Delete the voice at Bank %d / Area %d (%q)? Later areas shift up one slot.",
 					bankIdx+1, areaIdx+1, areaName),
 				Options: []confirm.Option{
 					{Label: cancelLabel, Result: 0},
@@ -2303,7 +2532,7 @@ func (a App) handleLayoutIntent(intent layout.Intent) App {
 				return a.deleteArea(bankIdx, areaIdx, areaName), nil
 			})
 	case layout.IntentRenameVoice:
-		off, ok := a.layout.VoiceOffset(intent.BankIdx, intent.AreaIdx)
+		off, ok := a.layout.VoicePointerOffset(intent.BankIdx, intent.AreaIdx)
 		if !ok {
 			a.setStatus(status.Warning, "Rename: voice slot out of bounds")
 			return a
@@ -2576,7 +2805,7 @@ func (a App) deleteArea(bankIdx, areaIdx int, name string) App {
 		return a
 	}
 	a.setStatus(status.Success,
-		fmt.Sprintf("Cleared Bank %d / Area %d (%q)", bankIdx+1, areaIdx+1, name))
+		fmt.Sprintf("Deleted Bank %d / Area %d (%q)", bankIdx+1, areaIdx+1, name))
 	return a
 }
 
@@ -2616,6 +2845,10 @@ func (a App) assignPoolEntryToArea(entry *pool.Entry, bankIdx, areaIdx int) App 
 			return a
 		}
 	}
+
+	// Remember the bank's current extent so we can render any areas the
+	// assignment skips over (F-QA-6) as genuinely empty below.
+	oldBstep := a.bankBstep(bankIdx)
 
 	data := a.containerModel.Bytes()
 	voiceAreaStart := a.containerInfo.BankCount * disk.SectorSize
@@ -2672,6 +2905,16 @@ func (a App) assignPoolEntryToArea(entry *pool.Entry, bankIdx, areaIdx int) App 
 	header[disk.VoiceNameOffset+disk.LabelSize] = 0
 	header[disk.VoiceNameOffset+disk.LabelSize+1] = 0
 
+	// F-QA-4: refuse an assignment that won't fit the disk's free space
+	// instead of silently over-filling past floppy capacity (which would
+	// only fail later, at save). Uses the same usable-capacity basis as the
+	// free-space display.
+	if freeSpaceBytes(int64(len(data)+growBytes+len(entryPCM))) < 0 {
+		a.setStatus(status.Warning,
+			fmt.Sprintf("Assign: %q won't fit; not enough free space on disk", entry.Name))
+		return a
+	}
+
 	// Compose new buffer:
 	//   [bank sectors][old voice area][grow zeros][old audio area][new PCM]
 	newData := make([]byte, len(data)+growBytes+len(entryPCM))
@@ -2705,7 +2948,50 @@ func (a App) assignPoolEntryToArea(entry *pool.Entry, bankIdx, areaIdx int) App 
 	if bumpPatch, ok := container.BankBstepBumpPatch(newData, bankIdx, areaIdx); ok {
 		patches = append(patches, bumpPatch)
 	}
+	// F-QA-6: assigning past the bank's current extent materialises the
+	// intervening areas. Point each such gap area at its own (newly grown,
+	// still-zeroed) voice slot instead of leaving vp[]=0, which resolves to
+	// slot 0 and renders the gap as slot 0's voice whenever slot 0 is
+	// occupied (degenerate "<voice>  C-1-C-1  0-0" rows that persist to
+	// disk). A zeroed slot reads as NoSound, so the gap renders "(empty)".
+	for k := oldBstep; k < areaIdx; k++ {
+		gapVPOff := bankIdx*disk.SectorSize + disk.BankVoiceNumOffset + disk.VPEntrySize*k
+		if gapVPOff+disk.VPEntrySize > len(newData) {
+			continue
+		}
+		gapSlot := a.layout.VoiceSlotIndex(bankIdx, k)
+		oldVP := make([]byte, disk.VPEntrySize)
+		copy(oldVP, newData[gapVPOff:gapVPOff+disk.VPEntrySize])
+		newVP := make([]byte, disk.VPEntrySize)
+		binary.LittleEndian.PutUint16(newVP, uint16(gapSlot)) //nolint:gosec // G115: gap slot index is bounded by the disk's voice-area capacity, well under uint16 max.
+		patches = append(patches, model.Patch{Offset: gapVPOff, Old: oldVP, New: newVP})
+	}
 	patches = append(patches, container.DefaultBankRangePatches(newData, bankIdx, areaIdx)...)
+	// F-QA-20: assigning into a wrapped single voice promotes the disk to
+	// a full dump on save, which moves the playable key range from the
+	// voice header into the bank's per-area table. Seed the original area
+	// (0) from its voice header so the promoted voice keeps its key window
+	// instead of collapsing to a zero (C-1..C-1, velocity off) range.
+	if a.containerInfo.WrappedVoice && areaIdx != 0 {
+		origOff := disk.VoiceSlotOffset(voiceAreaStart, 0)
+		if origOff+disk.VoiceKeyCentOffset < len(newData) {
+			seeds := []struct {
+				field int
+				val   byte
+			}{
+				{disk.BankKeyLowOffset, newData[origOff+disk.VoiceKeyLowOffset]},
+				{disk.BankKeyHighOffset, newData[origOff+disk.VoiceKeyHighOffset]},
+				{disk.BankKeyCentOffset, newData[origOff+disk.VoiceKeyCentOffset]},
+				{disk.BankVelLowOffset, 1},
+				{disk.BankVelHighOffset, 127},
+			}
+			for _, s := range seeds {
+				if p, ok := areaByteFieldPatch(newData, bankIdx, s.field, 0, s.val); ok {
+					patches = append(patches, p)
+				}
+			}
+		}
+	}
 	if err := a.containerModel.ApplyBatch(patches); err != nil {
 		a.setStatus(status.Error, fmt.Sprintf("Assign failed: %v", err))
 		return a
@@ -2718,21 +3004,25 @@ func (a App) assignPoolEntryToArea(entry *pool.Entry, bankIdx, areaIdx int) App 
 	a.containerInfo.TotalBytes = int64(a.containerModel.Len())
 	a.containerInfo.PCMBytes += int64(len(entryPCM))
 	a.containerInfo.AudioAreaStart = newAudioStart
-	if a.containerInfo.Header != nil {
-		// Bump the cached NVoice so SetContainer sees the new count if
-		// the user re-binds via Layout.
-		needed := areaIdx + 1
-		for b := 0; b < bankIdx; b++ {
-			base := b * disk.SectorSize
-			if base+disk.BankVoiceCountOffset+2 <= len(a.containerModel.Bytes()) {
-				needed += int(binary.LittleEndian.Uint16(
-					a.containerModel.Bytes()[base+disk.BankVoiceCountOffset:]))
-			}
+	// Bump the cached voice count so the header reads correctly and a
+	// re-bind via Layout sees the new count. A wrapped single voice has no
+	// parsed Header, so update VoiceCount directly there too (otherwise the
+	// header stays "1 voice" after a promoting assign).
+	needed := areaIdx + 1
+	for b := 0; b < bankIdx; b++ {
+		base := b * disk.SectorSize
+		if base+disk.BankVoiceCountOffset+2 <= len(a.containerModel.Bytes()) {
+			needed += int(binary.LittleEndian.Uint16(
+				a.containerModel.Bytes()[base+disk.BankVoiceCountOffset:]))
 		}
+	}
+	if a.containerInfo.Header != nil {
 		if needed > a.containerInfo.Header.NVoice {
 			a.containerInfo.Header.NVoice = needed
 		}
 		a.containerInfo.VoiceCount = a.containerInfo.Header.NVoice
+	} else if needed > a.containerInfo.VoiceCount {
+		a.containerInfo.VoiceCount = needed
 	}
 	// Keep Layout's view of the container in sync so the rebuilt voice
 	// list reflects the assignment. Use Refresh, not SetContainer, so
@@ -2856,7 +3146,7 @@ func (a App) View() tea.View {
 	top := lipgloss.JoinHorizontal(lipgloss.Top, paneBox, " ", rightCol)
 
 	dirty := ""
-	if a.containerModel != nil && a.containerModel.Dirty() {
+	if a.hasUnsavedChanges() {
 		dirty = theme.WarnText.Render("● modified")
 	}
 

@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2/table"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/studio/fznote"
 	"github.com/philipcunningham/fizzle/pkg/studio/model"
 	"github.com/philipcunningham/fizzle/pkg/studio/nav"
 	"github.com/philipcunningham/fizzle/pkg/studio/theme"
@@ -94,7 +95,7 @@ func cellCount(r row) int {
 	case rowLFO:
 		return 3 // visual, shape, depths
 	case rowSample:
-		return 6 // visual, rate, gen, root, tune, mode (name lives in Layout's `r` gesture)
+		return 5 // visual, rate, gen, root, mode (tune omitted: storage not pinned; name lives in Layout's `r` gesture)
 	case rowLoops:
 		return 10 // visual, sus/release pointers, 8 per-loop cells
 	case numRows:
@@ -123,6 +124,9 @@ type Model struct {
 	// the user backspaces or types a char, so further
 	// edits accumulate in-place.
 	numericDraft string // direct-entry buffer for numeric fields; "" when stepping
+	editCommits  int    // live commits made since entering the current cell edit;
+	// Esc replays Undo this many times to revert the whole
+	// edit in one press (commit-on-Enter / Esc-reverts model).
 
 	// Cached on Bind.
 	voiceOff       int
@@ -248,6 +252,7 @@ func (sm *Model) applyNav(a nav.Action) string {
 		}
 		sm.editMode = true
 		sm.fieldIdx = 0
+		sm.editCommits = 0
 		if fields[0].kind == fieldText {
 			sm.draft = fields[0].readText(sm.containerBytes)
 			sm.draftFresh = true
@@ -281,9 +286,7 @@ func (sm *Model) applyEdit(a nav.Action) string {
 
 	switch a { //nolint:exhaustive // field edit only consumes a subset of nav actions; default is no-op
 	case nav.Cancel:
-		sm.editMode = false
-		sm.draft = ""
-		return msgEditCancelled
+		return sm.revertEdit()
 	case nav.Confirm:
 		// Commit the current field and exit edit mode, so a following
 		// arrow navigates the grid rather than adjusting the just-
@@ -386,9 +389,7 @@ func (sm *Model) ConsumeTextKey(keyStr string) string {
 	f := fields[sm.fieldIdx]
 	switch keyStr {
 	case "esc":
-		sm.editMode = false
-		sm.draft = ""
-		return msgEditCancelled
+		return sm.revertEdit()
 	case "enter":
 		patches := f.patchText(sm.containerBytes, sm.draft)
 		if len(patches) > 0 {
@@ -472,12 +473,8 @@ func (sm *Model) ConsumeNumericKey(keyStr string) string {
 
 	switch keyStr {
 	case "esc":
-		if sm.numericDraft != "" {
-			sm.numericDraft = ""
-			return "Direct entry cancelled"
-		}
-		sm.editMode = false
-		return msgEditCancelled
+		// One press reverts the whole edit (typed draft + any steps).
+		return sm.revertEdit()
 	case "enter":
 		if sm.numericDraft != "" {
 			return sm.commitNumericDraft(f)
@@ -566,7 +563,50 @@ func (sm *Model) adjustNumericField(f field, delta int) string {
 	if err := sm.commit(patches); err != nil {
 		return fmt.Sprintf("Adjust failed: %v", err)
 	}
+	sm.editCommits++
 	return ""
+}
+
+// revertEdit undoes every live commit made since the current cell edit
+// began, drops the resulting redo entries, and returns to nav mode. A
+// single Esc thus reverts the whole edit (typed draft + any stepped
+// changes) to its entry value, matching the Area editor.
+func (sm *Model) revertEdit() string {
+	for i := 0; i < sm.editCommits; i++ {
+		_ = sm.m.Undo()
+	}
+	if sm.editCommits > 0 {
+		sm.m.ClearRedo()
+		sm.containerBytes = sm.m.Bytes()
+	}
+	sm.editCommits = 0
+	sm.editMode = false
+	sm.draft = ""
+	sm.numericDraft = ""
+	return msgEditCancelled
+}
+
+// MoveFieldInEdit moves focus to an adjacent field within the current
+// cell (Tab / Shift+Tab), discarding any open numeric draft. No-op past
+// the cell's ends. Mirrors Left/Right so Tab navigates fields like the
+// Area editor.
+func (sm *Model) MoveFieldInEdit(delta int) string {
+	if !sm.editMode {
+		return ""
+	}
+	fields := cellFields(sm.row, sm.col, sm.voiceOff)
+	ni := sm.fieldIdx + delta
+	if ni < 0 || ni >= len(fields) {
+		return ""
+	}
+	sm.numericDraft = ""
+	sm.fieldIdx = ni
+	next := fields[ni]
+	if next.kind == fieldText {
+		sm.draft = next.readText(sm.containerBytes)
+		sm.draftFresh = true
+	}
+	return fmt.Sprintf("Editing %s", next.label)
 }
 
 func (sm *Model) commitNumericDraft(f field) string {
@@ -629,6 +669,7 @@ func (sm *Model) adjustField(fields []field, delta int) string {
 	if err := sm.commit(patches); err != nil {
 		return fmt.Sprintf("Adjust failed: %v", err)
 	}
+	sm.editCommits++
 	return ""
 }
 
@@ -664,10 +705,10 @@ func (sm Model) View(width, height int) string {
 	hintText := rowHint(sm.row)
 	if sm.editMode {
 		if sm.InNumericEditMode() {
-			hints = "up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc close"
+			hints = "up/down ±1  •  shift ±10  •  pgup/dn ±100  •  type to set  •  tab next field  •  enter commit  •  esc cancel"
 			hintText = "Editing a number; step with the modifiers or type the value directly, then commit."
 		} else {
-			hints = "up/down adjusts  •  enter commit  •  esc close"
+			hints = "up/down adjusts  •  tab next field  •  enter commit  •  esc cancel"
 			hintText = "Editing a value; cycle through the choices and commit when you're settled."
 		}
 	}
@@ -727,7 +768,8 @@ func cellLabel(r row, idx int) string {
 		case 2:
 			return "[rateKF/VF]"
 		default:
-			return fmt.Sprintf("[s%d]", idx-3)
+			// 1-indexed to match the "stage N" copy/paste messages (F-QA-26).
+			return fmt.Sprintf("[s%d]", idx-2)
 		}
 	case rowDCF:
 		switch idx {
@@ -740,7 +782,8 @@ func cellLabel(r row, idx int) string {
 		case 3:
 			return "[rateKF/VF]"
 		default:
-			return fmt.Sprintf("[s%d]", idx-4)
+			// 1-indexed to match the "stage N" copy/paste messages (F-QA-26).
+			return fmt.Sprintf("[s%d]", idx-3)
 		}
 	case rowLFO:
 		switch idx {
@@ -752,7 +795,7 @@ func cellLabel(r row, idx int) string {
 			return "[depths]"
 		}
 	case rowSample:
-		labels := []string{labelVis, "[rate]", "[gen]", "[root]", "[tune]", "[mode]"}
+		labels := []string{labelVis, "[rate]", "[gen]", "[root]", "[mode]"}
 		if idx >= 0 && idx < len(labels) {
 			return labels[idx]
 		}
@@ -763,7 +806,8 @@ func cellLabel(r row, idx int) string {
 		case 1:
 			return "[ptrs]"
 		default:
-			return fmt.Sprintf("[L%d]", idx-2)
+			// 1-indexed to match the "Loop N" field labels (idx 2 -> L1).
+			return fmt.Sprintf("[L%d]", idx-1)
 		}
 	case numRows:
 		// Sentinel value; falls through to "[?]".
@@ -985,6 +1029,9 @@ func (sm Model) formatFieldValue(f field, focused bool) string {
 		v := f.read(sm.containerBytes)
 		if f.kind == fieldSigned && v >= 0 {
 			return fmt.Sprintf("+%d", v)
+		}
+		if f.noteName {
+			return fmt.Sprintf("%d (%s)", v, fznote.Name(v))
 		}
 		return fmt.Sprintf("%d", v)
 	case fieldEnum:

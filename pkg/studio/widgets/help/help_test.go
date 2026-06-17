@@ -132,7 +132,7 @@ func TestHelp_DisambiguatesCopy(t *testing.T) {
 	if !strings.Contains(m.View(minimap.Layout), "send the focused Area's voice to the pool") {
 		t.Errorf("Layout help should describe the pool gesture as 'send ... to the pool'")
 	}
-	if !strings.Contains(m.View(minimap.Sound), "copy / paste a cell value") {
+	if !strings.Contains(m.View(minimap.Sound), "copy / paste a stage, envelope, loop or LFO cell") {
 		t.Errorf("Sound help should reserve 'copy' for the cell clipboard")
 	}
 }

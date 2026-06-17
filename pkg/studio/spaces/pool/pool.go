@@ -33,6 +33,9 @@ import (
 // prompt and calls AddWAV again with the chosen channel.
 var ErrStereoNeedsChoice = errors.New("pool: stereo source; channel choice required")
 
+// navPageSize is how many rows PgUp/PgDn move the cursor (F-QA-23).
+const navPageSize = 10
+
 // Source label values for Entry.Source. Pool exposes these as constants
 // so the App can compare against them without re-typing string literals.
 const (
@@ -362,6 +365,14 @@ func (m *Model) Apply(a nav.Action) (statusMsg string, intent Intent) {
 		if m.cursor > 0 {
 			m.cursor--
 		}
+	case nav.NavTop:
+		m.cursor = 0
+	case nav.NavBottom:
+		m.cursor = len(m.entries) - 1
+	case nav.NavPageUp:
+		m.cursor = max(0, m.cursor-navPageSize)
+	case nav.NavPageDown:
+		m.cursor = min(len(m.entries)-1, m.cursor+navPageSize)
 	case nav.NavDown:
 		if m.cursor < len(m.entries)-1 {
 			m.cursor++
@@ -396,7 +407,7 @@ func (m *Model) View(width, _ int) string {
 	if len(m.entries) == 0 {
 		body := theme.SilverText.Render(
 			"Pool is empty. Add voices from the Workspace's file browser,\n" +
-				"or extract from an open disk's bank (Ctrl-E in Layout).")
+				"or send a voice to the pool with Ctrl-E (or c) from an Area in Layout.")
 		return joinVertical(header, "", targetLine, "", body)
 	}
 	rows := make([][]string, 0, len(m.entries))

@@ -64,6 +64,12 @@ type ContainerInfo struct {
 	// around a single Voice (.img holds an FZV, not a full dump). Save
 	// must unwrap before writing back as a Voice file.
 	WrappedVoice bool
+
+	// DiskLabel is the FZ disk label (the volume name the sampler shows),
+	// read from the .img's sector 0. Empty for .fzf dumps, which have no
+	// disk-level label. Studio surfaces it in the Layout header and lets
+	// the user edit it; Save writes it back to the .img.
+	DiskLabel string
 }
 
 // ErrNoFullDump signals that an .img has no FULL-DATA-FZ entry.
@@ -196,6 +202,7 @@ func loadIMG(path string) (*model.Model, ContainerInfo, error) {
 		untitled.Path = path
 		untitled.Format = FormatIMG
 		untitled.DiskEntryName = disk.FullDumpName
+		untitled.DiskLabel = img.Label()
 		return mWithPath, untitled, nil
 	}
 	if int(match.DisSector) < disk.ReservedSectors || int(match.DisSector) >= disk.SectorCount {
@@ -230,6 +237,7 @@ func loadIMG(path string) (*model.Model, ContainerInfo, error) {
 		AudioAreaStart: hdr.VoiceAreaStart + disk.VoiceAreaSectors(hdr.NVoice)*disk.SectorSize,
 		Header:         hdr,
 		DiskEntryName:  disk.FullDumpName,
+		DiskLabel:      img.Label(),
 	}
 	if info.PCMBytes < 0 {
 		info.PCMBytes = 0
@@ -290,6 +298,7 @@ func loadIMGVoice(path string, img *disk.Image, entry *disk.DirEntry) (*model.Mo
 		AudioAreaStart: 2 * disk.SectorSize,
 		DiskEntryName:  entry.NameString(),
 		WrappedVoice:   true,
+		DiskLabel:      img.Label(),
 		// Header stays nil; there's no FZF header in the synthetic
 		// container. Code paths that read Header should already gate
 		// on it; AudioAreaStart and the bank/voice counts give them

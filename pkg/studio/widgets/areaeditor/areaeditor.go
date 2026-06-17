@@ -183,10 +183,12 @@ func (m Model) Changed() bool {
 // enum fields where 10 would overshoot).
 func (m *Model) HandleKey(s string) {
 	switch s {
-	case "tab":
+	case "tab", "right":
+		// Tab and Right both move to the next field, matching the Sound
+		// editor so the two editors navigate identically (F-QA-2).
 		m.digits = ""
 		m.field = (m.field + 1) % numFields
-	case "shift+tab":
+	case "shift+tab", "left":
 		m.digits = ""
 		m.field = (m.field - 1 + numFields) % numFields
 	case "up":
@@ -221,7 +223,7 @@ func (m *Model) HandleKey(s string) {
 // numeric field that type-to-set can drive directly.
 func (m Model) acceptsTypedDigits() bool {
 	switch m.field { //nolint:exhaustive // only the plain numeric fields accept typed digits; default covers the rest
-	case FieldKeyLow, FieldKeyHigh, FieldKeyOrig, FieldVelLow, FieldVelHigh, FieldVolume:
+	case FieldKeyLow, FieldKeyHigh, FieldKeyOrig, FieldVelLow, FieldVelHigh, FieldVolume, FieldMIDIChan:
 		return true
 	default:
 		return false
@@ -264,7 +266,10 @@ func (m *Model) applyDigits() {
 		}
 	case FieldVolume:
 		m.volume = clampByte(v)
-	case FieldAudioOut, FieldMIDIChan, numFields:
+	case FieldMIDIChan:
+		// Displayed 1..16 but stored 0..15, so a typed channel maps down one.
+		m.midiChan = clampMIDIChan(v - 1)
+	case FieldAudioOut, numFields:
 		// Not type-settable; reached only if acceptsTypedDigits drifts.
 	}
 }
@@ -470,7 +475,7 @@ func (m Model) View() string {
 		theme.Field("Output   ", audioOutLabel(m.audioOut), m.field == FieldAudioOut),
 		theme.Field("MIDI Chan", fmt.Sprintf("%d", m.midiChan+1), m.field == FieldMIDIChan),
 		"",
-		theme.DimText.Render("tab cycle field  •  up/down step  •  shift+up/down big step  •  type digits to set  •  enter commit  •  esc cancel"),
+		theme.DimText.Render("tab/←→ next field  •  up/down step  •  shift+up/down big step  •  type to set  •  enter commit  •  esc cancel"),
 	}
 	body := strings.Join(lines, "\n")
 	return lipgloss.NewStyle().

@@ -31,6 +31,21 @@ func bindFromPiano(t testing.TB) *Model {
 	return &lm
 }
 
+// TestLayoutNav_AreaFastNav pins F-QA-23: Home/End jump the area cursor
+// to the first/last of the 64 areas rather than requiring 63 key presses.
+func TestLayoutNav_AreaFastNav(t *testing.T) {
+	lm := bindFromPiano(t)
+	lm.Apply(nav.Confirm) // drill into the bank's area list
+	lm.Apply(nav.NavBottom)
+	if lm.areaCursor != 63 {
+		t.Errorf("areaCursor after NavBottom = %d, want 63 (End jumps to last area)", lm.areaCursor)
+	}
+	lm.Apply(nav.NavTop)
+	if lm.areaCursor != 0 {
+		t.Errorf("areaCursor after NavTop = %d, want 0 (Home jumps to first area)", lm.areaCursor)
+	}
+}
+
 // TestLayoutNav_BankCursorClampsAtZero pins NavUp at Bank 0 is a
 // no-op. We don't wrap around; that would be confusing for an
 // 8-bank list.

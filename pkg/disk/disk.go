@@ -388,6 +388,14 @@ func (img *Image) Label() string {
 	return TrimPadded(img.data[0:LabelSize])
 }
 
+// SetLabel writes name into the disk label field (sector 0 offset 0x000),
+// space-padded / truncated to LabelSize. Case is preserved (PadLabel does
+// not upper-case), so mixed-case labels like "Techno Split" round-trip.
+func (img *Image) SetLabel(name string) {
+	padded := PadLabel(name)
+	copy(img.data[LabelOffset:LabelOffset+LabelSize], padded[:])
+}
+
 // Directory reads all non-empty directory entries from sector 1.
 func (img *Image) Directory() ([]DirEntry, error) {
 	var entries []DirEntry

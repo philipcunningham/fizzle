@@ -45,11 +45,13 @@ const (
 	xMax = 2.0
 )
 
-// yMin / yMax give the peaks a small margin so they are not clipped
-// against the chart edge.
+// yMin / yMax are the true data bounds. The Y axis is labelled exactly
+// -1 / 0 / 1 at the bottom / middle / top rows via yLabelAt (F-QA-28),
+// so peaks at ±1 land on the gridlines rather than above a misplaced
+// label.
 const (
-	yMin = -1.1
-	yMax = 1.1
+	yMin = -1.0
+	yMax = 1.0
 )
 
 // Styles for the rendered curve. Pulled from the studio palette so
@@ -78,6 +80,15 @@ func View(w Waveform, width, height int) string {
 		linechart.WithXYSteps(1, 1),
 		linechart.WithStyles(axisStyle, labelStyle, lineStyle),
 	)
+	// Own the axis labels. ntcharts' default formatter rounds every row's
+	// value with %.0f and de-dupes, so "1" lands at the first row that
+	// rounds to 1 (≈0.66, not the top) and a mid row prints "-0". Label by
+	// row/column index instead so -1/0/1 and 0/1/2 sit at the true ends
+	// and middle, and "-0" can never appear (F-QA-28). Steps are 1, so the
+	// label callbacks see every row/column index.
+	gh, gw := lc.GraphHeight(), lc.GraphWidth()
+	lc.YLabelFormatter = func(i int, _ float64) string { return yLabelAt(i, gh) }
+	lc.XLabelFormatter = func(i int, _ float64) string { return xLabelAt(i, gw) }
 	lc.Clear()
 	lc.DrawXYAxisAndLabel()
 
@@ -90,7 +101,8 @@ func View(w Waveform, width, height int) string {
 }
 
 // samplePoints produces the (x, y) sample pairs for the requested
-// waveform. X spans [xMin, xMax]; Y is in [-1, +1].
+// waveform. X spans [xMin, xMax]; Y is in [-1, +1] (full amplitude, so
+// peaks render right on the ±1 gridlines).
 func samplePoints(w Waveform) []canvas.Float64Point {
 	pts := make([]canvas.Float64Point, numSamples)
 	step := (xMax - xMin) / float64(numSamples-1)
@@ -101,22 +113,55 @@ func samplePoints(w Waveform) []canvas.Float64Point {
 	return pts
 }
 
+// yLabelAt returns the Y-axis label for canvas row index i (0 = bottom,
+// graphHeight = top): -1 / 0 / 1 at the bottom / middle / top, blank
+// elsewhere. Labelling by index (not value) keeps the ends on the
+// gridlines and makes a "-0" tick impossible.
+func yLabelAt(i, graphHeight int) string {
+	switch {
+	case i <= 0:
+		return "-1"
+	case i >= graphHeight:
+		return "1"
+	case graphHeight >= 2 && i == graphHeight/2:
+		return "0"
+	}
+	return ""
+}
+
+// xLabelAt returns the X-axis label for canvas column index i (0 = left,
+// graphWidth-1 = right edge): 0 / 1 / 2 at the left / middle / right,
+// blank elsewhere, so the cycle-boundary ticks land where the cycles
+// actually start and "2" sits at the right edge.
+func xLabelAt(i, graphWidth int) string {
+	switch {
+	case i <= 0:
+		return "0"
+	case i >= graphWidth-1:
+		return "2"
+	case graphWidth >= 3 && i == graphWidth/2:
+		return "1"
+	}
+	return ""
+}
+
 // waveformY returns the Y value for the given waveform at sample
 // index i (X = x). The formulas mirror the spec in the package
-// documentation; two cycles fit in the X range [0, 2] because every
-// formula folds X by a factor of 2.
+// documentation. Each has period 1 in X, so the X range [0, 2] shows
+// exactly two cycles and the integer X ticks (0, 1, 2) fall on cycle
+// boundaries.
 func waveformY(w Waveform, x float64, i int) float64 {
 	switch w {
 	case Sine:
-		return math.Sin(2 * math.Pi * x * 2)
+		return math.Sin(2 * math.Pi * x)
 	case SawUp:
-		return 2*frac(x*2) - 1
+		return 2*frac(x) - 1
 	case SawDown:
-		return 1 - 2*frac(x*2)
+		return 1 - 2*frac(x)
 	case Triangle:
-		return 4*math.Abs(frac(x*2+0.25)-0.5) - 1
+		return 4*math.Abs(frac(x+0.25)-0.5) - 1
 	case Rectangle:
-		if frac(x*2) < 0.5 {
+		if frac(x) < 0.5 {
 			return 1
 		}
 		return -1

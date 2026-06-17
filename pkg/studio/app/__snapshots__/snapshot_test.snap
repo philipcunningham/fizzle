@@ -7,7 +7,7 @@
 │          name       type  size                                                                                               │ │ L │
 │  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│ up/down move  •  enter opens or pools  •  ctrl-r refresh  •  left/esc up  •  shift+up/down switch pane                       │
 │                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
@@ -128,7 +128,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │     [F]  a.fzf  dump  11 B                                                                                                   │ │ S │
 │  ▶  [F]  b.fzf  dump  11 B                                                                                                   │ └───┘
 │                                                                                                                              │
-│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │ Free: 1.2 MB
+│ up/down move  •  enter opens or pools  •  ctrl-r refresh  •  left/esc up  •  shift+up/down switch pane                       │ Free: 1.2 MB
 │                                                                                                                              │
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
@@ -167,7 +167,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │          name        type   size                                                                                             │ │ L │
 │  ▶  [V]  nested.fzv  voice  1 B                                                                                              │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│ up/down move  •  enter opens or pools  •  ctrl-r refresh  •  left/esc up  •  shift+up/down switch pane                       │
 │                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
@@ -217,7 +217,7 @@ Resize the terminal to continue, or press Ctrl-Q to quit.
 │          name       type  size                                                                                               │ │ L │
 │  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│ up/down move  •  enter opens or pools  •  ctrl-r refresh  •  left/esc up  •  shift+up/down switch pane                       │
 │                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, a╭─────────────────────────────────────────────────────────────────────────╮ol.                 │
 │                               │                                                                         │                    │
@@ -257,7 +257,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │                                                                                                                              │ │ L │
 │                                                                                                                              │ │ S │
 │ Pool is empty. Add voices from the Workspace's file browser,                                                                 │ └───┘
-│ or extract from an open disk's bank (Ctrl-E in Layout).                                                                      │
+│ or send a voice to the pool with Ctrl-E (or c) from an Area in Layout.                                                       │
 │                                                                                                                              │ Free: 1.2 MB
 │                                                                                                                              │
 │                                                                                                                              │
@@ -300,7 +300,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │   Sample                                                                                                                     │
 │   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
-│   vis    [lvlKF/VF]    rateKF/VF    s0    s1    s2    s3    s4    s5    s6    s7                                             │
+│   vis    [lvlKF/VF]    rateKF/VF    s1    s2    s3    s4    s5    s6    s7    s8                                             │
 │                                                                                                                              │
 │ ◆ [lvlKF/VF]                                                                                                                 │
 │    DCA level KF  +0                                                                                                          │
@@ -340,7 +340,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │   Sample                                                                                                                     │
 │   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
-│   vis    lvlKF/VF    [rateKF/VF]    s0    s1    s2    s3    s4    s5    s6    s7                                             │
+│   vis    lvlKF/VF    [rateKF/VF]    s1    s2    s3    s4    s5    s6    s7    s8                                             │
 │                                                                                                                              │
 │ ◆ [rateKF/VF]                                                                                                                │
 │    DCA rate KF  +0                                                                                                           │
@@ -377,7 +377,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │          name       type  size                                                                                               │ │ L │
 │  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│ up/down move  •  enter opens or pools  •  ctrl-r refresh  •  left/esc up  •  shift+up/down switch pane                       │
 │                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
@@ -417,7 +417,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │          name       type  size                                                                                               │ │ L │
 │  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│ up/down move  •  enter opens or pools  •  ctrl-r refresh  •  left/esc up  •  shift+up/down switch pane                       │
 │                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
@@ -457,7 +457,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │          name       type  size                                                                                               │ │ L │
 │  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│ up/down move  •  enter opens or pools  •  ctrl-r refresh  •  left/esc up  •  shift+up/down switch pane                       │
 │                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
@@ -500,9 +500,9 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │   Sample                                                                                                                     │
 │   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
-│   vis    lvlKF/VF    rateKF/VF    [s0]    s1    s2    s3    s4    s5    s6    s7                                             │
+│   vis    lvlKF/VF    rateKF/VF    [s1]    s2    s3    s4    s5    s6    s7    s8                                             │
 │                                                                                                                              │
-│ ◆ [s0]                                                                                                                       │
+│ ◆ [s1]                                                                                                                       │
 │    Role        ***                                                                                                           │
 │    Rate        99                                                                                                            │
 │    Stop level  99                                                                                                            │
@@ -540,7 +540,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │   Sample                                                                                                                     │
 │ ▶ Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
-│   [vis]    ptrs    L0    L1    L2    L3    L4    L5    L6    L7                                                              │
+│   [vis]    ptrs    L1    L2    L3    L4    L5    L6    L7    L8                                                              │
 │                                                                                                                              │
 │ ◆ Loops  (1 active, no sustain loop)                                                                                         │
 │                                                                                                                              │
@@ -580,13 +580,13 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │   Sample                                                                                                                     │
 │   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
-│   vis    [lvlKF/VF]    rateKF/VF    s0    s1    s2    s3    s4    s5    s6    s7                                             │
+│   vis    [lvlKF/VF]    rateKF/VF    s1    s2    s3    s4    s5    s6    s7    s8                                             │
 │                                                                                                                              │
 │ ◆ [lvlKF/VF]                                                                                                                 │
 │  ▶  DCA level KF  +0                                                                                                         │
 │     DCA level VF  +95                                                                                                        │
 │                                                                                                                              │
-│ up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc close                │
+│ up/down ±1  •  shift ±10  •  pgup/dn ±100  •  type to set  •  tab next field  •  enter commit  •  esc cancel                 │
 │                                                                                                                              │
 │ Editing a number; step with the modifiers or type the value directly, then commit.                                           │
 │                                                                                                                              │
@@ -620,13 +620,13 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │   Sample                                                                                                                     │
 │   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
-│   vis    [lvlKF/VF]    rateKF/VF    s0    s1    s2    s3    s4    s5    s6    s7                                             │
+│   vis    [lvlKF/VF]    rateKF/VF    s1    s2    s3    s4    s5    s6    s7    s8                                             │
 │                                                                                                                              │
 │ ◆ [lvlKF/VF]                                                                                                                 │
 │  ▶  DCA level KF  +1                                                                                                         │
 │     DCA level VF  +95                                                                                                        │
 │                                                                                                                              │
-│ up/down ±1  •  shift ±10  •  pgup/dn ±100  •  alt ±1000  •  type digits to set  •  enter commit  •  esc close                │
+│ up/down ±1  •  shift ±10  •  pgup/dn ±100  •  type to set  •  tab next field  •  enter commit  •  esc cancel                 │
 │                                                                                                                              │
 │ Editing a number; step with the modifiers or type the value directly, then commit.                                           │
 │                                                                                                                              │
@@ -660,10 +660,10 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │   Sample                                                                                                                     │
 │   Loops                                                                                                                      │ Free: 241 KB
 │                                                                                                                              │
-│   vis    [lvlKF/VF]    rateKF/VF    s0    s1    s2    s3    s4    s5    s6    s7                                             │
+│   vis    [lvlKF/VF]    rateKF/VF    s1    s2    s3    s4    s5    s6    s7    s8                                             │
 │                                                                                                                              │
 │ ◆ [lvlKF/VF]                                                                                                                 │
-│    DCA level KF  +1                                                                                                          │
+│    DCA level KF  +0                                                                                                          │
 │    DCA level VF  +95                                                                                                         │
 │                                                                                                                              │
 │ up/down switch row  •  left/right switch cell  •  enter to edit  •  esc back to layout                                       │
@@ -741,7 +741,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │     [D]  c-disk.img    disk    1 B (?)                                                                                       │ Free: 1.2 MB
 │     [F]  d-dump.fzf    dump    1 B                                                                                           │
 │                                                                                                                              │
-│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│ up/down move  •  enter opens or pools  •  ctrl-r refresh  •  left/esc up  •  shift+up/down switch pane                       │
 │                                                                                                                              │
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
@@ -777,7 +777,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │          name     type    size                                                                                               │ │ L │
 │  ▶  [W]  808.wav  sample  299.3 KB                                                                                           │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│ up/down move  •  enter opens or pools  •  ctrl-r refresh  •  left/esc up  •  shift+up/down switch pane                       │
 │                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │
@@ -897,7 +897,7 @@ shift+up/down spaces  •  ctrl-s save  •  ctrl-z/y undo/redo  •  ? help  �
 │          name       type  size                                                                                               │ │ L │
 │  ▶  [F]  Piano.fzf  dump  1.0 MB                                                                                             │ │ S │
 │                                                                                                                              │ └───┘
-│ up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool                 │
+│ up/down move  •  enter opens or pools  •  ctrl-r refresh  •  left/esc up  •  shift+up/down switch pane                       │
 │                                                                                                                              │ Free: 1.2 MB
 │ Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.                 │
 │                                                                                                                              │

@@ -7,6 +7,9 @@
 *.fzf
 *.wav
 
+# Studio autosave / crash-recovery snapshots (e.g. JUNGLISM.img.bak)
+*.bak
+
 # Testdata assets are committed despite the above
 !testdata/**
 
