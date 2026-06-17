@@ -27,6 +27,16 @@ func FromKey(msg tea.KeyMsg) Action {
 	case "shift+down":
 		return SpaceDown
 
+	// Fast list navigation: Home/End to ends, PgUp/PgDn by a page.
+	case "home":
+		return NavTop
+	case "end":
+		return NavBottom
+	case "pgup":
+		return NavPageUp
+	case "pgdown":
+		return NavPageDown
+
 	// Cursor navigation: Emacs.
 	case "ctrl+p":
 		return NavUp
@@ -53,12 +63,16 @@ func FromKey(msg tea.KeyMsg) Action {
 		return Undo
 	case "ctrl+y":
 		return Redo
-	case "ctrl+c":
+	case "ctrl+c", "y":
+		// 'y' (yank) is the tmux-safe alias: terminals/tmux swallow
+		// Ctrl-C as SIGINT, so cell copy needs a plain-key option.
 		return Copy
-	case "ctrl+v":
+	case "ctrl+v", "p":
 		return Paste
 	case "f2", "r":
 		return Rename
+	case "l":
+		return RenameDisk
 	case "enter":
 		return Confirm
 	case "esc":

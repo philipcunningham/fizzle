@@ -87,6 +87,7 @@ var (
 		{keyEnter, "open a bank, then an Area for editing"},
 		{"i", "import a pool voice into the focused Area"},
 		{"r (or f2)", "rename the focused voice"},
+		{"l", "rename the disk label (the name the hardware shows)"},
 		{"c (or ctrl-e)", "send the focused Area's voice to the pool"},
 		{"e", "export the focused Area's voice to a .fzv file"},
 		{"ctrl-d", "duplicate the focused Area into a new voice slot"},
@@ -99,7 +100,7 @@ var (
 		{"up / down", "switch row"},
 		{"left / right", "switch cell"},
 		{keyEnter, "edit the focused cell"},
-		{"ctrl-c / ctrl-v", "copy / paste a cell value"},
+		{"y / p (or ctrl-c / ctrl-v)", "copy / paste a stage, envelope, loop or LFO cell"},
 		{"esc", "back to Layout"},
 		{"shift / pgup / alt + arrows", "bigger steps while editing a value"},
 	}}

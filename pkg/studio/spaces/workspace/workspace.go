@@ -28,6 +28,9 @@ import (
 // so the user can spot junk .img files without opening them (F-04).
 const sizeFlag = "(?)"
 
+// navPageSize is how many rows PgUp/PgDn move the cursor (F-QA-23).
+const navPageSize = 10
+
 // FileKind tags each row by the action a Confirm gesture produces.
 type FileKind int
 
@@ -184,6 +187,14 @@ func (m *Model) Apply(a nav.Action) (statusMsg string, intent Intent) {
 		if m.cursor < len(m.entries)-1 {
 			m.cursor++
 		}
+	case nav.NavTop:
+		m.cursor = 0
+	case nav.NavBottom:
+		m.cursor = max(0, len(m.entries)-1)
+	case nav.NavPageUp:
+		m.cursor = max(0, m.cursor-navPageSize)
+	case nav.NavPageDown:
+		m.cursor = min(len(m.entries)-1, m.cursor+navPageSize)
 	case nav.NavLeft, nav.Cancel:
 		// Ascend, but never above the directory the App started in;
 		// surface a hint if the user tries. Use filepath.Rel for the
@@ -281,7 +292,7 @@ func (m Model) View(width, _ int) string {
 	hintBlock := hint.View(width,
 		"Browse disks, dumps, voices, and samples; disks open into the editor, voices and samples drop into the pool.")
 	footer := theme.DimText.Render(
-		"up/down move  •  enter to descend or open  •  ctrl-r refresh  •  left or esc to go up  •  shift+down to pool")
+		"up/down move  •  enter opens or pools  •  ctrl-r refresh  •  left/esc up  •  shift+up/down switch pane")
 	return lipgloss.JoinVertical(lipgloss.Left, header, "", body, "", footer, "", hintBlock)
 }
 

@@ -206,6 +206,10 @@ func (lm *Model) applyBankList(a nav.Action) (string, Intent) {
 		if lm.bankCursor < disk.MaxBanks-1 {
 			lm.bankCursor++
 		}
+	case nav.NavTop, nav.NavPageUp:
+		lm.bankCursor = 0
+	case nav.NavBottom, nav.NavPageDown:
+		lm.bankCursor = disk.MaxBanks - 1
 	case nav.Confirm:
 		// All 8 banks are reachable. Drilling into an unmaterialised
 		// bank lands the user on its area list (all "(empty)"); the
@@ -241,6 +245,18 @@ func (lm *Model) applyAreaList(a nav.Action) (string, Intent) {
 		if lm.areaCursor < 63 {
 			lm.areaCursor++
 		}
+		lm.keepCursorInView()
+	case nav.NavTop:
+		lm.areaCursor = 0
+		lm.keepCursorInView()
+	case nav.NavBottom:
+		lm.areaCursor = 63
+		lm.keepCursorInView()
+	case nav.NavPageUp:
+		lm.areaCursor = max(0, lm.areaCursor-lm.areaListVisibleRows())
+		lm.keepCursorInView()
+	case nav.NavPageDown:
+		lm.areaCursor = min(63, lm.areaCursor+lm.areaListVisibleRows())
 		lm.keepCursorInView()
 	case nav.NavLeft:
 		lm.inBank = false
@@ -350,6 +366,30 @@ func (lm Model) VoiceOffset(bankIdx, areaIdx int) (int, bool) {
 	return off, ok
 }
 
+// VoicePointerOffset returns the byte offset of the voice header that
+// this Area's stored vp[] pointer references (the voice the list
+// actually displays), and whether it is in bounds. Unlike VoiceOffset,
+// which uses the cumulative-bstep allocation slot that *writers* assign
+// into, this follows vp[areaIdx], so read-side operations (rename,
+// extract-to-pool) target the correct voice on disks whose voice-table
+// order differs from area order. Mirrors areaSummary's resolution.
+func (lm Model) VoicePointerOffset(bankIdx, areaIdx int) (int, bool) {
+	if lm.m == nil {
+		return 0, false
+	}
+	data := lm.m.Bytes()
+	slotIdx, ok := disk.BankVPLookup(data, bankIdx, areaIdx)
+	if !ok {
+		return 0, false
+	}
+	voiceAreaStart := lm.info.BankCount * disk.SectorSize
+	off := disk.VoiceSlotOffset(voiceAreaStart, slotIdx)
+	if off+disk.VoicePackSize > len(data) {
+		return 0, false
+	}
+	return off, true
+}
+
 // VoiceSlotIndex returns the voice-area slot index this Area maps
 // to under the cumulative-bstep allocation: sum of prior banks'
 // bsteps + areaIdx. Pure math, never bounds-checks the buffer; safe
@@ -407,13 +447,22 @@ func (lm Model) View(width, _ int) string {
 }
 
 func (lm Model) viewBankList(width int) string {
-	name := lm.info.Path
-	if name == "" {
-		name = theme.DimText.Render("*untitled")
-	} else {
-		name = theme.PrimaryText.Render(name)
+	// Identity line: prefer the FZ disk label (what the hardware shows);
+	// keep the file path alongside it, dimmed. .fzf dumps have no label,
+	// so they show the path as before.
+	var ident string
+	switch {
+	case lm.info.DiskLabel != "":
+		ident = theme.PrimaryText.Render(fmt.Sprintf("%q", lm.info.DiskLabel))
+		if lm.info.Path != "" {
+			ident += "  " + theme.DimText.Render(lm.info.Path)
+		}
+	case lm.info.Path != "":
+		ident = theme.PrimaryText.Render(lm.info.Path)
+	default:
+		ident = theme.DimText.Render("*untitled")
 	}
-	header := theme.Heading.Render("Layout") + "   " + name +
+	header := theme.Heading.Render("Layout") + "   " + ident +
 		theme.DimText.Render(fmt.Sprintf("   (%d %s, %d %s)",
 			lm.info.BankCount, plural(lm.info.BankCount, "bank", "banks"),
 			lm.info.VoiceCount, plural(lm.info.VoiceCount, "voice", "voices")))

@@ -138,6 +138,12 @@ func (m *Model) ClearHistory() {
 	m.dirty = false
 }
 
+// ClearRedo drops the redo stack without touching the undo stack or the
+// dirty flag. Used when an in-place edit is cancelled by replaying Undo
+// for each of its live steps: those reverted batches land on the redo
+// stack, and a cancelled edit must not be re-applied by a later Redo.
+func (m *Model) ClearRedo() { m.redo = nil }
+
 // Replace swaps the model's bytes for an entirely new buffer. Used
 // when an operation cannot be expressed as a fixed-size patch (e.g.,
 // growing the container to append PCM for a newly assigned voice).

@@ -26,6 +26,15 @@ const (
 	// NavRight moves the cursor right within the focused space.
 	NavRight
 
+	// NavTop / NavBottom jump the cursor to the first / last item in
+	// the focused list (Home / End). NavPageUp / NavPageDown move the
+	// cursor by one page (PgUp / PgDn). Fast navigation for long lists
+	// (a bank holds up to 64 areas).
+	NavTop
+	NavBottom
+	NavPageUp
+	NavPageDown
+
 	// SpaceUp moves focus to the previous top-level space
 	// (Workspace -> Pool -> Layout -> Sound, in reverse).
 	SpaceUp
@@ -43,6 +52,10 @@ const (
 	Copy
 	Paste
 	Rename
+	// RenameDisk opens the disk-label editor (the FZ volume name the
+	// hardware shows). Distinct from Rename, which targets a bank or
+	// voice. Bound to `l` (label).
+	RenameDisk
 	Confirm
 	Cancel
 	Delete

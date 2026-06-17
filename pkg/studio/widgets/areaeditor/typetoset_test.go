@@ -53,3 +53,36 @@ func TestTypeToSet(t *testing.T) {
 		t.Errorf("KeyLow after typing 999 = %d, want clamp 127", m2.KeyLow())
 	}
 }
+
+// TestAreaEditor_ArrowFieldNav pins F-QA-2 parity: Left/Right move
+// between fields in the Area editor (like Tab), matching the Sound editor.
+func TestAreaEditor_ArrowFieldNav(t *testing.T) {
+	m := New()
+	m.Open(0, 0, SeedValues{})
+	if m.field != FieldKeyLow {
+		t.Fatalf("focus starts at %v, want FieldKeyLow", m.field)
+	}
+	m.HandleKey("right")
+	if m.field != FieldKeyHigh {
+		t.Errorf("Right: field = %v, want FieldKeyHigh", m.field)
+	}
+	m.HandleKey("left")
+	if m.field != FieldKeyLow {
+		t.Errorf("Left: field = %v, want FieldKeyLow", m.field)
+	}
+}
+
+// TestTypeToSet_MIDIChan pins F-QA-19: the MIDI Chan field accepts typed
+// digits like every other numeric field. The display is 1..16 and storage
+// is 0..15, so typing channel 9 stores 8.
+func TestTypeToSet_MIDIChan(t *testing.T) {
+	m := New()
+	m.Open(0, 0, SeedValues{MIDIChan: 0})
+	for i := 0; i < int(FieldMIDIChan); i++ {
+		m.HandleKey("tab") // advance focus to the MIDI Chan field
+	}
+	m.HandleKey("9")
+	if m.MIDIChan() != 8 {
+		t.Errorf("MIDIChan after typing channel 9 = %d, want 8 (display 9, stored 0-indexed)", m.MIDIChan())
+	}
+}

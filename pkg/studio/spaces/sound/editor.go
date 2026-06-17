@@ -33,6 +33,8 @@ type field struct {
 	readText  func(data []byte) string
 	patch     func(data []byte, value int) []model.Patch
 	patchText func(data []byte, value string) []model.Patch
+
+	noteName bool // numeric fields holding a MIDI note: show "49 (C#3)"
 }
 
 // cellFields returns the editable fields for the cell at (r, col)
@@ -58,10 +60,19 @@ func cellFields(r row, col, voiceOff int) []field {
 
 // ---- field constructors ------------------------------------------------
 
-// unsignedByteAt builds an unsigned 0..max byte field at the given
-// (voiceOff + fieldOff) byte location.
+// noteByteAt is unsignedByteAt for a field that holds a MIDI note number,
+// so the display appends the note name (e.g. "49 (C#3)"), matching the
+// Area editor's Key Orig.
 //
 //nolint:unparam // lo is kept symmetric with uint16At for callsite uniformity, even though all current callers pass 0
+func noteByteAt(label string, voiceOff, fieldOff, lo, hi int) field {
+	f := unsignedByteAt(label, voiceOff, fieldOff, lo, hi)
+	f.noteName = true
+	return f
+}
+
+// unsignedByteAt builds an unsigned 0..max byte field at the given
+// (voiceOff + fieldOff) byte location.
 func unsignedByteAt(label string, voiceOff, fieldOff, lo, hi int) field {
 	abs := voiceOff + fieldOff
 	return field{
@@ -288,7 +299,8 @@ func loopStartAddrAt(label string, voiceOff, fieldOff int) field {
 			return int(disk.LoopStartAddress(binary.LittleEndian.Uint32(data[abs:])))
 		},
 		patch: func(data []byte, v int) []model.Patch {
-			v = clampInt(v, 0, hi)
+			lo, hiB := loopAddrBounds(data, voiceOff, hi)
+			v = clampInt(v, lo, hiB)
 			cur := binary.LittleEndian.Uint32(data[abs:])
 			combined := (cur &^ disk.LoopStartAddressMask) | (uint32(v) & disk.LoopStartAddressMask) //nolint:gosec // G115: v clamped to 0..hi (hi = LoopStartAddressMask, uint32-bounded)
 			if combined == cur {
@@ -344,7 +356,8 @@ func loopEndAddrAt(label string, voiceOff, fieldOff int) field {
 			return int(disk.LoopEndAddress(binary.LittleEndian.Uint32(data[abs:])))
 		},
 		patch: func(data []byte, v int) []model.Patch {
-			v = clampInt(v, 0, hi)
+			lo, hiB := loopAddrBounds(data, voiceOff, hi)
+			v = clampInt(v, lo, hiB)
 			cur := binary.LittleEndian.Uint32(data[abs:])
 			combined := (cur & disk.LoopEndSkipMask) | (uint32(v) & disk.LoopEndAddressMask) //nolint:gosec // G115: v clamped to 0..hi (hi = LoopEndAddressMask, uint32-bounded)
 			if combined == cur {
@@ -672,11 +685,10 @@ func sampleCellFields(col, voiceOff int) []field {
 		}
 	case 3:
 		return []field{
-			unsignedByteAt("Root note", voiceOff, disk.VoiceKeyCentOffset, 0, 127),
+			noteByteAt("Root note", voiceOff, disk.VoiceKeyCentOffset, 0, 127),
 		}
 	case 4:
-		return nil // TUNE field; voicedata storage location not pinned in the spike
-	case 5:
+		// Playback mode (tune cell removed: its storage location isn't pinned).
 		abs := voiceOff + disk.VoiceLoopModeOffset
 		return []field{
 			{
@@ -775,6 +787,24 @@ func loopsCellFields(col, voiceOff int) []field {
 }
 
 // ---- helpers -----------------------------------------------------------
+
+// loopAddrBounds returns the [lo, hi] range a loop address may take,
+// clamped to the sample's wave region (F-QA-16): a loop point outside
+// [waveStart, waveEnd] produces clicks/garbage on hardware. maskHi is the
+// field's own address-mask ceiling. waveEnd is only used as the ceiling
+// when set (>0), so voices with unset wave bounds keep the mask ceiling.
+func loopAddrBounds(data []byte, voiceOff, maskHi int) (lo, hi int) {
+	waveStart := int(binary.LittleEndian.Uint32(data[voiceOff+disk.VoiceWaveStartOffset:]))
+	waveEnd := int(binary.LittleEndian.Uint32(data[voiceOff+disk.VoiceWaveEndOffset:]))
+	lo, hi = waveStart, maskHi
+	if waveEnd > 0 && waveEnd < hi {
+		hi = waveEnd
+	}
+	if lo > hi {
+		lo = hi
+	}
+	return lo, hi
+}
 
 func clampInt(v, lo, hi int) int {
 	if v < lo {
