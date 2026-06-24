@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased (last updated 2026-06-16)
+## Unreleased (last updated 2026-06-24)
+
+## v0.4.0 (2026-06-24)
 
 - Fix studio data-loss bugs and resolve the manual-QA backlog.
 
