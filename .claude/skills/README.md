@@ -2,6 +2,14 @@
 
 Claude Code skills for work on fizzle.
 
+## Project skills
+
+fizzle's own skills, under the repository's root
+[LICENSE](../../LICENSE):
+
+- `llm-wiki-ingest` and `llm-wiki-lint` maintain the knowledge base at
+  `llm-wiki/`; their authority is `llm-wiki/AGENTS.md`.
+
 ## Adapted skills
 
 The following skills are adapted from Matt Pocock's skills repository
@@ -44,11 +52,3 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
-
-## Project skills
-
-Everything else in this directory is fizzle's own, under the
-repository's root [LICENSE](../../LICENSE):
-
-- `llm-wiki-ingest` and `llm-wiki-lint` maintain the knowledge base at
-  `llm-wiki/`; their authority is `llm-wiki/AGENTS.md`.
