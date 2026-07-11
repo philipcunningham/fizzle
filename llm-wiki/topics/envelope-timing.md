@@ -14,7 +14,7 @@ status: confirmed-firmware
 
 DCA and DCF envelopes each have 8 stages. On note-on the envelope runs
 from stage 0, advancing when each stage's level is reached, and holds
-at `sus`; on note-off it resumes from `sus + 1` and runs to `end`.
+at `sus`. On note-off it resumes from `sus + 1` and runs to `end`.
 `sus` can sit beyond `end` (the factory piano has Sus 7, End 4). Rate
 bytes carry direction in bit 7 (set means falling) and magnitude in
 bits 0 to 6; stop levels are 0 to 255.

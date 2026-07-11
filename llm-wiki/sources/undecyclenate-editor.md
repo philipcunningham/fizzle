@@ -16,11 +16,11 @@ fizzle, and its manual structured `docs/fizzle-manual.md`. Community
 documentation, the lowest-ranked evidence.
 
 Useful for: front-panel menu locations per parameter, display-range
-notes (editor exposes 0 to 127 and 0 to 255 where the FZ shows 0 to
-99), and behavioural observations worth verifying: synthesized loop
-mode plays 6 semitones flat (correctable by tuning the root note the
-other way), and the LFO resonance and attack fields produced no
-audible effect in their testing.
+notes, and behavioural observations worth verifying. The editor
+exposes raw 0 to 127 and 0 to 255 ranges where the FZ shows 0 to 99.
+Synthesized loop mode plays 6 semitones flat (correctable by tuning
+the root note the other way). The LFO resonance and attack fields
+produced no audible effect in their testing.
 
 ## Open questions
 

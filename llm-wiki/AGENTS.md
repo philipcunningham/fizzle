@@ -54,7 +54,7 @@ Rules:
 - New page only for a distinct entity other pages would link to;
   otherwise edit in place. Merge overlapping pages.
 - Never mirror a single greppable file; link to it from `map.md`. A
-  page that restates one source should not exist; synthesis across
+  page that restates one source shouldn't exist; synthesis across
   sources may run longer than any one of them.
 - Pages are trusted at query time; freshness is lint's job, never a
   re-verify instruction on the page.
@@ -109,11 +109,12 @@ spec-section or code anchors. Then read only the selected pages and
 answer with citations. File the answer back only when it adds new
 evidence or synthesis.
 
-Lint (after every ingest session; drift is the main failure mode):
-frontmatter integrity, staleness against git, coverage gaps, map drift,
-orphans (pages whose only inbound link is the index, which links every
-page by construction), duplicates, and open questions collected into
-the report. Lint flags; it may fix a frontmatter field whose correct
+Lint runs after every ingest session; drift is the main failure mode.
+It checks frontmatter integrity, staleness against git, coverage gaps,
+map drift, orphans, duplicates, and open questions collected into the
+report. An orphan is a page whose only inbound link is the index,
+which links every page by construction.
+Lint flags; it may fix a frontmatter field whose correct
 value is unambiguous, but it never writes page bodies or deletes
 without user approval. Log every pass.
 

@@ -26,8 +26,8 @@ addresses in `loopst[0]`/`looped[0]`, all unused slots set to `gened`.
 One-shot means `loop_sus = 8` and every slot at `gened`. Loop
 addresses are cumulative word indices; WAV SMPL loop points scale by
 `round(loop * target_rate / source_rate)`. Auxiliary fields per spec:
-`loopxf` 0 to 1023 (0 = no crossfade), `looptm` 1 to 1022 in 16 ms
-units, `loopst` upper 8 bits are loop fine, `looped` MSB picks Skip
+`loopxf` 0 to 1023 (0 = no crossfade) and `looptm` 1 to 1022 in 16 ms
+units. `loopst` upper 8 bits are loop fine; `looped` MSB picks Skip
 over Trace.
 
 **DCA default**: stage 0 rises at rate 127 to stop 255; stages 1 to 7

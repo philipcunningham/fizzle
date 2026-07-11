@@ -16,9 +16,10 @@ Jacob Vosmaer's fz1 project (2025): small C utilities for building
 FZ-1 disk images, with a blog write-up on the format. Community
 documentation, the lowest-ranked evidence.
 
-Useful for: the file-head layout-number correction (counts at the
-sector end; see [dis-file-head](../findings/dis-file-head.md)) and the
-heuristic for reconstructing layout numbers on FZF files found online
-by scanning for 12-byte ASCII voice names, which informed fizzle's
-voice-slot walk (see
+Useful for two things. First, the file-head layout-number correction:
+counts at the sector end; see
+[dis-file-head](../findings/dis-file-head.md). Second, the heuristic
+for reconstructing layout numbers on FZF files found online by
+scanning for 12-byte ASCII voice names. That heuristic informed
+fizzle's voice-slot walk (see
 [voice-area-sizing](../topics/voice-area-sizing.md)).

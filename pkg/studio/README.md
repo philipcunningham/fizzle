@@ -41,8 +41,8 @@ corner of every space shows where you are.
 ### Workspace
 
 A file browser. `.img` and `.fzf` files open as the in-focus
-container (transitioning into Layout); `.fzv` files add to the
-Pool; `.wav` files add to the Pool as well, with a stereo channel
+container (transitioning into Layout). `.fzv` files add to the
+Pool. `.wav` files also add to the Pool, with a stereo channel
 prompt (Left / Right / Mix / Cancel) when the source is stereo.
 
 ### Pool
@@ -54,7 +54,7 @@ from a disk's bank). Entries are immutable: editing operations
 target the Area's voice instance, not the pool entry.
 
 The pool persists across container focus changes within a session
-but is not persisted to disk. Pool entries the user wants to keep
+but isn't persisted to disk. Pool entries the user wants to keep
 must be assigned to an Area or exported via the fizzle CLI before
 quitting.
 
@@ -66,10 +66,10 @@ key range, a velocity range, an audio output assignment, a MIDI
 channel, and a per-Area volume.
 
 The `Ctrl-D` Duplicate gesture is the foundation of velocity
-multi-switching: duplicate an Area, narrow the duplicate's
-velocity range to a band adjacent to the source's, end up with two
-Areas that play the same voice with different per-Area parameters
-depending on key velocity. Duplicate Areas share the source's
+multi-switching. Duplicate an Area, then narrow the duplicate's
+velocity range to a band adjacent to the source's. You end up with
+two Areas that play the same voice with different per-Area
+parameters depending on key velocity. Duplicate Areas share the source's
 audio data: the FZ voice header is cloned but the wave area is
 not duplicated.
 
@@ -78,9 +78,10 @@ not duplicated.
 Sound is voice-scoped editing. Entered by pressing `Enter` on a
 selected Area in Layout, or by the spatial gesture from Layout.
 Internally a 2D grid of subsystems by cells: DCA, DCF, LFO,
-Sample, Loops rows; per-row cells expose visual representation,
-stage editors (DCA/DCF), shape and depths (LFO), name / rate /
-gen / root / tune / playback (Sample), and 8 loop cells (Loops).
+Sample, Loops rows. Per-row cells expose visual representation,
+stage editors (DCA/DCF), shape and depths (LFO), and name / rate /
+gen / root / tune / playback (Sample). The Loops row exposes 8
+loop cells.
 `Esc` returns to the originating Layout Area (`SHIFT+up` also steps
 back up through the spaces).
 
@@ -109,8 +110,9 @@ back up through the spaces).
 
 ## User workflows
 
-These are the contracts studio guarantees. Each one is encoded as
-an executable journey test in `pkg/studio/app/journey_test.go`.
+The workflows below are the contracts studio guarantees. Each one
+is encoded as an executable journey test in
+`pkg/studio/app/journey_test.go`.
 
 1. **Open and edit.** Load a file (`.img` or `.fzf`), navigate to a
    voice's DCF cutoff, change the value, save. The edit lands at
@@ -160,20 +162,21 @@ container" state.
 | Quitting with unsaved edits   | Prompts to save, discard, or cancel.                                                                 |
 
 Only one container is in focus at a time. The voice pool persists
-across container switches; the undo / redo stacks are per-container
+across container switches. The undo / redo stacks are per-container
 and survive switching away and back as long as the container has
 not been closed.
 
 ### Free-space figure
 
 The "Free" indicator shows the space the disk is left with **after a
-save**, not its current on-disk size: studio compacts on save, so the
+save**, not its current on-disk size. studio compacts on save, so the
 figure already excludes reclaimable slack (orphan audio left by an
-import you then undid, for example). One consequence is that for a
-disk created by another tool that still carries slack, studio's "Free"
-can read higher than `fizzle disk ls` reports for the same file, since
-the CLI measures the file as it sits on disk. The two agree
-for any studio-saved disk, and both use binary (÷1024) KB / MB units.
+import you then undid, for example). For a disk created by another
+tool that still carries slack, studio's "Free" can therefore read
+higher than `fizzle disk ls` reports for the same file. The difference
+arises because the CLI measures the file as it sits on disk. The two
+agree for any studio-saved disk, and both use binary (÷1024) KB / MB
+units.
 
 ## Package layout
 
@@ -225,7 +228,7 @@ decode math. Property tests via `rapid` for state-machine
 invariants in `widgets/areaeditor`, `widgets/effectseditor`,
 `model`, and `spaces/sound`. The headline property is "every patch
 returned by every editor field keeps `disk.IsActiveOrEmptyVoiceSlot`
-true". That is the central data-integrity invariant.
+true". That property is the central data-integrity invariant.
 
 **Layer 2: package integration tests.** Round-trip tests that load
 a real fixture, drive edits through `Update`, `Save`, reload, and
@@ -235,10 +238,10 @@ end-to-end user journeys).
 
 **Layer 3: corpus-driven appearance net.** `app/corpus_test.go`
 walks every fixture in `testdata/corpus/` and `testdata/synthetic/`
-(232 files), loads each, runs a fixed navigation script
-(Workspace, Pool, Layout-banks, Layout-areas, Sound), and asserts
-(no panic, loader determinism, view non-empty, no rendered line
-exceeds terminal width + slack). Two curated snapshots gate
+(232 files), loads each, and runs a fixed navigation script
+(Workspace, Pool, Layout-banks, Layout-areas, Sound). It asserts
+no panic, loader determinism, view non-empty, and that no rendered
+line exceeds terminal width + slack. Two curated snapshots gate
 appearance regressions: `Drums.fzf` Layout bank list at 140x30 and
 the too-small hint at 139x29.
 
@@ -249,7 +252,7 @@ contract is "never panic."
 ### Snapshot review discipline
 
 Visual snapshots (especially anything containing braille / dense
-ASCII fingerprints such as envelope, LFO, sample waveform) are not
+ASCII fingerprints such as envelope, LFO, sample waveform) aren't
 eyeball-reviewable. When one of these changes:
 
 - **Don't blind-rebless.** `UPDATE_SNAPS=true make test` rewrites
@@ -287,8 +290,8 @@ For snapshot tests to be refresh-stable, all of these must hold:
 
 ### Deferred prerequisites
 
-These are blockers for future snapshot work, not for the current
-corpus + curated tier:
+The following items are blockers for future snapshot work, not
+for the current corpus + curated tier:
 
 - **Animation "jump to settled" test hook.** Transitions don't
   exist yet. When they're added, build with a test hook that

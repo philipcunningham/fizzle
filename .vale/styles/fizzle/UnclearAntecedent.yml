@@ -1,6 +1,6 @@
 extends: existence
 message: "Instead of '%s', start the sentence with a specific subject and verb."
-level: suggestion
+level: error
 tokens:
   - 'That is'
   - 'There are'

@@ -1,6 +1,6 @@
 extends: substitution
 message: "Prefer the contraction '%s' over '%s'; it reads as more human."
-level: suggestion
+level: error
 ignorecase: true
 swap:
   are not: aren't

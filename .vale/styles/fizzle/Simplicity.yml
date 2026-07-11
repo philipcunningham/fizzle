@@ -1,6 +1,6 @@
 extends: existence
 message: "Remove '%s'; be precise instead of subjective."
-level: warning
+level: error
 ignorecase: true
 tokens:
   - easy

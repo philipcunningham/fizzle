@@ -9,7 +9,7 @@ The full reference, including the meaning of every flag and where each parameter
 > [!IMPORTANT]
 > **Status: alpha.** `fizzle` is young and under active development. So far it has been validated the hands-on way, through my own day-to-day workflow with a Casio FZ-10M, rather than across the full FZ series (FZ-1, FZ-10M, FZ-20M) or a wide spread of setups. Development and testing happen on macOS; the Linux and Windows builds are provided for convenience and have not yet been exercised on those platforms. Expect the occasional rough edge, and treat results on unfamiliar material with healthy curiosity.
 >
-> Because `fizzle` produces disk images your sampler loads, please **keep backups of your instruments, disks, and samples** before making destructive edits, and try a converted disk on non-essential data first. Real-world reports (what worked, what didn't, and on which hardware) are hugely welcome and are exactly what helps `fizzle` mature.
+> Because `fizzle` produces disk images your sampler loads, please **keep backups of your instruments, disks, and samples** before making destructive edits. Try a converted disk on non-essential data first. Real-world reports (what worked, what didn't, and on which hardware) are hugely welcome and are exactly what helps `fizzle` mature.
 
 ---
 
@@ -88,7 +88,7 @@ fizzle disk ls mydrums.img
 
 You can pass a directory of WAVs instead of an SFZ file; each WAV gets assigned to a sequential key from C2 upward.
 
-For other workflows (importing a single WAV, editing a voice in place, splitting a large instrument across two floppies, round-tripping a hardware FZF), see the [Quickstart walkthroughs](docs/fizzle-manual.md#quickstart-walkthroughs) chapter of the manual.
+For other workflows, see the [Quickstart walkthroughs](docs/fizzle-manual.md#quickstart-walkthroughs) chapter of the manual. It covers importing a single WAV, editing a voice in place, splitting a large instrument across two floppies, and round-tripping a hardware FZF.
 
 Long conversions respect Ctrl+C: cancel a running `sfz convert` and the command exits cleanly without leaving a half-written file.
 
@@ -105,7 +105,7 @@ fizzle studio ~/fz-library       # use a directory as workspace
 
 `fizzle studio` is a workspace-oriented terminal editor for FZ-1 / FZ-10M / FZ-20M sound material. It takes a directory of `.img` / `.fzf` / `.fzv` / `.wav` files and opens them from the in-TUI Workspace browser. Omitting the argument uses the current working directory.
 
-studio organises around four spaces: Workspace (file browser), Pool (a session-level basket of voices), Layout (the in-focus container's banks and Areas), and Sound (the selected voice, edited per-cell). `SHIFT+up` / `SHIFT+down` move between spaces. `Ctrl+S` saves, `Ctrl+Z` / `Ctrl+Y` undo and redo, `Ctrl+D` duplicates an Area for velocity multi-switching, `Ctrl+C` / `Ctrl+V` copy / paste between compatible cells, `Space` auditions, `?` opens contextual help, `Ctrl+Q` quits. studio includes autosave with crash recovery: dirty containers get a `.bak` snapshot next to the source file every 30 seconds, deleted on a successful save and offered for recovery if a crash occurs.
+studio organises around four spaces: Workspace (file browser) and Pool (a session-level basket of voices). The other two spaces are Layout (the in-focus container's banks and Areas) and Sound (the selected voice, edited per-cell). `SHIFT+up` / `SHIFT+down` move between spaces. `Ctrl+S` saves, `Ctrl+Z` / `Ctrl+Y` undo and redo, `Ctrl+D` duplicates an Area for velocity multi-switching, `Ctrl+C` / `Ctrl+V` copy / paste between compatible cells, `Space` auditions, `?` opens contextual help, `Ctrl+Q` quits. studio includes autosave with crash recovery: dirty containers get a `.bak` snapshot next to the source file every 30 seconds. The snapshot is deleted on a successful save and offered for recovery if a crash occurs.
 
 For the full feature set, key bindings, user workflows, and testing approach see [pkg/studio/README.md](pkg/studio/README.md).
 
@@ -124,7 +124,7 @@ fizzle --debug sfz convert junglism.sfz junglism.fzf
 ## FAQ
 
 **Why mono only?**
-The FZ series records and plays back mono samples. Stereo is not supported by the hardware.
+The FZ series records and plays back mono samples. Stereo isn't supported by the hardware.
 
 **Why only three sample rates?**
 The FZ-1 supports 36 kHz, 18 kHz, and 9 kHz. Higher rates sound better but use more memory and disk space.
@@ -147,9 +147,9 @@ Yes. fizzle reads real hardware FZF files including multi-bank full dumps (up to
 
 The [Casio FZ-1 Data Structures](llm-wiki/sources/casio-fz1-data-structures.pdf) document (T. Sasaki, Casio R&D, 1987) is the primary reference for the disk and voice formats implemented here. Corrections and real-world findings distilled from it live in the [llm-wiki](llm-wiki/index.md).
 
-Rainer Buchty's [fztoolkit](http://www.buchty.net/casio/) (2000) is a set of C utilities for reading and writing FZ-1 disks directly from a Linux floppy drive. Its `voice_data` and `bank_data` struct layouts were a useful cross-check against the spec while implementing fizzle's voice and bank parsers; his firmware disassembly also informed the V50 ROM API notes in `testdata/assembly/DEMO.asm`.
+Rainer Buchty's [fztoolkit](http://www.buchty.net/casio/) (2000) is a set of C utilities for reading and writing FZ-1 disks directly from a Linux floppy drive. Its `voice_data` and `bank_data` struct layouts were a useful cross-check against the spec while implementing fizzle's voice and bank parsers. His firmware disassembly also informed the V50 ROM API notes in `testdata/assembly/DEMO.asm`.
 
-[Jacob Vosmaer's fz1 project](https://github.com/jacobvosmaer/fz1) and his [write-up on FZ-1 disk images](https://blog.jacobvosmaer.nl/0057-fz-1-images/) (2025) were valuable references, particularly for the file head layout number correction and the heuristic for reconstructing layout numbers from FZF files found online.
+[Jacob Vosmaer's fz1 project](https://github.com/jacobvosmaer/fz1) and his [write-up on FZ-1 disk images](https://blog.jacobvosmaer.nl/0057-fz-1-images/) (2025) were valuable references. They proved particularly useful for the file head layout number correction and the heuristic for reconstructing layout numbers from FZF files found online.
 
 The [Undecyclenate FZ Editor and Librarian](https://undecyclenate.neocities.org/manual) is prior art that scratched a similar itch on Windows XP. Its manual was a useful reference while structuring `docs/fizzle-manual.md`.
 

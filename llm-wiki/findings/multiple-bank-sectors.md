@@ -13,9 +13,9 @@ status: confirmed-hardware
 # Full dumps carry up to 8 bank sectors
 
 The spec's Full Data diagram (section 1-5) shows a single bank sector,
-but real hardware saves the whole bank set: one 1024-byte `bankdata`
-sector per bank, up to 8, with the voice parameter area following the
-last one. 210 of the 235 full dumps in the
+but real hardware saves the whole bank set. Each bank gets one
+1024-byte `bankdata` sector, up to 8, and the voice parameter area
+follows the last one. 210 of the 235 full dumps in the
 [corpus](../sources/corpus.md) are multi-bank.
 
 FZF readers must count consecutive valid bank sectors before locating

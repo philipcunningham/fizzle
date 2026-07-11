@@ -1,6 +1,6 @@
 # fizzle QA
 
-This file holds the QA scenarios that the automated test suite cannot
+This file holds the QA scenarios that the automated test suite can't
 cover by itself. Run the automated suite first:
 
 ```sh
@@ -18,7 +18,7 @@ The file is split into two sections:
   exploratory testing, ergonomics, cross-command consistency, and
   failure modes that are hard to encode as automated assertions.
 - **Hardware QA** (`HW-01` to `HW-13`) requires a real Casio FZ-1,
-  FZ-10M, or FZ-20M and cannot be automated.
+  FZ-10M, or FZ-20M and can't be automated.
 
 Run with `--debug` for verbose output when investigating failures.
 
@@ -30,7 +30,7 @@ Test assets in `testdata/synthetic/`: `HOOVER.img`, `STAB.img`, `TECHNO.img`,
 # CLI QA
 
 Scenarios that exercise the compiled `fizzle` binary against the
-fixtures and check behaviour the automated suite does not assert on.
+fixtures and check behaviour the automated suite doesn't assert on.
 
 Use a scratch directory for outputs:
 
@@ -44,7 +44,7 @@ cd "$QA"
 ## CLI-01: Error message ergonomics
 
 **Why CLI-level QA:** Automated tests assert exit codes and rough
-substrings. They do not grade whether the message tells the user what
+substrings. They don't grade whether the message tells the user what
 went wrong, what limit was hit, or what to try instead.
 
 **Scenario:** Drive each command with malformed or boundary inputs and
@@ -94,8 +94,8 @@ fizzle fzv edit some.fzv --key-low 200
 - Each error message names the offending input or flag, the limit or
   expected value, and ideally a fix.
 - Package prefixes (`fzfmidi:`, `voiceedit:`) are reserved for internal
-  errors. User-facing usage errors should not leak them.
-- Truly broken arguments do not produce a stack trace or panic.
+  errors. User-facing usage errors shouldn't leak them.
+- Truly broken arguments don't produce a stack trace or panic.
 
 ---
 
@@ -132,9 +132,10 @@ fish -c 'source completion.fish; complete -C "fizzle "' | head
 
 ## CLI-03: SIGINT / cancellation cleanup
 
-**Why CLI-level QA:** The README claims "Long conversions respect
+**Why CLI-level QA:** Nothing automated proves the README's
+cancellation claim. The README says: "Long conversions respect
 Ctrl+C: cancel a running `sfz convert` and the command exits cleanly
-without leaving a half-written file." Nothing automated proves this.
+without leaving a half-written file."
 
 **Steps:**
 
@@ -162,7 +163,7 @@ ls "$QA" | grep -E 'SPLIT-[12]\.img|\.tmp' || echo "no leftover files"
 - The process exits within a few hundred milliseconds of SIGINT.
 - No `.fzf`, `.img`, or `.tmp*` files are left in the scratch
   directory.
-- Exit status is non-zero (interrupted), but stderr is not a stack
+- Exit status is non-zero (interrupted), but stderr isn't a stack
   trace.
 
 ---
@@ -250,7 +251,7 @@ fizzle fzv info --json unpacked/MY\ PAD.fzv | jq '.dcf.cutoff'   # expect 64
 ## CLI-06: Multi-bank `fzf edit`
 
 **Why CLI-level QA:** `fzf edit` is tested against single-bank dumps.
-Behaviour on a multi-bank dump (TECHNO has 8 bank sectors) is not
+Behaviour on a multi-bank dump (TECHNO has 8 bank sectors) isn't
 exercised at the CLI level.
 
 **Steps:**
@@ -300,7 +301,7 @@ echo "exit=$?"
 
 **Why CLI-level QA:** Automated tests inject a `TestPlayer`. On
 darwin and windows the real `oto/v3` backend is selected; that path
-is not exercised in `make check`.
+isn't exercised in `make check`.
 
 **Steps:**
 
@@ -324,7 +325,7 @@ echo "exit=$?"
 ## CLI-09: WAV edge cases via `fzv import`
 
 **Why CLI-level QA:** The fixtures all use 36 kHz or 18 kHz mono PCM
-with no SMPL chunk. Off-rate, very short, and looped WAVs are not
+with no SMPL chunk. Off-rate, very short, and looped WAVs aren't
 exercised end-to-end at the CLI level.
 
 **Steps:**
@@ -389,7 +390,7 @@ fizzle disk ls par.img
 - Both processes exit 0.
 - The final image contains both voices (no lost write).
 - No `.lock` file is left behind.
-- The two processes did not both report success against an empty disk
+- The two processes didn't both report success against an empty disk
   (one of them must have seen the other's write).
 
 ---
@@ -452,8 +453,8 @@ duration, and its key range should agree.
 ## CLI-13: Disk-full handling
 
 **Why CLI-level QA:** Boundary-at-capacity is fuzzed at the byte
-level, but the user-facing behaviour of "the disk filled up while I
-was adding files" is not.
+level. The user-facing behaviour of "the disk filled up while I
+was adding files" isn't.
 
 **Steps:**
 
@@ -508,11 +509,11 @@ grep -i 'downsampling\|capacity\|fit' fit.log
 **Why CLI-level QA:** The `sfz export` command produces an SFZ + WAV
 bundle intended to load in Renoise, Bitwig, or any other SFZ-aware
 DAW. Automated tests verify that the exported SFZ can be re-converted
-by `sfz convert`, but nothing automated proves the bundle actually
+by `sfz convert`. Nothing automated proves the bundle actually
 loads in a DAW or that the audio plays back correctly. The export
 also has a known limitation around playback modes (CUE, SYNTH,
-REVERSE collapse to NORMAL on the SFZ side) that an operator should
-confirm matches expectations for their workflow.
+REVERSE collapse to NORMAL on the SFZ side). An operator should
+confirm this matches expectations for their workflow.
 
 **Scenario:** Export a real hardware FZF, load the result in a DAW,
 and confirm key ranges, velocities, and audio fidelity.
@@ -568,10 +569,10 @@ hardware FZFs exposes whatever drift exists in the export and
 re-conversion paths against the actual voice headers the sampler
 writes.
 
-**Scenario:** Export a hardware FZF as SFZ + WAVs, re-convert that
-SFZ to a fresh FZF, and confirm every voice slot survives in the
-same order with the same key range, MIDI channel, output, sample
-rate, and approximate duration.
+**Scenario:** Export a hardware FZF as SFZ + WAVs, then re-convert
+that SFZ to a fresh FZF. Confirm every voice slot survives in the
+same order. Each slot keeps the same key range, MIDI channel,
+output, sample rate, and approximate duration.
 
 **Steps:**
 
@@ -623,7 +624,7 @@ fizzle fzf info --json "$QA/brass-rt.fzf" \
 
 ## CLI-17: SFZ to FZF to SFZ round-trip
 
-**Why CLI-level QA:** The complementary round-trip: take an SFZ
+**Why CLI-level QA:** The complementary round-trip. Take an SFZ
 authored in a DAW, push it through fizzle into the FZ format, then
 pull it back out. Catches loss of fidelity in either direction
 against a known SFZ source-of-truth.
@@ -672,7 +673,7 @@ fizzle fzf info --json "$QA/junglism-rt.fzf" \
 # Hardware QA
 
 Scenarios that require a real Casio FZ-1, FZ-10M, or FZ-20M sampler
-and cannot be automated.
+and can't be automated.
 
 ---
 
@@ -832,15 +833,16 @@ Copy `env-test.img` to the sampler.
 ## HW-07: Studio edit round-trip
 
 **Automated counterparts:** the journey + round-trip tests under
-`pkg/studio/app/journey_test.go`, `pkg/studio/spaces/sound/roundtrip_test.go`,
-and the property tests under `pkg/studio/{model,spaces,widgets}/*property_test.go`
-cover field commit, undo/redo, focus navigation, byte-level edit
-persistence, and patch validity at the model layer. Hardware QA
+`pkg/studio/app/journey_test.go` and `pkg/studio/spaces/sound/roundtrip_test.go`,
+plus the property tests under `pkg/studio/{model,spaces,widgets}/*property_test.go`.
+Together they cover field commit, undo/redo, focus navigation,
+byte-level edit persistence, and patch validity at the model layer.
+Hardware QA
 verifies the edits are audible on a real FZ-1 / FZ-10M.
 
-**Scenario:** Open a workspace in studio, edit one voice across DCA /
-DCF / LFO / per-bank effects, rename a bank, save, reload, and verify
-the edits persist and play correctly on hardware.
+**Scenario:** Open a workspace in studio and edit one voice across
+DCA / DCF / LFO / per-bank effects. Rename a bank, save, and reload.
+Verify the edits persist and play correctly on hardware.
 
 **Setup:**
 ```sh
@@ -897,11 +899,11 @@ fizzle studio /tmp/qa-studio
 
 **Failure modes to record:**
 
-- Field appears edited in the studio after save but does not affect
+- Field appears edited in the studio after save but doesn't affect
   hardware playback: indicates a missing bank-site sync or wrong
   storage offset.
 - Field reverts after save then relaunch: indicates the model's
-  Apply path is not committing through to the saved bytes.
+  Apply path isn't committing through to the saved bytes.
 - Studio hangs on Ctrl+S: file lock contention or modal stack
   regression.
 
@@ -1032,7 +1034,7 @@ Copy `name-test.img` to the sampler.
 
 **Pass criteria:**
 - The sampler front panel displays "MY PAD" as the voice name
-- Voice plays correctly (rename did not corrupt other parameters)
+- Voice plays correctly (rename didn't corrupt other parameters)
 
 ---
 
@@ -1070,5 +1072,5 @@ Copy `output-test.img` to the sampler.
 ## Exploratory testing
 
 Before a release, consider manually testing any new features or changed
-workflows that are not yet covered by the CLI QA or hardware QA above.
+workflows that aren't yet covered by the CLI QA or hardware QA above.
 Use `--debug` to inspect log output during exploratory sessions.

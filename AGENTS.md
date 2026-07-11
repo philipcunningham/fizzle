@@ -36,7 +36,7 @@ seed validation.
 - `pkg/voice*/` contains voice file operations (import, extract, build, unpack, edit)
 - `pkg/disk*/` contains disk operations (format, list, add, get, copy)
 - `pkg/studio/` contains the interactive Bubble Tea TUI (`fizzle studio`), a workspace-oriented editor for FZ-1 / FZ-10M / FZ-20M sound material. Sub-packages: `app/` (root tea.Model + Update / View, modal stack, save / autosave / recovery, journey tests), `audio/` (audition path via oto with single-in-flight playback and an owner-identity guard), `clock/` (tea.Tick seam for tests), `container/` (pure FZF/disk container byte surgery: compaction, bank grow, area swap/delete/duplicate patches, unit-testable without the TUI), `fznote/` (note-name formatting shared by the layout and area editors), `loader/` (.img / .fzf loader returning a model.Model + ContainerInfo summary), `model/` (in-memory container bytes plus undo/redo and dirty flag), `nav/` (Action enum + keymap), `spaces/{workspace,pool,layout,sound}/` (one sub-package per space), `theme/` (lipgloss palette), and `widgets/` (minimap, status, toast, hint, help, confirm, areaeditor, effectseditor, envelopevisual, lfovisual, samplevisual, topbar). studio's own README is at `pkg/studio/README.md`; it carries the feature spec, key bindings, user workflows, and testing strategy.
-- `pkg/fzf*/` contains full dump operations (info, midi, output, effects). Note: `fzf build`, `fzf unpack`, and `fzf edit` dispatch to `pkg/voicebuild/`, `pkg/voiceunpack/`, and `pkg/voiceedit/` respectively.
+- `pkg/fzf*/` contains full dump operations (info, midi, output, effects). Note: `fzf build` dispatches to `pkg/voicebuild/`, `fzf unpack` to `pkg/voiceunpack/`, and `fzf edit` to `pkg/voiceedit/`.
 - `pkg/fzb*/` contains bank dump operations (info)
 - `pkg/fzv*/` contains voice info display
 - `pkg/audioplayer/` provides cross-platform audio playback: native audio on macOS and Windows via oto/v3, system audio players (`aplay`, `paplay`, `ffplay`) on Linux. Exports a `Player` interface and `TestPlayer` for testing.
@@ -71,7 +71,7 @@ Unexported byte-level functions (for example `fzvinfo.parseHeader`,
 values without filesystem access. Other pure functions like
 `diskformat.buildImage` accept plain parameters (a `string` label) and
 return `[]byte` with no I/O. Same-package
-tests can call these directly. Do not export pure internals solely for
+tests can call these directly. Don't export pure internals solely for
 test access; use white-box tests instead.
 
 **Logging:** Use `logger.InitWithWriter(debug, w)` in tests to capture log
@@ -88,10 +88,10 @@ package accepts `audioplayer.Player` and tests inject `NewTestPlayer` to verify
 playback behaviour without audio hardware.
 
 **Environment variables:** Parse environment variables at the CLI boundary and
-pass values as struct fields or function parameters. Do not call `os.Getenv`
+pass values as struct fields or function parameters. Don't call `os.Getenv`
 deep in library code.
 
-**Do not:**
+**Don't:**
 - Use DI frameworks or service locators.
 - Define broad interfaces in producer packages.
 - Mock `os.Open`, `filepath.Join`, or other stable standard library calls.
@@ -130,12 +130,12 @@ change must keep the output bytes identical.
 
 ## Writing style
 
-Do not use `--`, `-`, or an em dash (U+2014) as a grammatical separator
+Don't use `--`, `-`, or an em dash (U+2014) as a grammatical separator
 in code comments, markdown files, or documentation. Use proper
 punctuation instead: periods, colons, semicolons, commas, or
 parentheses. Restructure the sentence if needed.
 
-Do not use the right-arrow character (U+2192) in code comments, markdown
+Don't use the right-arrow character (U+2192) in code comments, markdown
 files, or documentation. Write the relationship in English: "SFZ to FZF"
 rather than an arrow between them, and "build then unpack round trip"
 rather than an arrow chain. Restructure with "maps to", "yields", or
@@ -162,17 +162,23 @@ FZ formats or hardware behaviour, read `llm-wiki/index.md` first instead
 of re-deriving from raw sources. Ingest and health checks run through
 the `llm-wiki-ingest` and `llm-wiki-lint` skills.
 
+## Agent skills
+
+`.claude/skills/` holds the Claude Code skills: the llm-wiki pair
+above plus skills adapted from Matt Pocock's skills repository.
+`.claude/skills/README.md` names the adapted skills, describes the
+local modifications, and reproduces the upstream MIT license.
+
 ## Docs tooling
 
 vale lints markdown prose: `.vale.ini` plus custom rules under
-`.vale/styles/fizzle/`. Hard bans are errors (EmDash, Arrow,
-SeparatorHyphen, Slop, Repetition); tone rules are warnings and
-suggestions (present tense, contractions, Oxford comma, sentence
-spacing, precise wording over subjective claims, inclusive language,
-plain English over Latin, sentence length). Only errors fail builds or
-block hooks; the repo is kept clean at warning level too. The only
-per-file exclusions are the verbatim Casio transcription and the
-CLAUDE.md symlinks (which would double-report AGENTS.md). A hook in
-`.claude/settings.json` runs vale on every file written or edited
-(`go run ./scripts/valehook`, blocking with the findings). `make
-lint-docs` is the manual full-repo pass.
+`.vale/styles/fizzle/`. Every rule is an error and any finding fails
+the build. Hard bans cover the em dash, arrows, separator hyphens,
+slop terms, and repetition. Tone rules cover present tense,
+contractions, Oxford comma, sentence spacing, precise wording over
+subjective claims, inclusive language, plain English over Latin, and
+sentence length. The only per-file exclusions are the verbatim Casio
+transcription and the CLAUDE.md symlinks (which would double-report
+AGENTS.md). A hook in `.claude/settings.json` runs vale on every file
+written or edited (`go run ./scripts/valehook`, blocking with the
+findings). `make lint-docs` is the manual full-repo pass.

@@ -12,12 +12,14 @@ status: confirmed-hardware
 
 # Front-panel display scales
 
-The FZ-1/FZ-10M front panel shows envelope values on a 0 to 99 scale
-and key-follow values on -15 to +15, not the raw header bytes. The
-spec never gives the mapping; these were calibrated against hardware.
+The FZ-1/FZ-10M front panel never shows raw header bytes. Envelope
+values display on a 0 to 99 scale. Key-follow values display as -15
+to +15. The spec never gives the mapping; these were calibrated
+against hardware.
+
 The [undecyclenate editor](../sources/undecyclenate-editor.md)
-documents the same mismatch from the UI side (it exposes raw 0 to 127
-and 0 to 255 ranges where the FZ shows 0 to 99).
+documents the same mismatch from the UI side. It exposes raw 0 to 127
+and 0 to 255 ranges where the FZ shows 0 to 99.
 
 **Rates** (magnitude 0 to 127; bit 7 is direction):
 

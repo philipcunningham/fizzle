@@ -18,12 +18,12 @@ not equal the padded block size.
 
 Wave-address fields (`wavst`, `waved`, `genst`, `gened`, loop
 addresses) are cumulative 16-bit-word indices into the combined audio
-area: voice 0 has `wavst = 0`, voice 1's `wavst` is voice 0's
+area. Voice 0 has `wavst = 0`; voice 1's `wavst` is voice 0's
 sector-aligned byte count divided by 2. Multiply by 2 for a byte
 offset.
 
 When unpacking, read voice `i`'s audio start from its own `wavst`
 (`pkg/voiceunpack`, `pkg/voiceextract`); never reconstruct it from
 `waved` deltas. On 2-disk dumps the same cumulative indices on disk 1
-point past its local audio into RAM that disk 2 fills; see
+point past its local audio into RAM that disk 2 fills. See
 [multi-disk-dumps](../topics/multi-disk-dumps.md).

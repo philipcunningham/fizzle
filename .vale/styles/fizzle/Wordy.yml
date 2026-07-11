@@ -1,6 +1,6 @@
 extends: substitution
 message: "%s"
-level: suggestion
+level: error
 ignorecase: true
 swap:
   a number of: "Specify the number or remove the phrase."
