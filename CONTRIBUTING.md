@@ -6,7 +6,7 @@ Requires **Go 1.26+**.
 
 Pull requests are disabled on this repository. If you'd like to make a
 contribution, please open an issue first. The issue may include a spec, a
-patch, or a proposal, and is how proposed changes get discussed and merged.
+patch, or a proposal; it is how proposed changes get discussed and merged.
 
 If you encounter a bug or something that isn't very ergonomic, please consider
 sharing an `.img` or `.fzf` along with steps to reproduce. Concrete fixtures
@@ -132,7 +132,7 @@ When adding `--json` to a new command, add both tests.
 `integration_test.go` uses SHA-256 checksums to verify that the conversion
 pipeline produces byte-identical output. If you intentionally change the
 output format (resampling, sector layout, voice packing), the golden
-checksums will fail.
+checksums fail.
 
 To update after an intentional change:
 
@@ -222,9 +222,10 @@ Real hardware disk images live in `testdata/`: `HOOVER.img`, `STAB.img`,
 with 28 WAV samples. These are used by both package integration tests and
 CLI integration tests.
 
-The `docs/` directory contains the FZ-1 data structures specification
-(`casio-fz1-format.md`) and the original Casio R&D reference
-(`casio-fz1-data-structures.pdf`).
+The Casio R&D FZ-1 data structures specification lives at
+`llm-wiki/sources/casio-fz1-data-structures.md` (with the original PDF
+beside it); format findings and corrections are distilled in
+`llm-wiki/`.
 
 ## Code style
 

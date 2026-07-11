@@ -92,7 +92,7 @@ func Parse(path string) (*FullDump, error) {
 	// 2-disk split. The first voice whose wavst (cumulative sample address)
 	// points past the local audio area is the boundary: its audio lives on
 	// disk 2 and the sampler will append disk 2's bytes into RAM after the
-	// last local voice. See docs/casio-fz1-format.md "Multi-Disk Full Dumps".
+	// last local voice. See llm-wiki/topics/multi-disk-dumps.md.
 	//
 	// The FZ-1 does not always write BankTotalWaveOffset, so this field is
 	// frequently garbage in real-world dumps. We therefore require

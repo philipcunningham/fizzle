@@ -1,0 +1,10 @@
+extends: existence
+message: "Instead of '%s', start the sentence with a specific subject and verb."
+level: suggestion
+tokens:
+  - 'That is'
+  - 'There are'
+  - 'There were'
+  - 'These are'
+  - 'This is'
+  - 'Those are'

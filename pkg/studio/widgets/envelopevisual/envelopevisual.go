@@ -39,10 +39,11 @@ type Envelope struct {
 	StopLevels [numStages]uint8
 }
 
-// envRateTable is the 128-entry, 16-bit envelope-rate lookup table
-// at CS:0x0490 in the FZ ROM. Verified against fizzlab's annotation of
-// fn 36 voice_state_2_6_handler (F000:218B: `MOV AX, CS:[BX+0x0490]`)
-// and the identical-shape DCA handler fn 33 at F000:2039.
+// envRateTable is the 128-entry, 16-bit envelope-rate lookup table at
+// CS:0x0490 in the FZ ROM, verified by reverse engineering the
+// firmware: the DCF stage handler reads it at F000:218B (`MOV AX,
+// CS:[BX+0x0490]`) and the DCA stage handler at F000:2039 has
+// identical shape.
 //
 // Per the firmware: each per-voice service tick reads the rate byte
 // for the current envelope stage, indexes this table with `rate & 0x7F`
@@ -52,8 +53,8 @@ type Envelope struct {
 // crosses the stage's stop level, the step counter advances and the
 // envelope moves to the next stage.
 //
-// Source: docs/firmware/disasm/fizzlab-fz1-os-raw.asm rows 1169..1424
-// (F000:0490..F000:058F) in fizzlab.
+// The table occupies F000:0490..F000:058F in the ROM; see
+// llm-wiki/topics/envelope-timing.md.
 var envRateTable = [128]uint16{
 	0x0000, 0x0003, 0x0006, 0x0009, 0x000D, 0x0010, 0x0014, 0x0018,
 	0x001C, 0x0021, 0x0025, 0x002A, 0x002F, 0x0034, 0x003A, 0x0040,
@@ -82,12 +83,12 @@ const displayMax = 99
 const envelopeFullLevel = 255
 
 // msPerDCATick is the approximate wall-clock time between two calls
-// to the DCA state-3/7 handler. Derived from fizzlab's
-// fizzlab-voice-state-machine.md: the per-voice service routine at
-// 0x1CD8 runs every 8 timer IRQs (~6.4 ms each), an 8-phase round is
-// ~50 ms wall-clock, and state 3 / state 7 each run once per round,
-// so the DCA state runs roughly every 25 ms. Approximate, not
-// measured against hardware.
+// to the DCA state-3/7 handler, derived by reverse engineering the
+// firmware: the per-voice service routine at F000:1CD8 runs every 8
+// timer IRQs (~6.4 ms each), an 8-phase round is ~50 ms wall-clock,
+// and state 3 / state 7 each run once per round, so the DCA state
+// runs roughly every 25 ms. Approximate, not measured against
+// hardware; see llm-wiki/topics/envelope-timing.md.
 const msPerDCATick = 25.0
 
 // minMs is the minimum visible spacing between two breakpoints. A

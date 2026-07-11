@@ -1,0 +1,12 @@
+extends: substitution
+message: "%s"
+level: suggestion
+ignorecase: true
+swap:
+  a number of: "Specify the number or remove the phrase."
+  as well as: "Use 'and' instead of 'as well as'."
+  note that: "Remove the phrase 'note that'."
+  in order to: "Remove 'in order' and leave 'to'."
+  quite: "Remove 'quite'."
+  respectively: "Remove 'respectively' and list each option instead."
+  utili(?:se|ze): "Use 'use'."

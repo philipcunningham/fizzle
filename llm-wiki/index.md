@@ -1,0 +1,61 @@
+# llm-wiki index
+
+One line per page, grouped by type. Read this first on every query.
+Conventions: [AGENTS.md](AGENTS.md).
+
+## Map
+
+- [Truth map](map.md): per topic, where truth lives across the spec,
+  fizzle code, firmware findings, and the corpus.
+- [Project outline](project.md): where the wiki links into the repo
+  tree; the directory listing lives in the root AGENTS.md.
+
+## Findings
+
+- [DIS / file head deviates from the spec in three ways](findings/dis-file-head.md):
+  extent area to 0x3F9, counts at the sector end in bn vn wn order,
+  DIS first in its chain.
+- [Full dumps carry up to 8 bank sectors](findings/multiple-bank-sectors.md):
+  the spec shows one; the voice area follows the last.
+- [Audio blocks are sector-padded but waved stores the unpadded count](findings/audio-block-padding.md):
+  read each start from wavst, never from waved deltas.
+- [The mchn array sits at 0x142, not 0x104](findings/mchn-offset.md):
+  writing at 0x104 corrupts the cent array and wrecks pitch.
+- [vel_dca_kf must be non-zero for velocity response](findings/vel-dca-kf.md):
+  zero kills velocity response; 80 matches hardware.
+- [gchn is an output bitmask that controls polyphony and mute groups](findings/gchn-polyphony.md):
+  maps to SFZ mutegroup.
+- [dcq resonance uses the full byte, not the upper nibble](findings/dcq-full-byte.md):
+  the spec's 4-bit claim is wrong on hardware.
+- [bstep counts key splits per bank, not file voices](findings/bstep-key-splits.md):
+  it equals vn for only 24 of 235 dumps.
+
+## Topics
+
+- [Multi-disk full dumps](topics/multi-disk-dumps.md): disk 1 carries
+  all metadata, disk 2 is pure audio; FULL-DATA-FZ naming.
+- [Voice-area sizing](topics/voice-area-sizing.md): vn from the DIS or
+  a validated slot walk bounded by summed bstep.
+- [Envelope timing](topics/envelope-timing.md): the firmware rate
+  table and tick model behind the 8-stage envelopes.
+- [Front-panel display scales](topics/display-scales.md): raw bytes to
+  the front panel's 0 to 99 and -15 to +15 displays.
+- [Voice authoring defaults](topics/voice-authoring-defaults.md): the
+  loop, envelope, and effect values fizzle writes for hardware-native
+  behaviour.
+
+## Sources
+
+- [Casio FZ-1 Data Structures spec](sources/casio-spec.md): the 1987
+  primary spec; reading conventions and known errors.
+- [FZ-1 firmware reverse engineering](sources/firmware.md): ROM
+  address anchors; outranks the spec.
+- [Fixture corpus](sources/corpus.md): 235 real full dumps under
+  testdata; the statistical evidence base.
+- [Buchty fztoolkit](sources/buchty-fztoolkit.md): 2000 C utilities;
+  struct cross-check.
+- [Vosmaer fz1](sources/vosmaer-fz1.md): 2025 utilities and write-up;
+  file-head correction, name-scan heuristic.
+- [Undecyclenate FZ Editor and Librarian](sources/undecyclenate-editor.md):
+  Windows XP editor manual; front-panel semantics, open behavioural
+  questions.

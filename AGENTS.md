@@ -14,7 +14,9 @@ seed validation.
 ## Individual commands
 
 - `make test` runs unit tests with race detector
-- `make lint` runs golangci-lint
+- `make lint` runs `lint-go` and `lint-docs`
+- `make lint-go` runs golangci-lint
+- `make lint-docs` runs vale over markdown (install vale with `brew install vale`)
 - `make fmt` formats code
 - `make vet` runs go vet
 - `make integration-test` runs CLI integration tests (builds binary automatically)
@@ -33,7 +35,7 @@ seed validation.
 - `pkg/wav/` is the WAV file reader/writer
 - `pkg/voice*/` contains voice file operations (import, extract, build, unpack, edit)
 - `pkg/disk*/` contains disk operations (format, list, add, get, copy)
-- `pkg/studio/` contains the interactive Bubble Tea TUI (`fizzle studio`), a workspace-oriented editor for FZ-1 / FZ-10M / FZ-20M sound material. Sub-packages: `app/` (root tea.Model + Update / View, modal stack, save / autosave / recovery, journey tests), `audio/` (audition path via oto with single-in-flight playback and an owner-identity guard), `clock/` (tea.Tick seam for tests), `loader/` (.img / .fzf loader returning a model.Model + ContainerInfo summary), `model/` (in-memory container bytes plus undo/redo and dirty flag), `nav/` (Action enum + keymap), `spaces/{workspace,pool,layout,sound}/` (one sub-package per space), `theme/` (lipgloss palette), and `widgets/` (minimap, status, toast, hint, help, confirm, areaeditor, effectseditor, envelopevisual, lfovisual, samplevisual, topbar). studio's own README is at `pkg/studio/README.md`; it carries the feature spec, key bindings, user workflows, and testing strategy.
+- `pkg/studio/` contains the interactive Bubble Tea TUI (`fizzle studio`), a workspace-oriented editor for FZ-1 / FZ-10M / FZ-20M sound material. Sub-packages: `app/` (root tea.Model + Update / View, modal stack, save / autosave / recovery, journey tests), `audio/` (audition path via oto with single-in-flight playback and an owner-identity guard), `clock/` (tea.Tick seam for tests), `container/` (pure FZF/disk container byte surgery: compaction, bank grow, area swap/delete/duplicate patches, unit-testable without the TUI), `fznote/` (note-name formatting shared by the layout and area editors), `loader/` (.img / .fzf loader returning a model.Model + ContainerInfo summary), `model/` (in-memory container bytes plus undo/redo and dirty flag), `nav/` (Action enum + keymap), `spaces/{workspace,pool,layout,sound}/` (one sub-package per space), `theme/` (lipgloss palette), and `widgets/` (minimap, status, toast, hint, help, confirm, areaeditor, effectseditor, envelopevisual, lfovisual, samplevisual, topbar). studio's own README is at `pkg/studio/README.md`; it carries the feature spec, key bindings, user workflows, and testing strategy.
 - `pkg/fzf*/` contains full dump operations (info, midi, output, effects). Note: `fzf build`, `fzf unpack`, and `fzf edit` dispatch to `pkg/voicebuild/`, `pkg/voiceunpack/`, and `pkg/voiceedit/` respectively.
 - `pkg/fzb*/` contains bank dump operations (info)
 - `pkg/fzv*/` contains voice info display
@@ -44,29 +46,30 @@ seed validation.
 - `pkg/render/` contains shared output formatting (tables, note names, byte sizes)
 - `pkg/version/` contains version string
 - `pkg/integration/` contains three test layers: package-level integration tests (`integration_test.go`) that exercise multi-package pipelines against real-hardware fixture images with golden SHA-256 checksums; corpus snapshot tests (`corpus_snapshot_test.go`) that assert byte-equal `fzf info` / `fzv info` / `disk ls` / `sfz` parse JSON output against the ~254 fixtures under `testdata/corpus/` and `testdata/synthetic/` via `go-snaps`; and CLI binary-executing tests (`cli_test.go`) gated behind the `integration` build tag and run by `make integration-test`. Refresh snapshots with `UPDATE_SNAPS=true go test ./pkg/integration/ -run TestCorpus`.
+- `pkg/feature/` contains studio's feature specs: end-to-end tests that drive the compiled TUI through a real PTY and a virtual-terminal emulator, behind the `feature` build tag (`make feature-test`, UNIX only)
 - `pkg/internal/bitconv/` contains PCM sample bit-pattern conversions (centralises gosec G115 suppressions)
 - `pkg/internal/limits/` contains shared upper bounds for untrusted-input reads (`MaxRead = 256 MiB`) to bound memory use on malformed input
 - `internal/licenses/` exposes the project license, third-party attribution, and CycloneDX SBOM to the CLI's `licenses` subcommand (`fizzle licenses` for full text, `fizzle licenses --json` for the SBOM). Stub strings ship without the `release` build tag so plain `go build`/`go test` work without running `make licenses` first; `make build` adds `-tags release` and the embedded text replaces the stubs.
 - `pkg/internal/testutil/` contains shared test helpers
-- `docs/` contains the FZ-1 data-structures specification (`casio-fz1-data-structures.md` + the original Casio R&D reference PDF), the format implementation notes (`casio-fz1-format.md`), the long-form user manual (`fizzle-manual.md`), and the benchmarking notes (`fizzle-benchmarking.md`)
+- `docs/` contains the long-form user manual (`fizzle-manual.md`) and the benchmarking notes (`fizzle-benchmarking.md`). The FZ-1 data-structures specification (markdown transcription plus the original Casio R&D PDF) lives in `llm-wiki/sources/`; format findings and synthesis live in `llm-wiki/`
 
 ## Dependency injection conventions
 
-Inject dependencies at boundaries; keep internal logic simple and concrete.
+Inject dependencies at boundaries; keep internal logic plain and concrete.
 
 **Output rendering:** Functions that produce text, table, or JSON output accept
 `io.Writer`. The CLI boundary (`cmd/fizzle/main.go`) passes `os.Stdout`.
 Tests pass `bytes.Buffer`.
 
-**Input parsing:** Core binary parsers accept `io.Reader` (e.g. `disk.ReadImage`,
+**Input parsing:** Core binary parsers accept `io.Reader` (for example `disk.ReadImage`,
 `wav.Read`). Convenience wrappers like `disk.OpenImage(path)` handle the
 `os.Open` call.
 
 **Pure data functions:** Many packages separate pure computation from I/O.
-Unexported byte-level functions (e.g. `fzvinfo.parseHeader`,
+Unexported byte-level functions (for example `fzvinfo.parseHeader`,
 `voiceedit.applyPatches`, `voiceunpack.unpack`) accept `[]byte` and return
 values without filesystem access. Other pure functions like
-`diskformat.buildImage` accept simple parameters (a `string` label) and
+`diskformat.buildImage` accept plain parameters (a `string` label) and
 return `[]byte` with no I/O. Same-package
 tests can call these directly. Do not export pure internals solely for
 test access; use white-box tests instead.
@@ -127,13 +130,49 @@ change must keep the output bytes identical.
 
 ## Writing style
 
-Do not use `--`, `-`, or em dash (`—`) as a grammatical separator in code
-comments, markdown files, or documentation. Use proper punctuation instead:
-periods, colons, semicolons, commas, or parentheses. Restructure the sentence
-if needed.
+Do not use `--`, `-`, or an em dash (U+2014) as a grammatical separator
+in code comments, markdown files, or documentation. Use proper
+punctuation instead: periods, colons, semicolons, commas, or
+parentheses. Restructure the sentence if needed.
 
-Do not use the right-arrow character `→` in code comments, markdown files,
-or documentation. Use English instead. For example, write "SFZ to FZF"
-rather than "SFZ→FZF", and "build then unpack round trip" rather than
-"build→unpack round trip". Restructure with "maps to", "yields", or
+Do not use the right-arrow character (U+2192) in code comments, markdown
+files, or documentation. Write the relationship in English: "SFZ to FZF"
+rather than an arrow between them, and "build then unpack round trip"
+rather than an arrow chain. Restructure with "maps to", "yields", or
 "becomes" if a plain "to" reads poorly.
+
+The project name is always lowercase fizzle, including at the start of a
+sentence.
+
+Knowledge of FZ-1 firmware behaviour comes from reverse engineering the
+firmware. Cite firmware findings by ROM address and routine name, for
+example `midi_note_on` at `F000:0FFD`.
+
+## CLAUDE.md symlinks
+
+`CLAUDE.md` at the repo root and `llm-wiki/CLAUDE.md` are symlinks to
+the `AGENTS.md` beside them. Edit the `AGENTS.md` files only.
+
+## Knowledge wiki
+
+`llm-wiki/` is an LLM maintained knowledge base about the Casio FZ
+samplers and their file formats. Its schema is `llm-wiki/AGENTS.md`;
+read it before touching anything under `llm-wiki/`. For questions about
+FZ formats or hardware behaviour, read `llm-wiki/index.md` first instead
+of re-deriving from raw sources. Ingest and health checks run through
+the `llm-wiki-ingest` and `llm-wiki-lint` skills.
+
+## Docs tooling
+
+vale lints markdown prose: `.vale.ini` plus custom rules under
+`.vale/styles/fizzle/`. Hard bans are errors (EmDash, Arrow,
+SeparatorHyphen, Slop, Repetition); tone rules are warnings and
+suggestions (present tense, contractions, Oxford comma, sentence
+spacing, precise wording over subjective claims, inclusive language,
+plain English over Latin, sentence length). Only errors fail builds or
+block hooks; the repo is kept clean at warning level too. The only
+per-file exclusions are the verbatim Casio transcription and the
+CLAUDE.md symlinks (which would double-report AGENTS.md). A hook in
+`.claude/settings.json` runs vale on every file written or edited
+(`go run ./scripts/valehook`, blocking with the findings). `make
+lint-docs` is the manual full-repo pass.

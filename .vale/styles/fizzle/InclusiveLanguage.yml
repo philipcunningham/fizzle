@@ -1,0 +1,9 @@
+extends: substitution
+message: "Use inclusive language; consider '%s' instead of '%s'."
+level: warning
+ignorecase: true
+swap:
+  blacklist(?:ed|ing|s)?: denylist
+  whitelist(?:ed|ing|s)?: allowlist
+  dummy: placeholder
+  sanity (?:check|test): completeness check

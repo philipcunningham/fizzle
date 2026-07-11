@@ -1,0 +1,16 @@
+extends: substitution
+message: "Prefer the contraction '%s' over '%s'; it reads as more human."
+level: suggestion
+ignorecase: true
+swap:
+  are not: aren't
+  cannot: can't
+  could not: couldn't
+  did not: didn't
+  does not: doesn't
+  do not: don't
+  is not: isn't
+  should not: shouldn't
+  was not: wasn't
+  will not: won't
+  would not: wouldn't

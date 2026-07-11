@@ -140,8 +140,8 @@ var ErrNotFound = errors.New("disk: file not found")
 // ValidateDiskNum converts a 1-based disk number to the 0-based byte stored
 // in directory entries. n must be in [1, MaxDisks]; the FZ-1 spec describes
 // at most a 2-disk save, bounded by the hardware's 2 MB of sample RAM (one
-// full disk being 1.25 MB). See docs/casio-fz1-format.md "Multi-Disk Full
-// Dumps" for the on-disk encoding.
+// full disk being 1.25 MB). See llm-wiki/topics/multi-disk-dumps.md for
+// the on-disk encoding.
 func ValidateDiskNum(n int) (uint8, error) {
 	if n < 1 {
 		return 0, fmt.Errorf("disk: --disk-num must be 1 or greater (got %d)", n)

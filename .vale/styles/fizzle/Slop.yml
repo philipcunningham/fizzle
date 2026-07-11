@@ -1,0 +1,24 @@
+extends: existence
+message: "Banned term '%s'; rewrite plainly."
+level: error
+ignorecase: true
+scope: sentence
+tokens:
+  - load-bearing
+  - delv(?:e|es|ed|ing)
+  - deep dive
+  - seamless(?:ly)?
+  - robust(?:ly|ness)?
+  - holistic
+  - tapestry
+  - testament to
+  - battle-tested
+  - supercharge(?:d|s)?
+  - game[- ]chang(?:er|ing)
+  - cutting[- ]edge
+  - it is worth noting
+  - it's worth noting
+  - leverag(?:e|es|ed|ing)
+  - unlock(?:s|ed|ing)?
+  - elevat(?:e|es|ed|ing)
+  - landscape

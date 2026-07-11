@@ -26,8 +26,10 @@ mem.prof
 **/.DS_Store
 
 # AI agent working directories: ignore everything except project skills
+# and the shared hook configuration
 .claude/*
 !.claude/skills/
+!.claude/settings.json
 
 # Generated attribution and SBOM (regenerated each `make build`)
 /internal/licenses/THIRD_PARTY_LICENSES.txt

@@ -11,7 +11,7 @@ fizzle studio ~/fz-library      # use a directory as workspace
 ```
 
 `DIRECTORY` points at the workspace folder containing the `.img` /
-`.fzf` / `.fzv` / `.wav` files studio will list and act on.
+`.fzf` / `.fzv` / `.wav` files studio lists and acts on.
 Omitting `DIRECTORY` uses the current working directory.
 Individual files are opened from the in-TUI Workspace browser,
 never from the CLI: studio is workspace-oriented by design.
@@ -31,7 +31,7 @@ broadest scope at the top to narrowest at the bottom:
 | Workspace | A directory of `.img` / `.fzf` / `.fzv` / `.wav` files | Always                                   |
 | Pool      | A persistent collection of voices ready for assembly   | Always                                   |
 | Layout    | The in-focus disk: banks and Areas                     | Always                                   |
-| Sound     | The currently selected voice, edited in detail         | Only when an Area is selected in Layout  |
+| Sound     | The selected voice, edited in detail           | Only when an Area is selected in Layout  |
 
 `SHIFT+up` / `SHIFT+down` (or `Ctrl-P` / `Ctrl-N` for Emacs users)
 move between adjacent spaces. Inside Sound, the same gestures move
@@ -166,13 +166,13 @@ not been closed.
 
 ### Free-space figure
 
-The "Free" indicator shows the space the disk will have **after a
+The "Free" indicator shows the space the disk is left with **after a
 save**, not its current on-disk size: studio compacts on save, so the
 figure already excludes reclaimable slack (orphan audio left by an
 import you then undid, for example). One consequence is that for a
 disk created by another tool that still carries slack, studio's "Free"
 can read higher than `fizzle disk ls` reports for the same file, since
-the CLI measures the file as it currently sits on disk. The two agree
+the CLI measures the file as it sits on disk. The two agree
 for any studio-saved disk, and both use binary (÷1024) KB / MB units.
 
 ## Package layout
@@ -225,7 +225,7 @@ decode math. Property tests via `rapid` for state-machine
 invariants in `widgets/areaeditor`, `widgets/effectseditor`,
 `model`, and `spaces/sound`. The headline property is "every patch
 returned by every editor field keeps `disk.IsActiveOrEmptyVoiceSlot`
-true". That is the load-bearing data-integrity invariant.
+true". That is the central data-integrity invariant.
 
 **Layer 2: package integration tests.** Round-trip tests that load
 a real fixture, drive edits through `Update`, `Save`, reload, and

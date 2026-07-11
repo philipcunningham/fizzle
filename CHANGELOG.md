@@ -56,7 +56,7 @@
 - SFZ `tune`, `cutoff`, `resonance`, `loop_start`, `loop_end` opcodes applied during conversion
 - `fzb info` command for inspecting bank dump files
 - `fzf unpack --disk2` extracts voices from a 2-disk split, merging audio from both disks
-- `sfz convert` accepts a directory of WAV files as input (zero-SFZ workflow for simple drum kits)
+- `sfz convert` accepts a directory of WAV files as input (zero-SFZ workflow for basic drum kits)
 - `sfz export` converts an FZF full dump back to an SFZ instrument with WAV files, enabling round-trip workflows between hardware and DAW
 - Exported `audioplayer.Player` interface and `audioplayer.TestPlayer` for testing audio playback without hardware
 - Shell completion for bash, zsh, fish, and pwsh

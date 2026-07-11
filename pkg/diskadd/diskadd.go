@@ -395,7 +395,7 @@ func detectFile(fileData []byte) (fileInfo, error) {
 //
 // The FZ-1 firmware does not always write BankTotalWaveOffset, so this field
 // is frequently garbage in real-world FZFs. The corroboration rule mirrors
-// fzfinfo.Parse; see docs/casio-fz1-format.md "Multi-Disk Full Dumps".
+// fzfinfo.Parse; see llm-wiki/topics/multi-disk-dumps.md.
 //
 // Idempotent: a no-op when no marker is present, when the marker doesn't
 // exceed the local wave count, or when no boundary voice corroborates it.

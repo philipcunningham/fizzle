@@ -1,0 +1,7 @@
+extends: existence
+message: "Right arrow used; write it out in English (to, maps to, yields, becomes)."
+level: error
+scope: raw
+nonword: true
+tokens:
+  - '\x{2192}'

@@ -190,7 +190,7 @@ type FZFHeader struct {
 // a separate file-level `vn` field in the dBP file head to size the voice
 // area. Standalone FZF files extracted via `disk get` lose the dBP, so we
 // recover `vn` by walking voice slots and validating each. See
-// docs/casio-fz1-format.md "Voice-area sizing" for the full rationale.
+// llm-wiki/topics/voice-area-sizing.md for the full rationale.
 //
 // The bstep value remains available as BStep0 for diagnostic uses.
 func ParseFZFHeader(data []byte) (*FZFHeader, error) {
