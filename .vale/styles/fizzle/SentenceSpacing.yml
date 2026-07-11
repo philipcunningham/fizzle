@@ -1,6 +1,6 @@
 extends: existence
 message: "Use exactly one space with punctuation; check '%s'."
-level: warning
+level: error
 nonword: true
 tokens:
   - '[a-z][?!,][A-Z]'

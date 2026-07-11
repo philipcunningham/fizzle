@@ -1,6 +1,6 @@
 extends: existence
 message: "Instead of future tense '%s', use present tense."
-level: warning
+level: error
 ignorecase: true
 nonword: true
 tokens:

@@ -1,6 +1,6 @@
 extends: substitution
 message: "Use inclusive language; consider '%s' instead of '%s'."
-level: warning
+level: error
 ignorecase: true
 swap:
   blacklist(?:ed|ing|s)?: denylist

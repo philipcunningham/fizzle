@@ -14,7 +14,7 @@ status: confirmed-hardware
 
 The spec calls `bstep` "the current number of key splits or the number
 of voices which the bank uses". The two coincide only in a single-bank
-dump where every key split uses a distinct voice; across the
+dump where every key split uses a distinct voice. Across the
 [corpus](../sources/corpus.md), bank 0's `bstep` equals the file's
 voice count `vn` for just 24 of 235 full dumps. It diverges two ways:
 

@@ -21,18 +21,18 @@ Sizing it means knowing `vn`:
 1. On a disk, read `vn` from the DIS tail (see
    [dis-file-head](../findings/dis-file-head.md)).
 2. Standalone `.fzf` files have no DIS, so `vn` must be inferred.
-   Bank 0's `bstep` is not it (see
+   Bank 0's `bstep` isn't it (see
    [bstep-key-splits](../findings/bstep-key-splits.md)); sizing by it
    reads audio bytes as voice headers.
 
-The reliable inference walks voice slots from 0 upward, accepting each
-slot whose 192-byte header passes a plausibility check (rate index in
-{0, 1, 2}, wave pointers monotonic, playback mode known, name
-printable or padded), and stops at the first failure. The walk was
-informed by the name-scan heuristic in
+The reliable inference walks voice slots from 0 upward and stops at
+the first failure. It accepts each slot whose 192-byte header passes
+a plausibility check. The check wants a rate index in {0, 1, 2},
+monotonic wave pointers, a known playback mode, and a printable or
+padded name. The walk was informed by the name-scan heuristic in
 [vosmaer-fz1](../sources/vosmaer-fz1.md). The summed `bstep` of every
 bank is a safe upper bound for the walk, but it overshoots on
-shared-voice kits: it equals `vn` for only 80 of 235 dumps in the
+shared-voice kits. It equals `vn` for only 80 of 235 dumps in the
 [corpus](../sources/corpus.md), so the validation trim is essential.
 fizzle implements this in `pkg/fzutil` (`CountAllVoices`,
 `InferVoiceCount`).

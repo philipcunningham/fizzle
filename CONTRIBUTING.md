@@ -123,7 +123,7 @@ at two levels:
    `fzfinfo`).
 2. **CLI test**: run the binary with `--json` and verify the output is valid
    JSON with expected top-level keys. This catches flag wiring bugs that
-   package tests cannot detect.
+   package tests can't detect.
 
 When adding `--json` to a new command, add both tests.
 
@@ -141,7 +141,7 @@ To update after an intentional change:
 3. Replace the corresponding "want" string in `integration_test.go`.
 4. Verify the change is intentional by inspecting the diff.
 
-Do not update checksums to fix a test without understanding why the output
+Don't update checksums to fix a test without understanding why the output
 changed.
 
 ### Fuzz tests
@@ -219,8 +219,8 @@ go test -fuzz=FuzzVoiceEncodeDecodeRoundTrip ./pkg/integration/ -fuzztime=30s
 Real hardware disk images live in `testdata/`: `HOOVER.img`, `STAB.img`,
 `TECHNO.img`, `BRASS.img` (13 voice multi-bank brass patch),
 `PAD-LFO.img` (single pad voice with LFO on filter), plus `JUNGLISM.sfz`
-with 28 WAV samples. These are used by both package integration tests and
-CLI integration tests.
+with 28 WAV samples. Both package integration tests and CLI integration
+tests use these fixtures.
 
 The Casio R&D FZ-1 data structures specification lives at
 `llm-wiki/sources/casio-fz1-data-structures.md` (with the original PDF

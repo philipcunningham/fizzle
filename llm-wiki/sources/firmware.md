@@ -12,10 +12,9 @@ status: confirmed-firmware
 # FZ-1 firmware reverse engineering
 
 The FZ-1 system ROM has been reverse engineered: disassembled,
-annotated, and partially decompiled, with an engineer-facing system
-guide covering MIDI, the voice service loop, disk/file I/O, and the
-panel. Outranked only by direct hardware observation; outranks the
-spec.
+annotated, and partially decompiled. An engineer-facing system guide
+covers MIDI, the voice service loop, disk/file I/O, and the panel.
+Outranked only by direct hardware observation; outranks the spec.
 
 Cite findings by ROM address and routine name; cite documents by
 filename and section. Anchors used by this wiki so far:

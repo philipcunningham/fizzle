@@ -12,9 +12,9 @@ status: confirmed-hardware
 # Fixture corpus
 
 `testdata/corpus/` holds real FZ-1 material downloaded from the Casio
-FZ sampler archive at zine.r-massive.com: the factory library (FL-1 to
-FL-14 plus FL-A and FL-B), the shareware set (CASIO001 to CASIO142),
-and the Soundwaves library. Nineteen shareware files shipped as `.FZF`
+FZ sampler archive at zine.r-massive.com. It contains the factory
+library (FL-1 to FL-14 plus FL-A and FL-B). It also holds the
+shareware set (CASIO001 to CASIO142) and the Soundwaves library. Nineteen shareware files shipped as `.FZF`
 but are single voices and were renamed `.FZV` on import; see
 `testdata/corpus/README.md` for the renaming rules.
 
