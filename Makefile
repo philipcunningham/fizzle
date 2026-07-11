@@ -73,8 +73,19 @@ fmt:
 vet:
 	go vet ./...
 
-lint:
+# `make lint` composes Go lint and prose lint.
+lint: lint-go lint-docs
+
+lint-go:
 	golangci-lint run ./...
+
+# Prose lint for markdown (vale). Hooks in .claude/settings.json run vale
+# per edited file; this is the manual full-repo pass. Primary sources and
+# per-file rule exceptions are configured in .vale.ini.
+lint-docs:
+	@command -v vale >/dev/null 2>&1 || \
+	  (echo "vale not found on PATH. Install it with: brew install vale" >&2; exit 1)
+	vale --glob='!llm-wiki/sources/casio-fz1-data-structures.md' .
 
 fuzz-seed:
 	go test -run 'Fuzz' ./...
@@ -151,4 +162,4 @@ asm-tools:
 	  (echo "Homebrew required (see https://brew.sh)" >&2; exit 1)
 	brew install nasm
 
-.PHONY: build tools licenses sbom test integration-test feature-test fuzz-seed fmt vet lint check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools
+.PHONY: build tools licenses sbom test integration-test feature-test fuzz-seed fmt vet lint lint-go lint-docs check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools

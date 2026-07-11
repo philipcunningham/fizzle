@@ -2,7 +2,7 @@
 
 This is the reference for `fizzle`, a desktop tool for the Casio FZ-1, FZ-10M, and FZ-20M samplers. Each chapter covers a concept of the instrument and the fizzle commands that operate on it, with the matching front-panel menu path on the sampler whenever one exists.
 
-For a copy-paste quickstart, see [README.md](../README.md). For byte-level details about the binary format, see [casio-fz1-format.md](casio-fz1-format.md).
+For a copy-paste quickstart, see [README.md](../README.md). For byte-level details about the binary format, see the Casio spec at [casio-fz1-data-structures.md](../llm-wiki/sources/casio-fz1-data-structures.md) and the findings in the [llm-wiki](../llm-wiki/index.md).
 
 Front-panel menu paths in this document are written as `MENU/SUBMENU/PAGE`.
 
@@ -36,7 +36,7 @@ Front-panel menu paths in this document are written as `MENU/SUBMENU/PAGE`.
 
 ## Preface
 
-`fizzle` is a command-line tool. It prepares disk images, voice files, and full dumps that the sampler reads from a floppy or floppy emulator (such as a Gotek). It does not emulate the FZ-1; the hardware is still required.
+`fizzle` is a command-line tool. It prepares disk images, voice files, and full dumps. The sampler reads them from a floppy or a floppy emulator (such as a Gotek). It does not emulate the FZ-1; the hardware is still required.
 
 This manual is the authoritative description of what fizzle does, what each flag means, and where on the sampler each parameter shows up. The README is the on-ramp; this is the reference.
 
@@ -45,7 +45,7 @@ This manual is the authoritative description of what fizzle does, what each flag
 - `MENU/SUBMENU/PAGE` indicates a front-panel navigation path on the sampler. For example, `MODIFY/VOICE EDIT/CREATE VOICE/LFO SET` is the LFO SET page reached through MODIFY then VOICE EDIT then CREATE VOICE.
 - A boxed "On the FZ" callout appears alongside each parameter that has a documented hardware location.
 - Flag tables list every option with its valid range, default, and what it controls.
-- Sample-byte values where they appear are the bytes written to disk. Display values are what the sampler's front panel shows. The mapping is documented in the [Display values vs stored bytes](#display-values-vs-stored-bytes) section of Concepts, with formulae in [casio-fz1-format.md](casio-fz1-format.md#hardware-display-scale).
+- Sample-byte values where they appear are the bytes written to disk. Display values are what the sampler's front panel shows. The mapping is documented in the [Display values vs stored bytes](#display-values-vs-stored-bytes) section of Concepts, with formulae in [display-scales](../llm-wiki/topics/display-scales.md).
 - Where a voice parameter has no documented hardware location, this manual says so explicitly.
 
 ---
@@ -96,7 +96,7 @@ Set per-voice channels with [`fzf midi`](#fzf-midi).
 
 ### Display values vs stored bytes
 
-The sampler's front panel shows envelope rates and stop levels on a 0-to-99 scale. The actual bytes in the file are 0-to-127 (rates) or 0-to-255 (stop levels). `fizzle fzv edit --dca-rate-1 99` takes the display value: what you type matches what the panel shows. fizzle does the byte conversion internally. The conversion formulae are documented in [casio-fz1-format.md](casio-fz1-format.md#hardware-display-scale).
+The sampler's front panel shows envelope rates and stop levels on a 0-to-99 scale. The actual bytes in the file are 0-to-127 (rates) or 0-to-255 (stop levels). `fizzle fzv edit --dca-rate-1 99` takes the display value: what you type matches what the panel shows. fizzle does the byte conversion internally. The conversion formulae are documented in [display-scales](../llm-wiki/topics/display-scales.md).
 
 ---
 
@@ -104,7 +104,7 @@ The sampler's front panel shows envelope rates and stop levels on a 0-to-99 scal
 
 The sampler's top-level mode hierarchy, abbreviated. fizzle commands map back to these locations throughout the rest of this document.
 
-- **MAIN MENU**: top-level. Entry point for playing back voices, choosing banks, configuring effects and MIDI.
+- **MAIN MENU**: top-level. Entry point for voice playback, bank choice, effects, and MIDI configuration.
   - `EFFECT/MIDI`: pitch bend range, modulation routing, MIDI receive mode (BASIC or AREA), MIDI channels.
 - **MODIFY**: editing of voices, banks, and effects.
   - `VOICE EDIT`: per-voice parameters.
@@ -120,7 +120,7 @@ The sampler's top-level mode hierarchy, abbreviated. fizzle commands map back to
   - `BANK EDIT/CREATE BANK`: per-voice bank settings inside a full dump (key range, velocity range, volume, MIDI channel, output assignment).
   - `EFFECT/MIDI/BEND RANGE`, `MOD WHEEL`, `AFTER TOUCH`: depths for performance-controller routing into the synthesis engine.
 
-The actual button labels and screen contents are described in the FZ-1 owner's manual and the Casio R&D structure document at [casio-fz1-data-structures.pdf](casio-fz1-data-structures.pdf).
+The actual button labels and screen contents are described in the FZ-1 owner's manual and the Casio R&D structure document at [casio-fz1-data-structures.pdf](../llm-wiki/sources/casio-fz1-data-structures.pdf).
 
 ---
 
@@ -301,7 +301,7 @@ fizzle fzf output FZF --voice NAME --output VALUE
 fizzle fzf output FZF --all --output VALUE
 ```
 
-Set the output (generator channel) assignment for one or more voices. Values are output numbers 1 to 8, a comma-separated list (e.g. `1,3,5`), or `all`.
+Set the output (generator channel) assignment for one or more voices. Values are output numbers 1 to 8, a comma-separated list (for example `1,3,5`), or `all`.
 
 > **On the FZ:** the per-voice output assignment lives at `MODIFY/BANK EDIT/CREATE BANK` (the `Output assignment` field). The front-panel display labels these 8 positions OUTPUT; a filled circle means assigned, a dot means inactive.
 
@@ -331,7 +331,7 @@ View or modify the global effect block: how performance controllers (pitch bend,
 | `--foot-dca` | int | (unchanged) | Foot pedal to DCA (volume) depth. Range 0 to 127. |
 | `--aftertouch-lfp` | int | (unchanged) | Aftertouch to LFO pitch depth. Range 0 to 127. |
 
-Out-of-range values for the three depth fields are not currently independently verified on hardware; the defaults (`bend=24`, `mod-lfp=15`, `foot-dca=64`, `aftertouch-lfp=8`) are confirmed to load and play correctly.
+Out-of-range values for the three depth fields are not yet independently verified on hardware; the defaults (`bend=24`, `mod-lfp=15`, `foot-dca=64`, `aftertouch-lfp=8`) are confirmed to load and play correctly.
 
 ### `fzf edit`
 
@@ -364,7 +364,7 @@ Show the voice map of a bank dump: each voice's name, key range, root note, MIDI
 |------|------|---------|-------|
 | `--json` | bool | false | Emit JSON instead of the table. |
 
-There is currently no `fzb build`, `fzb unpack`, or `fzb edit`: bank dumps are inspect-only in fizzle.
+There is no `fzb build`, `fzb unpack`, or `fzb edit`: bank dumps are inspect-only in fizzle.
 
 ---
 
@@ -402,7 +402,7 @@ The DCF (Digitally Controlled Filter) is the filter envelope plus a fixed cutoff
 | Flag | Range | Notes |
 |------|-------|-------|
 | `--cutoff` | 0-127 | Cutoff offset added to the filter envelope output. 127 means fully open (no audible filtering). |
-| `--resonance` | 0-127 | Filter resonance. Older Casio documentation describes resonance as the upper nibble only; in practice the hardware uses the entire byte. See [casio-fz1-format.md](casio-fz1-format.md#real-world-findings) for the verification detail. |
+| `--resonance` | 0-127 | Filter resonance. Older Casio documentation describes resonance as the upper nibble only; in practice the hardware uses the entire byte. See [dcq-full-byte](../llm-wiki/findings/dcq-full-byte.md) for the verification detail. |
 | `--dcf-sustain` | 0-7 | Sustain stage for the filter envelope. |
 | `--dcf-end` | 0-7 | End stage for the filter envelope. |
 | `--dcf-rate-N` (N=1..8) | 0-99 | Stage rate, display scale. |
@@ -427,7 +427,7 @@ A single low-frequency oscillator that can modulate pitch, amplitude, filter cut
 | `--lfo-attack` | 0-127 | LFO attack rate. Not visible on the FZ front panel and not described in the owner's manual. |
 | `--lfo-q` | 0-127 | Depth of LFO into filter resonance. Not visible on the FZ front panel and not described in the owner's manual. |
 
-`--lfo-wave` carries a phase-sync flag internally (bit 7 of the byte that names the waveform). fizzle does not currently expose phase sync as a CLI flag.
+`--lfo-wave` carries a phase-sync flag internally (bit 7 of the byte that names the waveform). fizzle does not yet expose phase sync as a CLI flag.
 
 ### Modulation routing
 
@@ -462,7 +462,7 @@ Voices have 8 loop slots and a playback mode that determines whether and how loo
 | Synth | Synthesised playback; looping disabled. On the sampler, Synth-mode voices display pitch offset by minus six semitones; correction requires equal-and-opposite tuning. |
 | No sound | The slot is silent. Used for unused voice slots. |
 
-Playback mode can be changed with `fzv edit --playback-mode` (normal, reverse, cue, synth). Per-loop editing (individual loop start/end/crossfade) is not currently exposed through CLI flags. Loops carried in WAV SMPL chunks are imported automatically by `fzv import`; the loop points are scaled correctly when resampling. SFZ `loop_start` and `loop_end` opcodes override WAV loop points during conversion.
+Playback mode can be changed with `fzv edit --playback-mode` (normal, reverse, cue, synth). Per-loop editing (individual loop start/end/crossfade) is not yet exposed through CLI flags. Loops carried in WAV SMPL chunks are imported automatically by `fzv import`; the loop points are scaled correctly when resampling. SFZ `loop_start` and `loop_end` opcodes override WAV loop points during conversion.
 
 ### Tuning and voice naming
 
@@ -492,7 +492,7 @@ The FZ-1 has 8 voice generators. Each generator drives a physical output jack (1
 
 > **On the FZ:** per-voice output assignment lives at `MODIFY/BANK EDIT/CREATE BANK` (the `Output assignment` field). The front-panel display has an OUTPUT row of 8 positions; filled circle means assigned, dot means inactive.
 
-A voice with all 8 generators (`0xff`) plays back round-robin across all generators: fully polyphonic, with stolen notes when more than 8 are sounding. A voice with one generator is monophonic on that output: a new note cuts the previous. A voice with several generators (e.g. outputs 1, 3, and 5) has limited polyphony across just those outputs.
+A voice with all 8 generators (`0xff`) plays back round-robin across all generators: fully polyphonic, with stolen notes when more than 8 are sounding. A voice with one generator is monophonic on that output: a new note cuts the previous. A voice with several generators (for example outputs 1, 3, and 5) has limited polyphony across just those outputs.
 
 **Mute groups.** Two voices sharing the same single-generator assignment mute each other. This is how the FZ-1 implements hat chokes (closed and open hat both routed to output 1), monophonic basses (one output, never overlapping), and the SFZ `mutegroup=N` opcode. `sfz convert` allocates one generator per distinct `mutegroup` value during conversion (see [Converting from SFZ](#converting-from-sfz)).
 
@@ -594,7 +594,7 @@ studio organises around the user's task, not the FZ's data hierarchy. Four space
 - **Workspace.** File browser over a directory of `.img` / `.fzf` / `.fzv` / `.wav` files. Each file is dispatched by extension: `.img` and `.fzf` open as the in-focus container, `.fzv` adds to the Pool, `.wav` adds to the Pool (with a stereo channel prompt when needed).
 - **Pool.** A session-level basket of voices accumulated from the Workspace, the in-focus container's banks, or external samples. Voices persist across container switches.
 - **Layout.** The in-focus container's banks and Areas. Up to 8 banks × 64 Areas each. `Ctrl+D` duplicates an Area for velocity multi-switching; `a` opens the per-Area editor (key range, velocity range, root note, audio output, volume, MIDI channel); `f` opens the per-bank effects editor (bend depth + 3×7 controller modulation matrix).
-- **Sound.** Voice-scoped editing of the currently selected Area. A 2D grid of subsystems by cells: DCA, DCF, LFO, Sample, Loops. The leftmost cell of each row is a braille-rendered visualisation (envelope curve, LFO waveform, sample waveform); subsequent cells are field editors.
+- **Sound.** Voice-scoped editing of the selected Area. A 2D grid of subsystems by cells: DCA, DCF, LFO, Sample, Loops. The leftmost cell of each row is a braille-rendered visualisation (envelope curve, LFO waveform, sample waveform); subsequent cells are field editors.
 
 ### Key bindings
 
@@ -650,7 +650,7 @@ fizzle disk add first-kick.img kick.fzv
 fizzle disk ls first-kick.img
 ```
 
-Copy `first-kick.img` to the Gotek (or a real floppy). On the sampler, load the disk and the voice will appear as `KICK`, playing at original pitch on the root key (C5, MIDI 72).
+Copy `first-kick.img` to the Gotek (or a real floppy). On the sampler, load the disk and the voice appears as `KICK`, playing at original pitch on the root key (C5, MIDI 72).
 
 ### Build a drum kit
 
@@ -713,7 +713,7 @@ Full dumps are always named `FULL-DATA-FZ` on disk; that name is how the firmwar
 
 **Bank.** A logical grouping of voices within a full dump. Most dumps have one bank; hardware dumps may have up to 8.
 
-**bvol.** Bank-sector field holding the per-voice output level (0 to 127). Not currently editable through fizzle.
+**bvol.** Bank-sector field holding the per-voice output level (0 to 127). Not yet editable through fizzle.
 
 **Cue.** A playback mode in the sampler. Looping is enabled; suited to sustained sounds.
 
@@ -723,7 +723,7 @@ Full dumps are always named `FULL-DATA-FZ` on disk; that name is how the firmwar
 
 **DCP.** Pitch-control field in the voice header (`dcp`). Stores transpose in 1/256-semitone units.
 
-**Display value.** The 0-to-99 number shown on the sampler's front panel for envelope rates and stop levels. Maps to internal bytes (0-127 for rates, 0-255 for levels) via the formulae in [casio-fz1-format.md](casio-fz1-format.md#hardware-display-scale).
+**Display value.** The 0-to-99 number shown on the sampler's front panel for envelope rates and stop levels. Maps to internal bytes (0-127 for rates, 0-255 for levels) via the formulae in [display-scales](../llm-wiki/topics/display-scales.md).
 
 **End point.** The last envelope stage traversed during note release.
 
@@ -852,8 +852,8 @@ Every fizzle subcommand and flag, alphabetical.
 
 ### Display value formulae
 
-The conversion between front-panel display values (0 to 99) and stored bytes is documented in [casio-fz1-format.md](casio-fz1-format.md#hardware-display-scale). fizzle does the conversion internally so flags accept the display value.
+The conversion between front-panel display values (0 to 99) and stored bytes is documented in [display-scales](../llm-wiki/topics/display-scales.md). fizzle does the conversion internally so flags accept the display value.
 
 ### Where the manual disagrees with the spec
 
-A small number of corrections against the original Casio R&D specification are documented in [casio-fz1-format.md](casio-fz1-format.md#real-world-findings). The most consequential is the `mchn` (MIDI channel) array offset: the spec lists it at 0x104, but the hardware actually reads it at 0x142. fizzle writes 0x142.
+A small number of corrections against the original Casio R&D specification are documented in the [llm-wiki findings](../llm-wiki/index.md#findings). The most consequential is the `mchn` (MIDI channel) array offset: the spec lists it at 0x104, but the hardware actually reads it at 0x142. fizzle writes 0x142.

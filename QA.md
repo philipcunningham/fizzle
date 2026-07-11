@@ -556,7 +556,7 @@ diff /tmp/orig.info /tmp/rt.info
   velocity range matches the source.
 - A voice whose source FZF used CUE, SYNTH, or REVERSE playback is
   represented as `loop_mode=one_shot` (with the original mode in the
-  `// Playback:` comment); the DAW will play it as a one-shot.
+  `// Playback:` comment); the DAW plays it as a one-shot.
 
 ---
 
@@ -861,7 +861,7 @@ fizzle studio /tmp/qa-studio
    to a non-default value. Sound, LFO row: change Rate (cell
    `[shape]`) to a non-default value.
 3. Layout, bank list: press `r` (or `F2`) on Bank 1 to rename. Type
-   a name (e.g. `Test Edit`) and commit. Bank names use the FZ-1's
+   a name (for example `Test Edit`) and commit. Bank names use the FZ-1's
    name set and auto-uppercase, so it commits as `TEST EDIT` (the same
    rule voice renames use).
 4. Layout, area list: press `a` on the Area you edited in step 2 to
@@ -881,7 +881,7 @@ fizzle studio /tmp/qa-studio
 
 - Every edit from steps 2 to 6 is visible and unchanged in the studio
   after the relaunch.
-- Bank name persists (uppercased, e.g. `TEST EDIT`).
+- Bank name persists (uppercased, for example `TEST EDIT`).
 - The modified indicator is absent on relaunch.
 
 **Pass criteria (on hardware):**

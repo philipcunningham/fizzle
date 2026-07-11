@@ -1,0 +1,11 @@
+extends: existence
+message: "Remove '%s'; be precise instead of subjective."
+level: warning
+ignorecase: true
+tokens:
+  - easy
+  - easily
+  - handy
+  - simple
+  - simply
+  - straightforward

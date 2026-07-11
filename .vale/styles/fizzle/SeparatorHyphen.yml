@@ -1,0 +1,9 @@
+extends: existence
+message: "Hyphen used as a separator; use a period, colon, semicolon, comma, or parentheses."
+level: error
+scope: sentence
+nonword: true
+tokens:
+  - ' -- '
+  - '\w--\w'
+  - ' - '

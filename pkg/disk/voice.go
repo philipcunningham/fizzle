@@ -431,7 +431,7 @@ const (
 // Canonical lowercase identifiers for the documented playback modes. Used
 // as JSON values so consumers can filter on stable string keys. NoSound is
 // the spec-defined placeholder for an undefined slot (see the loop-mode
-// table in docs/casio-fz1-data-structures.md).
+// table in llm-wiki/sources/casio-fz1-data-structures.md).
 const (
 	PlaybackModeNameNoSound       = "no_sound"
 	PlaybackModeNameNormal        = "normal"
