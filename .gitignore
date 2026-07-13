@@ -37,3 +37,39 @@ mem.prof
 /internal/licenses/sbom.cdx.json
 /*.cdx.json
 /*.spdx.json
+
+# Browser automation session artifacts (Playwright MCP)
+.playwright-mcp/
+
+# Web front end (npm / React / Vite), scoped under web/
+web/**/node_modules/
+web/**/dist/
+web/**/dist-ssr/
+web/**/coverage/
+web/**/.vite/
+web/**/*.local
+web/**/.env
+web/**/.env.*
+!web/**/.env.example
+
+# Playwright test artifacts
+web/**/test-results/
+web/**/playwright-report/
+
+# Mockup screenshots, regenerated on demand by `npm run shots`
+web/mockup/*.png
+
+# Handoff docs stay local; only the directory marker is tracked
+/handoffs/*
+!/handoffs/.gitkeep
+
+# npm / TypeScript / lint caches and logs
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.eslintcache
+.stylelintcache
+.npm
