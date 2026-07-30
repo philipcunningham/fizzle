@@ -90,7 +90,28 @@ lint-docs:
 fuzz-seed:
 	go test -run 'Fuzz' ./...
 
-check: fmt vet lint test integration-test fuzz-seed
+# Browser target build check: web/wasm pins the core import surface, so
+# a change that breaks the js/wasm build fails here, not in slice work.
+wasm-check:
+	GOOS=js GOARCH=wasm go build ./web/wasm/...
+
+# Build the browser core: the WASM module into the app's public assets
+# and the Go runtime shim into the generated sources. Both outputs are
+# gitignored; run this before `npm run dev` or `npm run smoke`.
+wasm:
+	GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o web/app/public/fizzle.wasm ./web/wasm/module
+	mkdir -p web/app/src/core/generated
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" web/app/src/core/generated/wasm_exec.js
+
+# Web front end checks: format, lint, type check, unit tests, build,
+# and the payload budget. Builds the WASM core first so the budget
+# counts the real payload.
+web-check: wasm
+	@command -v npm >/dev/null 2>&1 || \
+	  (echo "npm not found on PATH. Install Node 22+ to run web checks." >&2; exit 1)
+	cd web/app && npm run check
+
+check: fmt vet lint test integration-test fuzz-seed wasm-check web-check
 
 coverage:
 	go test -race -coverpkg=./... -coverprofile=coverage.out ./...

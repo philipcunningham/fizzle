@@ -231,6 +231,26 @@ func Set(path string, p SetParams) (Result, error) {
 		return Result{}, fmt.Errorf("fzfeffects: %w", err)
 	}
 
+	res, err := SetBytes(data, p)
+	if err != nil {
+		return Result{}, err
+	}
+	if !res.Changed {
+		return res, nil
+	}
+
+	if err := fileutil.WriteAtomic(path, data); err != nil {
+		return Result{}, fmt.Errorf("fzfeffects: writing %q: %w", path, err)
+	}
+	return res, nil
+}
+
+// SetBytes applies validated effect-block writes to FZF bytes in
+// place: the same behaviour as Set with no filesystem access.
+func SetBytes(data []byte, p SetParams) (Result, error) {
+	if len(data) < disk.BankEffectOffset+disk.EffectDataSize {
+		return Result{}, fmt.Errorf("fzfeffects: data too small for an effect block")
+	}
 	before := *parseBlock(data)
 	base := disk.BankEffectOffset
 
@@ -246,17 +266,16 @@ func Set(path string, p SetParams) (Result, error) {
 	}
 
 	after := *parseBlock(data)
-	changed := before != after
+	return Result{Before: before, After: after, Changed: before != after}, nil
+}
 
-	if !changed {
-		return Result{Before: before, After: after, Changed: false}, nil
+// ParseBytes reads the effect block from FZF bytes: the same result as
+// Parse with no filesystem access.
+func ParseBytes(data []byte) (*Params, error) {
+	if len(data) < disk.BankEffectOffset+disk.EffectDataSize {
+		return nil, fmt.Errorf("fzfeffects: data too small for an effect block")
 	}
-
-	if err := fileutil.WriteAtomic(path, data); err != nil {
-		return Result{}, fmt.Errorf("fzfeffects: writing %q: %w", path, err)
-	}
-
-	return Result{Before: before, After: after, Changed: true}, nil
+	return parseBlock(data), nil
 }
 
 // renderField is one row in the human-readable matrix output. Pairing the

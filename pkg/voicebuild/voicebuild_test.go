@@ -1,6 +1,7 @@
 package voicebuild
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -941,5 +942,65 @@ func TestAssembleWritesVoiceHeaderKeyRange(t *testing.T) {
 		if got := out[disk.BankKeyCentOffset+i]; got != k.centre {
 			t.Errorf("bank KeyCent[%d]: got %d, want %d", i, got, k.centre)
 		}
+	}
+}
+
+// TestSplitDumpMatchesAssembleMultiDisk pins SplitDump on a pre-assembled
+// dump to the AssembleMultiDisk result on the same voices: identical disks,
+// counts, and split marker. It also checks the input dump stays unstamped.
+func TestSplitDumpMatchesAssembleMultiDisk(t *testing.T) {
+	t.Parallel()
+	const nVoices = 3
+	const samplesPerVoice = 300000
+	voices := make([][]byte, nVoices)
+	groups := make([]Keygroup, nVoices)
+	for i := range voices {
+		voices[i] = testutil.MakeTestVoice(fmt.Sprintf("V%02d", i+1), samplesPerVoice)
+		groups[i] = NewKeygroup(uint8(36+i), uint8(36+i), uint8(36+i))
+	}
+
+	want, err := AssembleMultiDisk(voices, groups)
+	if err != nil {
+		t.Fatalf("AssembleMultiDisk: %v", err)
+	}
+
+	fzf, err := AssembleWithKeygroups(voices, groups)
+	if err != nil {
+		t.Fatalf("AssembleWithKeygroups: %v", err)
+	}
+	markerBefore := binary.LittleEndian.Uint32(fzf[disk.BankTotalWaveOffset:])
+
+	got, err := SplitDump(fzf)
+	if err != nil {
+		t.Fatalf("SplitDump: %v", err)
+	}
+
+	if got.BankCount != want.BankCount || got.VoiceCount != want.VoiceCount || got.WaveCount != want.WaveCount {
+		t.Errorf("counts differ: got %d/%d/%d, want %d/%d/%d",
+			got.BankCount, got.VoiceCount, got.WaveCount,
+			want.BankCount, want.VoiceCount, want.WaveCount)
+	}
+	for i := range want.Disks {
+		if !bytes.Equal(got.Disks[i], want.Disks[i]) {
+			t.Errorf("disk %d differs", i+1)
+		}
+	}
+	if binary.LittleEndian.Uint32(fzf[disk.BankTotalWaveOffset:]) != markerBefore {
+		t.Error("SplitDump mutated the caller's dump")
+	}
+}
+
+// TestSplitDumpSingleDiskErrors verifies a dump that fits one disk is
+// rejected: callers write it whole instead.
+func TestSplitDumpSingleDiskErrors(t *testing.T) {
+	t.Parallel()
+	voices := [][]byte{testutil.MakeTestVoice("SMALL", 2000)}
+	groups := []Keygroup{NewKeygroup(36, 36, 36)}
+	fzf, err := AssembleWithKeygroups(voices, groups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SplitDump(fzf); err == nil {
+		t.Error("expected an error for a single-disk dump")
 	}
 }

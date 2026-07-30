@@ -244,3 +244,48 @@ func TestGetLargeFile(t *testing.T) {
 		t.Error("extracted data does not match original")
 	}
 }
+
+// FromImage is the pure in-memory entry point the web core calls: the
+// same extraction as Get with no filesystem.
+func TestFromImageMatchesGet(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "synthetic", "TECHNO.img"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	img, err := disk.ReadImage(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("ReadImage: %v", err)
+	}
+	entries, err := img.Directory()
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("Directory: %v (%d entries)", err, len(entries))
+	}
+	name := entries[0].NameString()
+
+	imgPath := filepath.Join(t.TempDir(), "fixture.img")
+	// #nosec G703 -- t.TempDir() output, not user input.
+	if err := os.WriteFile(imgPath, data, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	outPath := filepath.Join(t.TempDir(), "out.bin")
+	if err := Get(imgPath, name, outPath); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	fromFile, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	fromImage, err := FromImage(img, name)
+	if err != nil {
+		t.Fatalf("FromImage: %v", err)
+	}
+	if !bytes.Equal(fromFile, fromImage) {
+		t.Fatal("FromImage bytes differ from Get output")
+	}
+
+	if _, err := FromImage(img, "NO SUCH FILE"); !errors.Is(err, disk.ErrNotFound) {
+		t.Fatalf("missing file error = %v, want ErrNotFound", err)
+	}
+}

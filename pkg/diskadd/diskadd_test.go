@@ -13,6 +13,7 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )
 
 func TestBuildDISContiguous(t *testing.T) {
@@ -1325,5 +1326,117 @@ func TestConcurrentAddSafe(t *testing.T) {
 			names[i] = e.NameString()
 		}
 		t.Errorf("expected %d entries, got %d: %v", n, len(entries), names)
+	}
+}
+
+// AddToImage is the pure in-memory entry point the web core calls:
+// the same detection and placement as Add, no filesystem.
+func TestAddToImageMatchesAdd(t *testing.T) {
+	t.Parallel()
+	samples := make([]int16, 4096)
+	for i := range samples {
+		samples[i] = int16(i % 251)
+	}
+	voice := voiceimport.Encode(samples, 1, "SNARE", 0, voiceimport.NoLoop())
+
+	dir := t.TempDir()
+	imgPath := filepath.Join(dir, "disk.img")
+	if err := diskformat.Format(imgPath, "PARITY"); err != nil {
+		t.Fatalf("Format: %v", err)
+	}
+	voicePath := filepath.Join(dir, "SNARE.fzv")
+	if err := os.WriteFile(voicePath, voice, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := Add(imgPath, voicePath, 0); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	fromFile, err := os.ReadFile(imgPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	blank, err := diskformat.BuildImage("PARITY")
+	if err != nil {
+		t.Fatalf("BuildImage: %v", err)
+	}
+	img, err := disk.ReadImage(bytes.NewReader(blank))
+	if err != nil {
+		t.Fatalf("ReadImage: %v", err)
+	}
+	if err := AddToImage(img, voice, 0); err != nil {
+		t.Fatalf("AddToImage: %v", err)
+	}
+	if !bytes.Equal(fromFile, img.Bytes()) {
+		t.Fatal("AddToImage bytes differ from Add output")
+	}
+}
+
+func TestAddToImageRejectsGarbage(t *testing.T) {
+	t.Parallel()
+	blank, err := diskformat.BuildImage("REJECT")
+	if err != nil {
+		t.Fatalf("BuildImage: %v", err)
+	}
+	img, err := disk.ReadImage(bytes.NewReader(blank))
+	if err != nil {
+		t.Fatalf("ReadImage: %v", err)
+	}
+	if err := AddToImage(img, []byte{0x00}, 0); err == nil {
+		t.Fatal("garbage accepted")
+	}
+}
+
+// TestAddBytesToImageMatchesAddBytes pins the in-memory variant to the
+// path variant byte for byte.
+func TestAddBytesToImageMatchesAddBytes(t *testing.T) {
+	t.Parallel()
+	imgPath := filepath.Join(t.TempDir(), "path.img")
+	if err := diskformat.Format(imgPath, "PAIR"); err != nil {
+		t.Fatalf("Format: %v", err)
+	}
+
+	fileData := make([]byte, 3*disk.SectorSize)
+	for i := range fileData {
+		fileData[i] = byte(i % 251)
+	}
+	name := disk.PadLabel("FULL-DATA-FZ")
+
+	if err := AddBytes(imgPath, fileData, name, disk.TypeFullDump, 1, 1, 5, 40); err != nil {
+		t.Fatalf("AddBytes: %v", err)
+	}
+	want, err := os.ReadFile(imgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	imgBytes, err := diskformat.BuildImage("PAIR")
+	if err != nil {
+		t.Fatalf("BuildImage: %v", err)
+	}
+	img, err := disk.ReadImage(bytes.NewReader(imgBytes))
+	if err != nil {
+		t.Fatalf("ReadImage: %v", err)
+	}
+	if err := AddBytesToImage(img, fileData, name, disk.TypeFullDump, 1, 1, 5, 40); err != nil {
+		t.Fatalf("AddBytesToImage: %v", err)
+	}
+	if !bytes.Equal(img.Bytes(), want) {
+		t.Error("in-memory image differs from the AddBytes-written image")
+	}
+}
+
+func TestAddBytesToImageEmptyErrors(t *testing.T) {
+	t.Parallel()
+	imgBytes, err := diskformat.BuildImage("EMPTY")
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := disk.ReadImage(bytes.NewReader(imgBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := AddBytesToImage(img, nil, disk.PadLabel("X"), disk.TypeVoice, 0, 0, 1, 1); err == nil {
+		t.Error("expected an error for empty file data")
 	}
 }

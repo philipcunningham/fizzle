@@ -178,11 +178,26 @@ func AssembleMultiDisk(voices [][]byte, groups []Keygroup) (MultiDiskResult, err
 		return MultiDiskResult{}, err
 	}
 
-	// The maximum FZF data that fits on one disk, accounting for the DIS
-	// sector that diskadd allocates alongside the data.
-	maxDisk1 := disk.UsableDataSize - disk.SectorSize
-	maxDisk1 = (maxDisk1 / disk.SectorSize) * disk.SectorSize
+	return SplitDump(fzf)
+}
 
+// MaxDiskFileBytes is the largest FZF payload one floppy disk holds,
+// accounting for the DIS sector diskadd allocates alongside the data.
+// A dump above this size needs the two disk split.
+var MaxDiskFileBytes = (disk.UsableDataSize - disk.SectorSize) / disk.SectorSize * disk.SectorSize
+
+// SplitDump splits an already assembled full dump across two floppy disks.
+// The dump's counts come from its own header; the bank sector is stamped
+// (in a copy) with the total wave sector count at disk.BankTotalWaveOffset
+// so disk 1's DIS wn value tells the sampler more audio follows on disk 2.
+// A dump that fits one disk is an error: write it whole instead.
+func SplitDump(fzf []byte) (MultiDiskResult, error) {
+	hdr, err := fzutil.ParseFZFHeader(fzf)
+	if err != nil {
+		return MultiDiskResult{}, fmt.Errorf("voicebuild: %w", err)
+	}
+
+	maxDisk1 := MaxDiskFileBytes
 	if len(fzf) <= maxDisk1 {
 		return MultiDiskResult{}, fmt.Errorf("voicebuild: all voices fit on one disk; use AssembleWithKeygroups instead")
 	}
@@ -198,31 +213,29 @@ func AssembleMultiDisk(voices [][]byte, groups []Keygroup) (MultiDiskResult, err
 	}
 
 	// Check total audio against the hardware's 2 MB sample RAM limit.
-	n := len(voices)
-	audioBlocks, err := buildAudioBlocks(voices)
-	if err != nil {
-		return MultiDiskResult{}, err
+	audioStart := hdr.VoiceAreaStart + disk.VoiceAreaSectors(hdr.NVoice)*disk.SectorSize
+	if audioStart > len(fzf) {
+		return MultiDiskResult{}, fmt.Errorf("voicebuild: dump is %d bytes, shorter than its %d byte header area", len(fzf), audioStart)
 	}
-	totalAudioBytes := 0
-	totalWaveSectors := 0
-	for _, b := range audioBlocks {
-		totalAudioBytes += len(b)
-		totalWaveSectors += len(b) / disk.SectorSize
-	}
+	totalAudioBytes := len(fzf) - audioStart
+	totalWaveSectors := totalAudioBytes / disk.SectorSize
 	if totalAudioBytes > disk.MaxSampleRAM {
 		return MultiDiskResult{}, &ErrSampleRAMExceeded{TotalAudioBytes: totalAudioBytes}
 	}
 
 	// Stamp the total wave sector count into the bank sector so that
 	// diskadd writes the correct DIS wn value for disk 1. This tells the
-	// sampler that more audio is coming on disk 2.
-	binary.LittleEndian.PutUint32(fzf[disk.BankTotalWaveOffset:], bitconv.NarrowU32(totalWaveSectors))
+	// sampler that more audio is coming on disk 2. Work on a copy so the
+	// caller's dump stays untouched.
+	out := make([]byte, len(fzf))
+	copy(out, fzf)
+	binary.LittleEndian.PutUint32(out[disk.BankTotalWaveOffset:], bitconv.NarrowU32(totalWaveSectors))
 
-	disk1Data := fzf[:maxDisk1]
-	disk2Data := fzf[maxDisk1:]
+	disk1Data := out[:maxDisk1]
+	disk2Data := out[maxDisk1:]
 
 	log.Info().
-		Int("total_voices", n).
+		Int("total_voices", hdr.NVoice).
 		Int("disks", 2).
 		Msg("multi-disk split")
 
@@ -238,8 +251,8 @@ func AssembleMultiDisk(voices [][]byte, groups []Keygroup) (MultiDiskResult, err
 
 	return MultiDiskResult{
 		Disks:      [][]byte{disk1Data, disk2Data},
-		BankCount:  1,
-		VoiceCount: n,
+		BankCount:  hdr.NBankSectors,
+		VoiceCount: hdr.NVoice,
 		WaveCount:  totalWaveSectors,
 	}, nil
 }

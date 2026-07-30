@@ -41,6 +41,11 @@ const (
 	// loopxf[] and looptm[] arrays.
 	LoopXFEntrySize = 2
 	LoopTmEntrySize = 2
+	// MaxLoopXF / MaxLoopTm bound the loopxf[] and looptm[] entries
+	// (spec §2-1). Fresh voices carry 0 in both, so writers accept 0
+	// even where the spec's lower bound is 1.
+	MaxLoopXF = 1023
+	MaxLoopTm = 1022
 
 	// Envelope offsets (DCA and DCF).
 	//

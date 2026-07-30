@@ -19,6 +19,8 @@ package sfz
 
 import (
 	"fmt"
+	"io/fs"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -32,6 +34,10 @@ const (
 	// maxRegions matches the FZ-1 hardware limit of 64 voices per bank.
 	maxRegions           = disk.MaxVoices
 	maxSFZFileSize int64 = 16 << 20
+	// maxWarnings bounds the diagnostics a single file can accumulate.
+	// A hostile file of hundreds of thousands of malformed regions must
+	// not allocate a warning for each one.
+	maxWarnings = 256
 
 	// DefaultLoVel is the minimum velocity for an SFZ region.
 	DefaultLoVel = 1
@@ -146,14 +152,7 @@ type opcodes map[string]string
 // not resolve symlinks; an attacker with write access to a symlink inside
 // the root can escape detection.
 func Parse(path string) ([]Region, []Warning, error) {
-	p := &parser{
-		defines:  map[string]string{},
-		included: map[string]bool{},
-		global:   opcodes{},
-		master:   opcodes{},
-		group:    opcodes{},
-	}
-	p.current = p.global
+	p := newParser(nil)
 
 	// Resolve the top-level root before parsing so #include checks can use
 	// it. We tolerate filepath.Abs errors here because parseFile re-runs
@@ -162,19 +161,58 @@ func Parse(path string) ([]Region, []Warning, error) {
 		p.rootDir = filepath.Dir(abs)
 	}
 
-	if err := p.parseFile(path); err != nil {
+	return p.run(path)
+}
+
+// ParseFS parses the SFZ file at sfzPath inside fsys, resolving #include,
+// default_path, and sample= references against the same filesystem. Sample
+// paths in the returned regions are slash-separated paths relative to the
+// root of fsys, suitable as keys into the same filesystem. Backslashes in
+// opcode values are treated as literal name characters, matching Parse on
+// UNIX. Path confinement follows from fs.ValidPath: a reference that
+// escapes the filesystem root warns and later fails to read.
+func ParseFS(fsys fs.FS, sfzPath string) ([]Region, []Warning, error) {
+	p := newParser(fsys)
+	return p.run(sfzPath)
+}
+
+func newParser(fsys fs.FS) *parser {
+	p := &parser{
+		fsys:     fsys,
+		defines:  map[string]string{},
+		included: map[string]bool{},
+		global:   opcodes{},
+		master:   opcodes{},
+		group:    opcodes{},
+	}
+	p.current = p.global
+	return p
+}
+
+// warn records a diagnostic, up to the cap.
+func (p *parser) warn(w Warning) {
+	if len(p.warnings) >= maxWarnings {
+		return
+	}
+	p.warnings = append(p.warnings, w)
+}
+
+func (p *parser) run(sfzPath string) ([]Region, []Warning, error) {
+	if err := p.parseFile(sfzPath); err != nil {
 		return nil, p.warnings, err
 	}
 	if len(p.regions) == 0 && !p.sawRegionTag {
-		return nil, p.warnings, fmt.Errorf("sfz: no regions found in %q", path)
+		return nil, p.warnings, fmt.Errorf("sfz: no regions found in %q", sfzPath)
 	}
-	if len(p.regions) > maxRegions {
-		return nil, p.warnings, fmt.Errorf("sfz: %d regions exceeds maximum of %d", len(p.regions), maxRegions)
+	if p.overflowed {
+		return nil, p.warnings, fmt.Errorf("sfz: more than %d regions; the FZ holds %d voices", maxRegions, maxRegions)
 	}
 	return p.regions, p.warnings, nil
 }
 
 type parser struct {
+	fsys         fs.FS // nil in path mode; non-nil roots all reads and joins in an fs.FS
+	overflowed   bool  // more regions than the hardware holds; see flushRegion
 	defines      map[string]string
 	included     map[string]bool
 	warnings     []Warning
@@ -198,6 +236,9 @@ type parser struct {
 // the root is empty or either path cannot be made absolute, since failing
 // open is safer than spamming spurious warnings.
 func (p *parser) isOutsideRoot(target string) bool {
+	if p.fsys != nil {
+		return !fs.ValidPath(path.Clean(target))
+	}
 	if p.rootDir == "" {
 		return false
 	}
@@ -222,42 +263,92 @@ func (p *parser) isOutsideRoot(target string) bool {
 	return false
 }
 
-func (p *parser) parseFile(path string) error {
-	abs, err := filepath.Abs(path)
+func (p *parser) parseFile(pth string) error {
+	pth, err := p.canonical(pth)
 	if err != nil {
-		return fmt.Errorf("sfz: resolving %q: %w", path, err)
+		return err
 	}
-	path = abs
-	if p.included[path] {
-		p.warnings = append(p.warnings, Warning{
+	if p.included[pth] {
+		p.warn(Warning{
 			Region:  -1,
-			Message: fmt.Sprintf("ignoring repeated #include of %q (include cycle or duplicate)", filepath.Base(path)),
+			Message: fmt.Sprintf("ignoring repeated #include of %q (include cycle or duplicate)", filepath.Base(pth)),
 		})
 		return nil
 	}
-	p.included[path] = true
+	p.included[pth] = true
 
 	// Path-confinement: warn if an #include resolves outside the top-level
 	// SFZ directory tree. The top-level file itself sets rootDir (in Parse)
 	// so the first call here is always inside its own root and skipped.
-	if p.isOutsideRoot(path) {
-		p.warnings = append(p.warnings, Warning{
+	if p.isOutsideRoot(pth) {
+		p.warn(Warning{
 			Region:  -1,
-			Message: fmt.Sprintf("#include %q resolves outside the SFZ root directory", path),
+			Message: fmt.Sprintf("#include %q resolves outside the SFZ root directory", pth),
 		})
 	}
 
-	raw, err := fzutil.ReadBounded(path, maxSFZFileSize)
+	raw, err := p.readBounded(pth)
 	if err != nil {
-		return fmt.Errorf("sfz: reading %q: %w", path, err)
+		return fmt.Errorf("sfz: reading %q: %w", pth, err)
 	}
-	dir := filepath.Dir(path)
+	dir := p.dirOf(pth)
 	prevDir := p.currentDir
 	p.currentDir = dir
 	text := stripComments(string(raw))
 	err = p.parseText(text, dir)
 	p.currentDir = prevDir
 	return err
+}
+
+// canonical normalises a path for the include-cycle map: absolute in path
+// mode, cleaned in fs mode (fs.FS paths have no working directory).
+func (p *parser) canonical(pth string) (string, error) {
+	if p.fsys != nil {
+		return path.Clean(pth), nil
+	}
+	abs, err := filepath.Abs(pth)
+	if err != nil {
+		return "", fmt.Errorf("sfz: resolving %q: %w", pth, err)
+	}
+	return abs, nil
+}
+
+func (p *parser) readBounded(pth string) ([]byte, error) {
+	if p.fsys == nil {
+		return fzutil.ReadBounded(pth, maxSFZFileSize)
+	}
+	data, err := fs.ReadFile(p.fsys, pth)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxSFZFileSize {
+		return nil, fmt.Errorf("file is %d bytes, larger than the %d byte limit", len(data), maxSFZFileSize)
+	}
+	return data, nil
+}
+
+// joinPath resolves a relative reference from an SFZ opcode against dir.
+// Path mode converts forward slashes to the host separator; fs mode keeps
+// slash semantics, matching io/fs. Backslashes stay literal in both modes.
+func (p *parser) joinPath(dir, name string) string {
+	if p.fsys != nil {
+		return path.Join(dir, name)
+	}
+	return filepath.Join(dir, filepath.FromSlash(name))
+}
+
+func (p *parser) dirOf(pth string) string {
+	if p.fsys != nil {
+		return path.Dir(pth)
+	}
+	return filepath.Dir(pth)
+}
+
+func (p *parser) isAbs(pth string) bool {
+	if p.fsys != nil {
+		return path.IsAbs(pth)
+	}
+	return filepath.IsAbs(pth)
 }
 
 func (p *parser) parseText(text, dir string) error {
@@ -297,7 +388,7 @@ func (p *parser) parseText(text, dir string) error {
 				}
 			}
 			inc := strings.Trim(strings.Join(incParts, " "), `"`)
-			incPath := filepath.Join(dir, filepath.FromSlash(inc))
+			incPath := p.joinPath(dir, inc)
 			if err := p.parseFile(incPath); err != nil {
 				return err
 			}
@@ -336,7 +427,7 @@ func (p *parser) parseText(text, dir string) error {
 				p.inRegion = false
 				p.inControl = true
 			default:
-				p.warnings = append(p.warnings, Warning{
+				p.warn(Warning{
 					Region:  -1,
 					Message: fmt.Sprintf("ignoring unsupported header <%s>; opcodes inside are discarded", tag),
 				})
@@ -388,9 +479,9 @@ func (p *parser) applyOpcode(key, value, dir string) {
 	// <control> special opcodes.
 	if p.inControl {
 		if key == "default_path" {
-			p.defaultPath = filepath.Join(dir, filepath.FromSlash(value))
+			p.defaultPath = p.joinPath(dir, value)
 			if p.isOutsideRoot(p.defaultPath) {
-				p.warnings = append(p.warnings, Warning{
+				p.warn(Warning{
 					Region:  -1,
 					Message: fmt.Sprintf("default_path=%q resolves outside the SFZ root directory", value),
 				})
@@ -433,7 +524,7 @@ func (p *parser) clampVel(key string, n int) uint8 {
 		if clamped > disk.MaxMIDINote {
 			clamped = disk.MaxMIDINote
 		}
-		p.warnings = append(p.warnings, Warning{
+		p.warn(Warning{
 			Region:  len(p.regions),
 			Message: fmt.Sprintf("%s=%d out of range [0, %d]; clamped to %d", key, n, disk.MaxMIDINote, clamped),
 		})
@@ -450,17 +541,20 @@ func (p *parser) flushRegion() {
 
 	sampleRaw, ok := p.lookup("sample")
 	if !ok || sampleRaw == "" {
-		p.warnings = append(p.warnings, Warning{Region: len(p.regions), Message: "no sample opcode, skipping"})
+		p.warn(Warning{Region: len(p.regions), Message: "no sample opcode, skipping"})
 		return
 	}
 
 	// Resolve sample path to absolute using default_path or the SFZ file's directory.
-	samplePath := filepath.FromSlash(sampleRaw)
-	if !filepath.IsAbs(samplePath) {
+	samplePath := sampleRaw
+	if p.fsys == nil {
+		samplePath = filepath.FromSlash(sampleRaw)
+	}
+	if !p.isAbs(samplePath) {
 		if p.defaultPath != "" {
-			samplePath = filepath.Join(p.defaultPath, samplePath)
+			samplePath = p.joinPath(p.defaultPath, samplePath)
 		} else {
-			samplePath = filepath.Join(p.currentDir, samplePath)
+			samplePath = p.joinPath(p.currentDir, samplePath)
 		}
 	}
 
@@ -468,7 +562,7 @@ func (p *parser) flushRegion() {
 	// top-level SFZ directory tree. Real SFZ packs sometimes share WAVs
 	// across sibling directories so this is not treated as an error.
 	if p.isOutsideRoot(samplePath) {
-		p.warnings = append(p.warnings, Warning{
+		p.warn(Warning{
 			Region:  len(p.regions),
 			Message: fmt.Sprintf("sample=%q resolves outside the SFZ root directory", sampleRaw),
 		})
@@ -481,7 +575,7 @@ func (p *parser) flushRegion() {
 		}
 		n, err := parseKeyValue(v)
 		if err != nil {
-			p.warnings = append(p.warnings, Warning{
+			p.warn(Warning{
 				Region:  len(p.regions),
 				Message: fmt.Sprintf("malformed %s=%q: %v; using default %d", key, v, err, def),
 			})
@@ -538,7 +632,7 @@ func (p *parser) flushRegion() {
 	lovel := p.clampVel("lovel", parseInt("lovel", DefaultLoVel))
 	hivel := p.clampVel("hivel", parseInt("hivel", DefaultHiVel))
 	if hivel < lovel {
-		p.warnings = append(p.warnings, Warning{
+		p.warn(Warning{
 			Region:  len(p.regions),
 			Message: fmt.Sprintf("hivel=%d < lovel=%d, region will never trigger", hivel, lovel),
 		})
@@ -546,7 +640,7 @@ func (p *parser) flushRegion() {
 		// Spec §1-5 says htch/ltch range is 1-127. MIDI note-on velocity is
 		// also 1-127 (vel 0 is note-off), so (0,0) cannot match any note-on
 		// and the voice will be silent on hardware.
-		p.warnings = append(p.warnings, Warning{
+		p.warn(Warning{
 			Region:  len(p.regions),
 			Message: "lovel=0 and hivel=0; voice will be silent (FZ-1 velocity range is 1-127)",
 		})
@@ -560,7 +654,7 @@ func (p *parser) flushRegion() {
 		if clamped > MaxTranspose {
 			clamped = MaxTranspose
 		}
-		p.warnings = append(p.warnings, Warning{
+		p.warn(Warning{
 			Region:  len(p.regions),
 			Message: fmt.Sprintf("transpose=%d out of range [%d, %d]; clamped to %d", transpose, MinTranspose, MaxTranspose, clamped),
 		})
@@ -575,7 +669,7 @@ func (p *parser) flushRegion() {
 		if clamped > MaxTune {
 			clamped = MaxTune
 		}
-		p.warnings = append(p.warnings, Warning{
+		p.warn(Warning{
 			Region:  len(p.regions),
 			Message: fmt.Sprintf("tune=%d out of range [%d, %d]; clamped to %d", tune, MinTune, MaxTune, clamped),
 		})
@@ -601,7 +695,7 @@ func (p *parser) flushRegion() {
 	// Warn on opcodes we recognise but don't map.
 	for k := range p.current {
 		if _, known := knownOpcodes[k]; !known {
-			p.warnings = append(p.warnings, Warning{
+			p.warn(Warning{
 				Region:  len(p.regions),
 				Message: fmt.Sprintf("unsupported opcode %q ignored", k),
 			})
@@ -624,6 +718,14 @@ func (p *parser) flushRegion() {
 	r.Resonance = resonance
 	r.LoopStart = loopStart
 	r.LoopEnd = loopEnd
+	if len(p.regions) >= maxRegions {
+		// The cap is enforced here, as the regions arrive, so a file
+		// with hundreds of thousands of them cannot allocate them all
+		// before the count is checked. Parsing stops counting; run()
+		// turns the overflow into the error.
+		p.overflowed = true
+		return
+	}
 	p.regions = append(p.regions, r)
 }
 

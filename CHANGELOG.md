@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased (last updated 2026-06-24)
+## Unreleased (last updated 2026-07-30)
+
+- `fizzle sfz convert` and `fizzle fzv import` refuse stereo WAV input, naming the file and asking for a mono source. Both used to accept it and write a voice of double length at half the pitch, with the two channels alternating sample by sample. Convert the file to mono first. The web UI instead asks which side to keep: left, right, or the mix of the two.
 
 ## v0.4.0 (2026-06-24)
 

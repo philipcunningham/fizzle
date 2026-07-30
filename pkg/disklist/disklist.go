@@ -44,7 +44,12 @@ func Parse(path string) (*Listing, error) {
 	if err != nil {
 		return nil, fmt.Errorf("disklist: %w", err)
 	}
+	return ParseImage(img)
+}
 
+// ParseImage returns the listing for an in-memory disk image: the same
+// result as Parse with no filesystem access.
+func ParseImage(img *disk.Image) (*Listing, error) {
 	entries, err := img.Directory()
 	if err != nil {
 		return nil, fmt.Errorf("disklist: reading directory: %w", err)

@@ -3,6 +3,7 @@ package voiceimport
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -453,4 +454,311 @@ func TestEncodeLoopPoints(t *testing.T) {
 			t.Errorf("LoopEd[%d]: got %d, want %d (genEnd)", i, hdr.LoopEd[i], genEnd)
 		}
 	}
+}
+
+// monoWAVBytes builds an in-memory 16-bit mono PCM WAV.
+func monoWAVBytes(t *testing.T, samples []int16, rate uint32) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := wav.Write(&buf, &wav.File{SampleRate: rate, Samples: samples, Channels: 1}); err != nil {
+		t.Fatalf("wav.Write: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// stereoWAVBytes hand-rolls a 16-bit stereo PCM WAV, since wav.Write
+// only produces mono.
+func stereoWAVBytes(t *testing.T, left, right []int16, rate uint32) []byte {
+	t.Helper()
+	if len(left) != len(right) {
+		t.Fatal("channel lengths differ")
+	}
+	dataLen := len(left) * 4
+	var buf bytes.Buffer
+	buf.WriteString("RIFF")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(36+dataLen)) // #nosec G115 -- tiny fixture
+	buf.WriteString("WAVEfmt ")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(16))
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // PCM
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(2)) // stereo
+	_ = binary.Write(&buf, binary.LittleEndian, rate)
+	_ = binary.Write(&buf, binary.LittleEndian, rate*4)    // byte rate
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(4)) // block align
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(16))
+	buf.WriteString("data")
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(dataLen)) // #nosec G115 -- tiny fixture
+	for i := range left {
+		_ = binary.Write(&buf, binary.LittleEndian, left[i])
+		_ = binary.Write(&buf, binary.LittleEndian, right[i])
+	}
+	return buf.Bytes()
+}
+
+func rampSamples(n int, step int16) []int16 {
+	out := make([]int16, n)
+	for i := range out {
+		out[i] = int16(i) * step
+	}
+	return out
+}
+
+// ImportBytes is the pure entry point the web core calls: identical
+// bytes to Import with no filesystem.
+func TestImportBytesMatchesImport(t *testing.T) {
+	samples := rampSamples(2000, 3)
+	wavData := monoWAVBytes(t, samples, 18000)
+
+	dir := t.TempDir()
+	wavPath := filepath.Join(dir, "KICK 1.wav")
+	fzvPath := filepath.Join(dir, "KICK 1.fzv")
+	if err := os.WriteFile(wavPath, wavData, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := Import(wavPath, fzvPath, 18000); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	fromFile, err := os.ReadFile(fzvPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	built, err := ImportBytes(wavData, "KICK 1", 18000, ChannelMonoOnly)
+	if err != nil {
+		t.Fatalf("ImportBytes: %v", err)
+	}
+	if !bytes.Equal(fromFile, built) {
+		t.Fatal("ImportBytes bytes differ from Import output")
+	}
+}
+
+func TestImportBytesStereoChannels(t *testing.T) {
+	left := rampSamples(1500, 2)
+	right := rampSamples(1500, 5)
+	stereo := stereoWAVBytes(t, left, right, 18000)
+
+	mix := make([]int16, len(left))
+	for i := range mix {
+		mix[i] = int16((int32(left[i]) + int32(right[i])) / 2) // #nosec G115 -- mean of two int16 fits
+	}
+
+	cases := []struct {
+		name    string
+		channel Channel
+		want    []int16
+	}{
+		{"left", ChannelLeft, left},
+		{"right", ChannelRight, right},
+		{"mix", ChannelMix, mix},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ImportBytes(stereo, "STEREO", 18000, tc.channel)
+			if err != nil {
+				t.Fatalf("ImportBytes: %v", err)
+			}
+			want, err := ImportBytes(monoWAVBytes(t, tc.want, 18000), "STEREO", 18000, ChannelMonoOnly)
+			if err != nil {
+				t.Fatalf("ImportBytes mono reference: %v", err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("channel %s differs from its mono reference", tc.name)
+			}
+		})
+	}
+}
+
+func TestImportBytesRejects(t *testing.T) {
+	mono := monoWAVBytes(t, rampSamples(100, 1), 18000)
+	stereo := stereoWAVBytes(t, rampSamples(100, 1), rampSamples(100, 1), 18000)
+
+	if _, err := ImportBytes(stereo, "X", 18000, ChannelMonoOnly); err == nil {
+		t.Fatal("stereo accepted without a channel choice")
+	}
+	if _, err := ImportBytes(mono, "X", 12345, ChannelMonoOnly); err == nil {
+		t.Fatal("unsupported rate accepted")
+	}
+	if _, err := ImportBytes([]byte("not a wav"), "X", 18000, ChannelMonoOnly); err == nil {
+		t.Fatal("garbage accepted")
+	}
+}
+
+// writeWAVFile drops WAV bytes at dir/name and returns the path.
+func writeWAVFile(t *testing.T, dir, name string, data []byte) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return path
+}
+
+// Import refuses a stereo WAV, and the message has to name the file
+// the user typed rather than the voice name derived from it. The CLI
+// carries no channel flag, so the message also has to say how to get
+// a mono source.
+func TestImportRejectsStereoNamingTheFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stereo := stereoWAVBytes(t, rampSamples(600, 3), rampSamples(600, 7), 18000)
+	wavPath := writeWAVFile(t, dir, "STEREO PAD.wav", stereo)
+	fzvPath := filepath.Join(dir, "out.fzv")
+
+	err := Import(wavPath, fzvPath, 18000)
+	if err == nil {
+		t.Fatal("stereo WAV accepted by Import")
+	}
+	if !namesPath(err, wavPath) {
+		t.Errorf("error should name the file the user typed; got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "mono") {
+		t.Errorf("error should say the import writes mono only; got: %v", err)
+	}
+	// The remedy has to be one the user can actually take. studio takes
+	// no channel choice on import, so the message must not send them
+	// there.
+	if !strings.Contains(err.Error(), "convert it to mono first") {
+		t.Errorf("error should give a remedy the user can take; got: %v", err)
+	}
+	if _, statErr := os.Stat(fzvPath); statErr == nil {
+		t.Error("a rejected stereo import still wrote a voice file")
+	}
+}
+
+// A WAV that fails to parse has to name the path, so a batch caller
+// can tell which file broke.
+func TestImportNamesThePathOnParseFailure(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	wavPath := writeWAVFile(t, dir, "BROKEN.wav", []byte("not a wav at all"))
+
+	err := Import(wavPath, filepath.Join(dir, "out.fzv"), 18000)
+	if err == nil {
+		t.Fatal("malformed WAV accepted")
+	}
+	if !namesPath(err, wavPath) {
+		t.Errorf("error should name the WAV path; got: %v", err)
+	}
+}
+
+// A WAV that fails to open has to name the path too.
+func TestImportNamesThePathOnOpenFailure(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	wavPath := filepath.Join(dir, "MISSING.wav")
+
+	err := Import(wavPath, filepath.Join(dir, "out.fzv"), 18000)
+	if err == nil {
+		t.Fatal("missing WAV accepted")
+	}
+	if !namesPath(err, wavPath) {
+		t.Errorf("error should name the WAV path; got: %v", err)
+	}
+}
+
+// B9: the io/fs refactor rewrote these two messages inside what was
+// meant to be a refactor. The shipped wording routes the reader to the
+// package that failed, so it is pinned here.
+func TestImportKeepsTheShippedReadErrorWording(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "MISSING.wav")
+	broken := writeWAVFile(t, dir, "BROKEN.wav", []byte("not a wav at all"))
+
+	cases := []struct {
+		name    string
+		wavPath string
+		want    string
+	}{
+		{"open", missing, fmt.Sprintf("voiceimport: fzutil: opening WAV %q", missing)},
+		{"parse", broken, fmt.Sprintf("voiceimport: fzutil: reading WAV %q", broken)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := Import(tc.wavPath, filepath.Join(dir, tc.name+".fzv"), 18000)
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if !strings.HasPrefix(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to start with %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// The rate is checked before the file is read, so a caller that gets
+// both wrong hears about the rate.
+func TestImportValidatesRateBeforeReadingTheFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	err := Import(filepath.Join(dir, "MISSING.wav"), filepath.Join(dir, "out.fzv"), 12345)
+	if err == nil {
+		t.Fatal("unsupported rate accepted")
+	}
+	if !strings.Contains(err.Error(), "unsupported rate") {
+		t.Errorf("error should name the rate, not the missing file; got: %v", err)
+	}
+}
+
+// The "importing voice" line carries the resampled sample count, and
+// it logs only once the import has succeeded.
+func TestImportLogsSampleCount(t *testing.T) {
+	buf := testutil.CaptureLog(t)
+	dir := t.TempDir()
+	wavPath := writeWAVFile(t, dir, "KICK.wav", monoWAVBytes(t, rampSamples(3600, 2), 36000))
+
+	if err := Import(wavPath, filepath.Join(dir, "KICK.fzv"), 18000); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "importing voice") {
+		t.Fatalf("no import log line: %q", out)
+	}
+	if !strings.Contains(out, "samples=1800") {
+		t.Errorf("log line should carry the resampled sample count; got: %q", out)
+	}
+}
+
+// A rejected import logs nothing: the info line follows the encode,
+// so a failure produces one message rather than two.
+func TestImportDoesNotLogBeforeRejecting(t *testing.T) {
+	buf := testutil.CaptureLog(t)
+	dir := t.TempDir()
+	wavPath := writeWAVFile(t, dir, "BROKEN.wav", []byte("not a wav at all"))
+
+	if err := Import(wavPath, filepath.Join(dir, "out.fzv"), 18000); err == nil {
+		t.Fatal("malformed WAV accepted")
+	}
+	if strings.Contains(buf.String(), "importing voice") {
+		t.Errorf("a rejected import logged a stray line: %q", buf.String())
+	}
+}
+
+// The errors quote the path with %q, which escapes a backslash. A test
+// that looks for the raw path therefore passes on Unix and fails on
+// Windows, where every path carries backslashes: the message names the
+// file correctly and the assertion cannot see it. The path here is a
+// literal rather than a real file, because a backslash separates
+// directories on Windows and cannot appear in a name there.
+func TestNamesPathSeesAQuotedPath(t *testing.T) {
+	t.Parallel()
+	const winPath = `C:\Users\RUNNER~1\AppData\Local\Temp\STEREO PAD.wav`
+	err := fmt.Errorf("voiceimport: %q is stereo and fzv import writes mono only", winPath)
+
+	if !namesPath(err, winPath) {
+		t.Errorf("namesPath should see the quoted path; got: %v", err)
+	}
+	// The naive form is what shipped, and it cannot see the quoted
+	// path. Pinned so the helper stays load bearing.
+	if strings.Contains(err.Error(), winPath) {
+		t.Error("the raw path matched, so this no longer reproduces the Windows shape")
+	}
+}
+
+// namesPath reports whether err names path the way this package writes
+// it, quoted with %q. That escapes a backslash, so a raw comparison
+// misses every Windows path and any name holding one.
+func namesPath(err error, path string) bool {
+	return err != nil && strings.Contains(err.Error(), fmt.Sprintf("%q", path))
 }

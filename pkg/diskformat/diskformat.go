@@ -33,6 +33,10 @@ func Format(path, label string) error {
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
 		return fmt.Errorf("diskformat: %q is a directory, IMAGE must be a file path", path)
 	}
+	// Validate the label the user typed, before the truncation below.
+	// Checking after the cut would accept a non-ASCII byte past byte 12
+	// and would report the replacement rune when the cut splits a
+	// multi-byte character.
 	for _, r := range label {
 		if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
 			return fmt.Errorf("diskformat: disk label contains non-ASCII character %q (the sampler only supports printable ASCII)", string(r))
@@ -53,11 +57,35 @@ func Format(path, label string) error {
 		Str("path", path).
 		Str("size", fmt.Sprintf("%d bytes", disk.ImageSize)).
 		Msg("disk image details")
-	img := buildImage(label)
+	img, err := BuildImage(label)
+	if err != nil {
+		return err
+	}
 	if err := fileutil.WriteAtomic(path, img); err != nil {
 		return fmt.Errorf("diskformat: %w", err)
 	}
 	return nil
+}
+
+// BuildImage constructs the raw bytes of a blank formatted disk image
+// in memory. Unlike Format it never touches the filesystem and
+// validates strictly: an empty, over-length, or non printable ASCII
+// label is an error. Format validates the label it was given, then
+// truncates before calling here, keeping the CLI's truncate-and-warn
+// behaviour.
+func BuildImage(label string) ([]byte, error) {
+	if label == "" {
+		return nil, fmt.Errorf("diskformat: disk label must not be empty")
+	}
+	if len(label) > disk.LabelSize {
+		return nil, fmt.Errorf("diskformat: disk label exceeds %d characters", disk.LabelSize)
+	}
+	for _, r := range label {
+		if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
+			return nil, fmt.Errorf("diskformat: disk label contains non-ASCII character %q (the sampler only supports printable ASCII)", string(r))
+		}
+	}
+	return buildImage(label), nil
 }
 
 // buildImage constructs the raw bytes of a blank formatted disk image.

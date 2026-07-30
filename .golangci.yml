@@ -7,6 +7,9 @@ formatters:
   enable:
     - gofmt
     - goimports
+  exclusions:
+    paths:
+      - node_modules
 
 linters:
   enable:
@@ -30,6 +33,11 @@ linters:
     - goconst
     - tparallel
     - dupword
+  exclusions:
+    paths:
+      # Vendored JS dependencies can carry Go files (e.g. flatted ships
+      # a Go port); they are not project code.
+      - node_modules
   settings:
     errcheck:
       check-type-assertions: true

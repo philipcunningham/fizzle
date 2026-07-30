@@ -778,6 +778,101 @@ func TestConvertMultiDiskHappyPath(t *testing.T) {
 	}
 }
 
+// The three path mode entry points and stereo input.
+
+// writeStereoKit lays out a folder holding one stereo WAV and an SFZ
+// that references it, and returns the folder and the SFZ path.
+func writeStereoKit(t *testing.T, frames int) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "stereo.wav"), stereoWAVBytes(18000, frames), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sfzPath := filepath.Join(dir, "kit.sfz")
+	body := "<region>\nsample=stereo.wav\nlokey=36\nhikey=36\npitch_keycenter=36\n"
+	if err := os.WriteFile(sfzPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir, sfzPath
+}
+
+// wantsStereoRefusal checks the shared refusal: it names the file and
+// gives a remedy the command can actually carry out.
+func wantsStereoRefusal(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected a refusal for stereo input")
+	}
+	for _, want := range []string{stereoWAV, "sfz convert writes mono only", "convert it to mono first"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should contain %q", err, want)
+		}
+	}
+}
+
+// TestConvertRefusesStereo covers B2 on the CLI's single disk mode.
+// The command carries no channel answer, so it used to write a voice of
+// double length at half the pitch with the channels alternating.
+func TestConvertRefusesStereo(t *testing.T) {
+	t.Parallel()
+	_, sfzPath := writeStereoKit(t, 512)
+	out := filepath.Join(t.TempDir(), "kit.fzf")
+	wantsStereoRefusal(t, Convert(context.Background(), sfzPath, out, 18000, false))
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Errorf("a refused convert must write nothing, but %s exists", out)
+	}
+}
+
+// TestConvertDirRefusesStereo covers the zero SFZ drum kit mode.
+func TestConvertDirRefusesStereo(t *testing.T) {
+	t.Parallel()
+	dir, _ := writeStereoKit(t, 512)
+	out := filepath.Join(t.TempDir(), "kit.fzf")
+	wantsStereoRefusal(t, ConvertDir(context.Background(), dir, out, 18000, false))
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Errorf("a refused convert must write nothing, but %s exists", out)
+	}
+}
+
+// TestConvertMultiDiskRefusesStereo covers the two disk split mode.
+func TestConvertMultiDiskRefusesStereo(t *testing.T) {
+	t.Parallel()
+	_, sfzPath := writeStereoKit(t, 512)
+	prefix := filepath.Join(t.TempDir(), "multi")
+	wantsStereoRefusal(t, ConvertMultiDisk(context.Background(), sfzPath, prefix, 18000))
+	if _, err := os.Stat(prefix + "-1.img"); !os.IsNotExist(err) {
+		t.Errorf("a refused convert must write nothing, but %s-1.img exists", prefix)
+	}
+}
+
+// TestAssembleMultiReportsProgress covers B9: the split is the slowest
+// thing the CLI does, and this line is its only progress signal. The
+// io/fs refactor kept it on the single disk path and dropped it here.
+//
+// Not parallel: CaptureLog redirects the global logger.
+func TestAssembleMultiReportsProgress(t *testing.T) {
+	buf := testutil.CaptureLog(t)
+	dir := t.TempDir()
+	var sfzContent strings.Builder
+	for i := range 5 {
+		name := fmt.Sprintf("voice%02d.wav", i)
+		testutil.WriteTestWAV(t, filepath.Join(dir, name), 36000, 150000)
+		note := 36 + i
+		fmt.Fprintf(&sfzContent, "<region>\nsample=%s\nlokey=%d\nhikey=%d\npitch_keycenter=%d\n\n",
+			name, note, note, note)
+	}
+	sfzPath := filepath.Join(dir, "test.sfz")
+	if err := os.WriteFile(sfzPath, []byte(sfzContent.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ConvertMultiDisk(context.Background(), sfzPath, filepath.Join(t.TempDir(), "multi"), 36000); err != nil {
+		t.Fatalf("ConvertMultiDisk: %v", err)
+	}
+	if !strings.Contains(buf.String(), "converting regions") {
+		t.Errorf("the split reported no region progress: %s", buf.String())
+	}
+}
+
 // buildMuteGroupMap tests.
 
 // Not parallel: CaptureLog redirects the global logger.
@@ -810,7 +905,7 @@ func TestLoadWAVFilesDeduplication(t *testing.T) {
 		{Sample: wavPath},
 		{Sample: wavPath},
 	}
-	m, err := loadWAVFiles(context.Background(), regions)
+	m, err := loadWAVFiles(context.Background(), nil, regions)
 	if err != nil {
 		t.Fatalf("loadWAVFiles: %v", err)
 	}
@@ -874,7 +969,7 @@ func TestLoadWAVFilesBadPath(t *testing.T) {
 	regions := []sfz.Region{
 		{Sample: "/nonexistent/path/bad.wav"},
 	}
-	_, err := loadWAVFiles(context.Background(), regions)
+	_, err := loadWAVFiles(context.Background(), nil, regions)
 	if err == nil {
 		t.Fatal("expected error for bad WAV path")
 	}

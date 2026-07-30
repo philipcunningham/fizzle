@@ -132,6 +132,20 @@ type VoiceParams struct {
 	// LoopTm is the multi-loop time for the active sustain loop
 	// (looptm[loop_sus], spec §2-1, range 1-1022; step 16 ms).
 	LoopTm uint16 `json:"loop_time"`
+
+	// AllLoops carries every loop entry with the spec's flag bits
+	// masked off, for consumers that edit the whole 8-loop table (the
+	// Web UI). Kept out of the JSON so the CLI's output is unchanged.
+	AllLoops [disk.MaxGenerators]LoopEntry `json:"-"`
+}
+
+// LoopEntry is one row of the 8-loop table: masked sample addresses
+// plus the per-loop cross-fade and time values.
+type LoopEntry struct {
+	Start uint32
+	End   uint32
+	XF    uint16
+	Tm    uint16
 }
 
 // ParseVoiceInFZF parses a named voice's parameters directly from FZF data
@@ -166,6 +180,23 @@ func Parse(path string) (*VoiceParams, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fzvinfo: reading %q: %w", path, err)
 	}
+	return parseFrom(data, path)
+}
+
+// ParseBytes parses FZV voice file bytes: the same result as Parse
+// with no filesystem access.
+func ParseBytes(data []byte) (*VoiceParams, error) {
+	return parseFrom(data, "")
+}
+
+// parseFrom is the shared body. source names the file when the caller
+// holds a path, so a rejection says which file it read (E1); the bytes
+// entry point passes an empty source and speaks of the data.
+func parseFrom(data []byte, source string) (*VoiceParams, error) {
+	subject := "data"
+	if source != "" {
+		subject = fmt.Sprintf("%q", source)
+	}
 	// Use the structural plausibility check (active playback mode, sane wave
 	// pointers, valid envelope stages) rather than the strict
 	// IsPlausibleVoiceHeader. Real-world FZF dumps sometimes contain voices
@@ -175,12 +206,12 @@ func Parse(path string) (*VoiceParams, error) {
 	// IsPlausibleVoiceSlot bytes-level checks reject non-voice data (FZF
 	// bank sectors, text files, etc.) just as effectively.
 	if len(data) < disk.SectorSize {
-		return nil, fmt.Errorf("fzvinfo: file too small to be a voice file")
+		return nil, fmt.Errorf("fzvinfo: %s is too small to be a voice file", subject)
 	}
 	if !disk.IsPlausibleVoiceSlot(data[:disk.VoiceHeaderUsed]) {
-		return nil, fmt.Errorf("fzvinfo: %q does not look like a voice file", path)
+		return nil, fmt.Errorf("fzvinfo: %s does not look like a voice file", subject)
 	}
-	return parseHeader(data[:disk.SectorSize], path)
+	return parseHeader(data[:disk.SectorSize], source)
 }
 
 func parseHeader(hdr []byte, source string) (*VoiceParams, error) {
@@ -337,6 +368,7 @@ func parseHeader(hdr []byte, source string) (*VoiceParams, error) {
 		LoopRelease:   loopInfo.release,
 		LoopStart:     loopInfo.start,
 		LoopEnd:       loopInfo.end,
+		AllLoops:      parseAllLoops(hdr),
 		LoopXF:        loopInfo.xfade,
 		LoopTm:        loopInfo.time,
 	}, nil
@@ -405,6 +437,24 @@ func parseLoop(hdr []byte, loopMode uint16) loopInfo {
 		info.hasLoop = info.start < info.end
 	}
 	return info
+}
+
+// parseAllLoops reads every loop entry with flag bits masked.
+func parseAllLoops(hdr []byte) [disk.MaxGenerators]LoopEntry {
+	var out [disk.MaxGenerators]LoopEntry
+	for i := range out {
+		stOff := disk.VoiceLoopSt0Offset + i*4
+		edOff := disk.VoiceLoopEd0Offset + i*4
+		xfOff := disk.VoiceLoopXFOffset + i*disk.LoopXFEntrySize
+		tmOff := disk.VoiceLoopTmOffset + i*disk.LoopTmEntrySize
+		out[i] = LoopEntry{
+			Start: disk.LoopStartAddress(binary.LittleEndian.Uint32(hdr[stOff : stOff+4])),
+			End:   disk.LoopEndAddress(binary.LittleEndian.Uint32(hdr[edOff : edOff+4])),
+			XF:    binary.LittleEndian.Uint16(hdr[xfOff : xfOff+disk.LoopXFEntrySize]),
+			Tm:    binary.LittleEndian.Uint16(hdr[tmOff : tmOff+disk.LoopTmEntrySize]),
+		}
+	}
+	return out
 }
 
 // RenderJSON writes the voice parameters as indented JSON to w.

@@ -11,8 +11,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -34,10 +36,236 @@ import (
 // rateLadder is the supported rates from highest to lowest quality.
 var rateLadder = disk.SampleRatesSlice()
 
+// Result carries an in-memory conversion: the assembled full dump and the
+// sample rate actually used, which fit to disk may have stepped down from
+// the requested rate.
+type Result struct {
+	FZF  []byte
+	Rate uint32
+}
+
+// ConvertFS converts the SFZ file at sfzPath inside fsys and returns the
+// assembled full dump. It is the in-memory twin of Convert: same pipeline,
+// same fit to disk behaviour, no filesystem writes. Sample references
+// resolve inside fsys.
+//
+// channel answers for the whole instrument, as it does for
+// ConvertDirFS: it says which side of a stereo sample the FZ keeps.
+// voiceimport.ChannelMonoOnly refuses stereo input rather than
+// guessing.
+func ConvertFS(ctx context.Context, fsys fs.FS, sfzPath string, targetRate uint32, fitToDisk bool, channel voiceimport.Channel) (*Result, error) {
+	regions, wavFiles, err := parseAndLoad(ctx, fsys, sfzPath, targetRate)
+	if err != nil {
+		return nil, err
+	}
+	if err := reduceToMono(wavFiles, channel); err != nil {
+		return nil, err
+	}
+	return assembleSingle(ctx, regions, wavFiles, targetRate, fitToDisk)
+}
+
+// ConvertDirFS converts every WAV in fsys at any depth (sorted by
+// path, sequential keys from C2) and returns the assembled full dump.
+// It is the in-memory twin of ConvertDir. Depth is the one place the
+// two differ.
+//
+// ConvertDir takes a directory path, so the WAVs below it may belong
+// to a neighbouring library. A caller who meant them can move them
+// up, and the refusal says so. fsys is the other case: it holds
+// exactly the tree the browser user dropped, and the dialog has
+// already counted all of it. Converting the top level alone would
+// drop the rest in silence.
+//
+// channel answers for the whole folder: it says which side of a stereo
+// file the FZ keeps. voiceimport.ChannelMonoOnly refuses stereo input
+// rather than guessing, which is what ConvertDir's callers want.
+func ConvertDirFS(ctx context.Context, fsys fs.FS, targetRate uint32, fitToDisk bool, channel voiceimport.Channel) (*Result, error) {
+	if err := disk.ValidateRate(targetRate); err != nil {
+		return nil, fmt.Errorf("sfzconvert: %w", err)
+	}
+	wavPaths, err := walkWAVsFS(fsys)
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(wavPaths)
+	if len(wavPaths) == 0 {
+		// The folder has no name here: fsys is rooted at what the user
+		// dropped, and the walk has already looked everywhere below it.
+		return nil, fmt.Errorf("sfzconvert: no WAV files found in the folder")
+	}
+	regions, err := sequentialRegions(wavPaths)
+	if err != nil {
+		return nil, err
+	}
+	wavFiles, err := loadWAVFiles(ctx, fsys, regions)
+	if err != nil {
+		return nil, err
+	}
+	if err := reduceToMono(wavFiles, channel); err != nil {
+		return nil, err
+	}
+	return assembleSingle(ctx, regions, wavFiles, targetRate, fitToDisk)
+}
+
+// reduceToMono collapses every stereo file to the one channel the
+// caller chose, in place. It runs before the rate is selected because
+// the size estimate and the resampler both measure sample counts, and
+// an interleaved stereo buffer holds two per frame. Without the
+// reduction a stereo file becomes a voice of double length at half
+// the pitch, with the channels alternating sample by sample.
+//
+// The channel is checked before any file is looked at, so an argument
+// the package doesn't know is refused even when every file is mono.
+func reduceToMono(wavFiles map[string]*wav.File, channel voiceimport.Channel) error {
+	var reduce func(*wav.File) []int16
+	switch channel {
+	case voiceimport.ChannelLeft:
+		reduce = func(f *wav.File) []int16 { return f.ExtractChannel(0) }
+	case voiceimport.ChannelRight:
+		reduce = func(f *wav.File) []int16 { return f.ExtractChannel(1) }
+	case voiceimport.ChannelMix:
+		reduce = func(f *wav.File) []int16 { return f.MixChannels() }
+	case voiceimport.ChannelMonoOnly:
+		reduce = nil // Stereo is refused below rather than guessed at.
+	default:
+		return fmt.Errorf("sfzconvert: invalid channel %d", channel)
+	}
+	for _, name := range sortedNames(wavFiles) {
+		f := wavFiles[name]
+		if f.Channels < 2 {
+			continue
+		}
+		if reduce == nil {
+			return fmt.Errorf("sfzconvert: %q is stereo; choose left, right, or mix", path.Base(name))
+		}
+		f.Samples = reduce(f)
+		f.Channels = 1
+	}
+	return nil
+}
+
+// refuseStereo fails on the first stereo file rather than write a
+// voice of double length at half the pitch. The three path mode entry
+// points carry no channel answer, so naming the file and pointing at a
+// mono conversion is the only remedy that exists, matching what
+// fizzle fzv import does.
+func refuseStereo(wavFiles map[string]*wav.File) error {
+	for _, name := range sortedNames(wavFiles) {
+		if wavFiles[name].Channels >= 2 {
+			return fmt.Errorf("sfzconvert: %q is stereo and sfz convert writes mono only; convert it to mono first", name)
+		}
+	}
+	return nil
+}
+
+// sortedNames orders the loaded files so a refusal always names the
+// same one when several are stereo, rather than whichever the map
+// handed over first.
+func sortedNames(wavFiles map[string]*wav.File) []string {
+	names := make([]string, 0, len(wavFiles))
+	for name := range wavFiles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// ConvertMultiDiskFS converts the SFZ file at sfzPath inside fsys into a
+// two disk full dump. It is the in-memory twin of ConvertMultiDisk: the
+// caller writes the returned disks. channel carries the same answer
+// ConvertFS takes.
+func ConvertMultiDiskFS(ctx context.Context, fsys fs.FS, sfzPath string, targetRate uint32, channel voiceimport.Channel) (voicebuild.MultiDiskResult, error) {
+	regions, wavFiles, err := parseAndLoad(ctx, fsys, sfzPath, targetRate)
+	if err != nil {
+		return voicebuild.MultiDiskResult{}, err
+	}
+	if err := reduceToMono(wavFiles, channel); err != nil {
+		return voicebuild.MultiDiskResult{}, err
+	}
+	return assembleMulti(ctx, regions, wavFiles, targetRate)
+}
+
+// sequentialRegions builds one region per sample path with sequential MIDI
+// keys from C2 (MIDI 36), the zero SFZ drum kit layout.
+func sequentialRegions(samplePaths []string) ([]sfz.Region, error) {
+	if len(samplePaths) > disk.MaxVoices {
+		return nil, fmt.Errorf("sfzconvert: %d WAV files exceeds maximum of %d voices", len(samplePaths), disk.MaxVoices)
+	}
+	regions := make([]sfz.Region, len(samplePaths))
+	for i, p := range samplePaths {
+		note := uint8(disk.FirstMIDINote + i) //nolint:gosec // G115: bounded by MaxVoices above
+		r := sfz.NewRegion()
+		r.Sample = p
+		r.LoKey = note
+		r.HiKey = note
+		r.PitchKeycenter = note
+		regions[i] = r
+	}
+	return regions, nil
+}
+
+// assembleSingle runs the shared single disk pipeline (rate selection,
+// region conversion, assembly) and returns the dump bytes.
+func assembleSingle(ctx context.Context, regions []sfz.Region, wavFiles map[string]*wav.File, targetRate uint32, fitToDisk bool) (*Result, error) {
+	chosenRate, err := selectRate(regions, wavFiles, targetRate, fitToDisk)
+	if err != nil {
+		return nil, err
+	}
+	rateIdx, _ := disk.RateIndexFor(chosenRate)
+
+	log.Info().
+		Int("count", len(regions)).
+		Uint32("rate", chosenRate).
+		Msg("converting regions")
+
+	voices, keygroups, err := convertVoices(ctx, regions, wavFiles, rateIdx, chosenRate)
+	if err != nil {
+		return nil, err
+	}
+	out, err := voicebuild.AssembleWithKeygroups(voices, keygroups)
+	if err != nil {
+		return nil, fmt.Errorf("sfzconvert: assembling dump: %w", err)
+	}
+	return &Result{FZF: out, Rate: chosenRate}, nil
+}
+
+// assembleMulti runs the shared two disk pipeline. It reports the
+// region count and rate as assembleSingle does: the split is the
+// slowest thing the CLI does, and this line is its only progress
+// signal.
+func assembleMulti(ctx context.Context, regions []sfz.Region, wavFiles map[string]*wav.File, targetRate uint32) (voicebuild.MultiDiskResult, error) {
+	rateIdx, _ := disk.RateIndexFor(targetRate)
+
+	log.Info().
+		Int("count", len(regions)).
+		Uint32("rate", targetRate).
+		Msg("converting regions")
+
+	voices, keygroups, err := convertVoices(ctx, regions, wavFiles, rateIdx, targetRate)
+	if err != nil {
+		return voicebuild.MultiDiskResult{}, err
+	}
+	result, err := voicebuild.AssembleMultiDisk(voices, keygroups)
+	if err != nil {
+		var tmd *voicebuild.ErrTooManyDisks
+		if errors.As(err, &tmd) {
+			return voicebuild.MultiDiskResult{}, fmt.Errorf("%w\nuse --fit-to-disk instead to downsample automatically and fit on a single disk", err)
+		}
+		var ram *voicebuild.ErrSampleRAMExceeded
+		if errors.As(err, &ram) {
+			return voicebuild.MultiDiskResult{}, fmt.Errorf("%w\ntrim or shorten samples to fit within the sampler's 2 MB sample memory", err)
+		}
+		return voicebuild.MultiDiskResult{}, fmt.Errorf("sfzconvert: assembling multi-disk dump: %w", err)
+	}
+	return result, nil
+}
+
 // ConvertDir reads all WAV files from dirPath (sorted alphabetically), assigns
 // each one to a sequential MIDI key starting at C2 (MIDI 36), and writes a
 // full dump to outputPath. This is the zero-SFZ workflow for simple drum kits.
 // The context is checked between WAV loads so a long convert can be cancelled.
+// A stereo WAV is refused: the command carries no channel answer, and a
+// mangled voice is worse than a refusal that names the file.
 func ConvertDir(ctx context.Context, dirPath, outputPath string, targetRate uint32, fitToDisk bool) error {
 	if err := disk.ValidateRate(targetRate); err != nil {
 		return fmt.Errorf("sfzconvert: %w", err)
@@ -107,6 +335,9 @@ func ConvertDir(ctx context.Context, dirPath, outputPath string, targetRate uint
 			Str("file", filepath.Base(p)).
 			Msg("loaded WAV")
 	}
+	if err := refuseStereo(wavFiles); err != nil {
+		return err
+	}
 
 	return convertRegions(ctx, regions, wavFiles, outputPath, targetRate, fitToDisk)
 }
@@ -116,35 +347,20 @@ func ConvertDir(ctx context.Context, dirPath, outputPath string, targetRate uint
 // bank and voice headers plus the first portion of audio. Disk 2 contains
 // pure audio continuation (no bank or voice headers), matching the format
 // the hardware writes when saving a multi-disk instrument. The context is
-// checked between WAV loads.
+// checked between WAV loads. Stereo samples are refused, as they are in
+// Convert.
 func ConvertMultiDisk(ctx context.Context, sfzPath, outputPrefix string, targetRate uint32) error {
-	regions, wavFiles, err := parseSFZAndLoadWAVs(ctx, sfzPath, targetRate)
+	regions, wavFiles, err := parseAndLoad(ctx, nil, sfzPath, targetRate)
 	if err != nil {
 		return err
 	}
-
-	rateIdx, _ := disk.RateIndexFor(targetRate)
-	log.Info().
-		Int("count", len(regions)).
-		Uint32("rate", targetRate).
-		Msg("converting regions")
-
-	voices, keygroups, err := convertVoices(ctx, regions, wavFiles, rateIdx, targetRate)
-	if err != nil {
+	if err := refuseStereo(wavFiles); err != nil {
 		return err
 	}
 
-	result, err := voicebuild.AssembleMultiDisk(voices, keygroups)
+	result, err := assembleMulti(ctx, regions, wavFiles, targetRate)
 	if err != nil {
-		var tmd *voicebuild.ErrTooManyDisks
-		if errors.As(err, &tmd) {
-			return fmt.Errorf("%w\nuse --fit-to-disk instead to downsample automatically and fit on a single disk", err)
-		}
-		var ram *voicebuild.ErrSampleRAMExceeded
-		if errors.As(err, &ram) {
-			return fmt.Errorf("%w\ntrim or shorten samples to fit within the sampler's 2 MB sample memory", err)
-		}
-		return fmt.Errorf("sfzconvert: assembling multi-disk dump: %w", err)
+		return err
 	}
 
 	baseName := filepath.Base(outputPrefix)
@@ -178,21 +394,38 @@ func ConvertMultiDisk(ctx context.Context, sfzPath, outputPrefix string, targetR
 // 9000. If fitToDisk is true the rate is automatically stepped down from
 // targetRate to ensure the output fits on a single floppy disk; an error is
 // returned if even 9000 Hz is too large. The context is checked between
-// WAV loads so a long convert can be cancelled.
+// WAV loads so a long convert can be cancelled. A stereo sample is
+// refused: the command carries no channel answer, so the alternative is
+// a voice of double length at half the pitch.
 func Convert(ctx context.Context, sfzPath, outputPath string, targetRate uint32, fitToDisk bool) error {
-	regions, wavFiles, err := parseSFZAndLoadWAVs(ctx, sfzPath, targetRate)
+	regions, wavFiles, err := parseAndLoad(ctx, nil, sfzPath, targetRate)
 	if err != nil {
+		return err
+	}
+	if err := refuseStereo(wavFiles); err != nil {
 		return err
 	}
 	return convertRegions(ctx, regions, wavFiles, outputPath, targetRate, fitToDisk)
 }
 
-func parseSFZAndLoadWAVs(ctx context.Context, sfzPath string, targetRate uint32) ([]sfz.Region, map[string]*wav.File, error) {
+// parseAndLoad parses the SFZ and reads every referenced WAV. A nil fsys
+// reads from the host filesystem; otherwise everything resolves inside
+// fsys.
+func parseAndLoad(ctx context.Context, fsys fs.FS, sfzPath string, targetRate uint32) ([]sfz.Region, map[string]*wav.File, error) {
 	if err := disk.ValidateRate(targetRate); err != nil {
 		return nil, nil, fmt.Errorf("sfzconvert: %w", err)
 	}
 	log.Info().Str("file", filepath.Base(sfzPath)).Msg("parsing SFZ")
-	regions, warns, err := sfz.Parse(sfzPath)
+	var (
+		regions []sfz.Region
+		warns   []sfz.Warning
+		err     error
+	)
+	if fsys == nil {
+		regions, warns, err = sfz.Parse(sfzPath)
+	} else {
+		regions, warns, err = sfz.ParseFS(fsys, sfzPath)
+	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("sfzconvert: parsing SFZ: %w", err)
 	}
@@ -204,14 +437,14 @@ func parseSFZAndLoadWAVs(ctx context.Context, sfzPath string, targetRate uint32)
 		e.Msg(warn.Message)
 	}
 	log.Debug().Int("count", len(regions)).Msg("loading WAV files")
-	wavFiles, err := loadWAVFiles(ctx, regions)
+	wavFiles, err := loadWAVFiles(ctx, fsys, regions)
 	if err != nil {
 		return nil, nil, err
 	}
 	return regions, wavFiles, nil
 }
 
-func loadWAVFiles(ctx context.Context, regions []sfz.Region) (map[string]*wav.File, error) {
+func loadWAVFiles(ctx context.Context, fsys fs.FS, regions []sfz.Region) (map[string]*wav.File, error) {
 	wavFiles := make(map[string]*wav.File, len(regions))
 	for i, r := range regions {
 		if err := ctx.Err(); err != nil {
@@ -220,7 +453,7 @@ func loadWAVFiles(ctx context.Context, regions []sfz.Region) (map[string]*wav.Fi
 		if _, loaded := wavFiles[r.Sample]; loaded {
 			continue
 		}
-		f, err := fzutil.ReadWAV(r.Sample)
+		f, err := readWAV(fsys, r.Sample)
 		if err != nil {
 			return nil, fmt.Errorf("sfzconvert: region %d (%s): %w", i+1, filepath.Base(r.Sample), err)
 		}
@@ -231,6 +464,23 @@ func loadWAVFiles(ctx context.Context, regions []sfz.Region) (map[string]*wav.Fi
 			Msg("loaded WAV")
 	}
 	return wavFiles, nil
+}
+
+// readWAV reads one WAV from the host filesystem (nil fsys) or from fsys.
+func readWAV(fsys fs.FS, samplePath string) (*wav.File, error) {
+	if fsys == nil {
+		return fzutil.ReadWAV(samplePath)
+	}
+	fh, err := fsys.Open(samplePath)
+	if err != nil {
+		return nil, fmt.Errorf("fzutil: opening WAV %q: %w", samplePath, err)
+	}
+	defer fh.Close() //nolint:errcheck
+	f, err := wav.Read(fh)
+	if err != nil {
+		return nil, fmt.Errorf("fzutil: reading WAV %q: %w", samplePath, err)
+	}
+	return f, nil
 }
 
 func convertVoices(ctx context.Context, regions []sfz.Region, wavFiles map[string]*wav.File, rateIdx uint8, targetRate uint32) ([][]byte, []voicebuild.Keygroup, error) {
@@ -293,26 +543,11 @@ func buildKeygroup(r sfz.Region, muteGroupToGen map[int]uint8) voicebuild.Keygro
 
 // convertRegions is the shared implementation called by both Convert and ConvertDir.
 func convertRegions(ctx context.Context, regions []sfz.Region, wavFiles map[string]*wav.File, outputPath string, targetRate uint32, fitToDisk bool) error {
-	chosenRate, err := selectRate(regions, wavFiles, targetRate, fitToDisk)
+	res, err := assembleSingle(ctx, regions, wavFiles, targetRate, fitToDisk)
 	if err != nil {
 		return err
 	}
-	rateIdx, _ := disk.RateIndexFor(chosenRate)
-
-	log.Info().
-		Int("count", len(regions)).
-		Uint32("rate", chosenRate).
-		Msg("converting regions")
-
-	voices, keygroups, err := convertVoices(ctx, regions, wavFiles, rateIdx, chosenRate)
-	if err != nil {
-		return err
-	}
-
-	out, err := voicebuild.AssembleWithKeygroups(voices, keygroups)
-	if err != nil {
-		return fmt.Errorf("sfzconvert: assembling dump: %w", err)
-	}
+	out := res.FZF
 	log.Info().
 		Str("file", filepath.Base(outputPath)).
 		Str("size", render.FormatBytes(len(out))).
@@ -367,6 +602,10 @@ func selectRate(regions []sfz.Region, wavFiles map[string]*wav.File, targetRate 
 // estimateFZFSize computes the approximate FZF output size in bytes for the
 // given regions and rate without encoding any audio. It accounts for the bank
 // sector, voice area, and per-voice audio blocks (sector-aligned).
+//
+// Length is counted in frames, not samples. A file that reaches the
+// estimate still interleaved would otherwise measure double and step
+// the rate down earlier than it needs to.
 func estimateFZFSize(regions []sfz.Region, wavFiles map[string]*wav.File, targetRate uint32) int {
 	n := len(regions)
 	bankSector := disk.SectorSize
@@ -378,8 +617,12 @@ func estimateFZFSize(regions []sfz.Region, wavFiles map[string]*wav.File, target
 		if !ok {
 			continue
 		}
+		frames := len(f.Samples)
+		if f.Channels > 1 {
+			frames /= int(f.Channels)
+		}
 		ratio := float64(targetRate) / float64(f.SampleRate)
-		outSamples := int(math.Round(float64(len(f.Samples)) * ratio))
+		outSamples := int(math.Round(float64(frames) * ratio))
 		rawBytes := disk.PadToSector(outSamples * disk.BytesPerSample)
 		audioBytes += rawBytes
 	}
@@ -460,6 +703,30 @@ func regionToFZVFromFile(r sfz.Region, f *wav.File, rateIdx uint8, targetRate ui
 	// round-trip leak on fzv extract / sfz export (which read VoiceKeyCentOffset).
 	fzv[disk.VoiceKeyCentOffset] = r.PitchKeycenter
 	return fzv, nil
+}
+
+// walkWAVsFS collects every WAV in fsys at any depth, as slash
+// separated paths from the root. The paths drive the sort order and
+// the voice names. A nested file therefore keeps its folder in the
+// order and its base name as the voice name.
+func walkWAVsFS(fsys fs.FS) ([]string, error) {
+	var paths []string
+	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(strings.ToLower(p), ".wav") {
+			paths = append(paths, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sfzconvert: reading directory: %w", err)
+	}
+	return paths, nil
 }
 
 func countSubdirWAVs(dir string) int {

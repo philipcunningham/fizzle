@@ -77,6 +77,36 @@ func Add(imagePath, filePath string, diskNum uint8) error {
 	return writeToImage(imagePath, fileData, fi.name, fi.fileType, diskNum, fi.nbank, fi.nvoice, fi.nwave)
 }
 
+// AddToImage adds fileData to an in-memory disk image with the same
+// content detection as Add and no filesystem access. Program files are
+// rejected: their name comes from a host filename, which an in-memory
+// caller doesn't have; use Add or AddBytes for those.
+func AddToImage(img *disk.Image, fileData []byte, diskNum uint8) error {
+	if len(fileData) == 0 {
+		return errors.New("diskadd: file is empty")
+	}
+	fi, err := detectFile(fileData)
+	if err != nil {
+		return fmt.Errorf("diskadd: %w", err)
+	}
+	if fi.fileType == disk.TypeProgram {
+		return errors.New("diskadd: program files need a host filename for their name; use Add")
+	}
+	return addToImage(img, fileData, fi.name, fi.fileType, diskNum, fi.nbank, fi.nvoice, fi.nwave)
+}
+
+// AddBytesToImage adds fileData to an in-memory disk image with explicit
+// file type, name, and DIS tail counts: the in-memory twin of AddBytes.
+// Used for multi-disk full dumps, where the counts must be controlled
+// rather than detected (disk 1's wn spans both disks, and disk 2 is a bare
+// audio continuation that content detection cannot classify).
+func AddBytesToImage(img *disk.Image, fileData []byte, name [disk.LabelSize]byte, fileType disk.FileType, diskNum uint8, nbank, nvoice, nwave int) error {
+	if len(fileData) == 0 {
+		return errors.New("diskadd: file is empty")
+	}
+	return addToImage(img, fileData, name, fileType, diskNum, nbank, nvoice, nwave)
+}
+
 func writeToImage(imagePath string, fileData []byte, name [disk.LabelSize]byte, fileType disk.FileType, diskNum uint8, nbank, nvoice, nwave int) error {
 	return fileutil.WithFileLock(imagePath, func() error {
 		img, err := disk.OpenImage(imagePath)
