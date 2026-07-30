@@ -111,6 +111,25 @@ For the full feature set, key bindings, user workflows, and testing approach see
 
 ---
 
+## Browser editor
+
+```sh
+make wasm          # build the browser core
+cd web/app
+npm install
+npm run dev        # then open the printed localhost URL
+```
+
+The browser editor is the same fizzle core compiled to WebAssembly, behind a React front end. Create a disk or open an `.img` file, import WAVs as voices, edit them, then export the image. Voices preview in the tab through Web Audio. It runs from source: the releases carry the CLI only.
+
+Desktop Chromium is the only supported browser. Other browsers and mobile are out of scope.
+
+Everything happens in the tab. The page loads its assets and then makes no network requests, so your samples and disk images never leave the machine.
+
+For the front end layout and its checks see [web/app/README.md](web/app/README.md).
+
+---
+
 ## Logging
 
 `fizzle` logs INFO-level progress to stderr by default. Add `--debug` to see per-file detail:

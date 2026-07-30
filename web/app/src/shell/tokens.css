@@ -1,0 +1,52 @@
+:root {
+  --fz-bg: #000000;
+  --fz-bg-raised: #141414;
+  --fz-bg-panel: #111111;
+  --fz-fg: #ffffff;
+  --fz-fg-dim: #c0c0c0;
+  --fz-fg-faint: #9a9a9a;
+  --fz-accent: #008b8b;
+  --fz-accent-bright: #00cdcd;
+  --fz-warning: #ffb000;
+  --fz-error: #ff4040;
+  --fz-ok: #33d17a;
+  /* The two edge greys. Faint was #333333, which is 1.46 against the
+     raised panel it draws on; since an input's black fill is 1.14
+     against that same panel, the border was the whole of what said
+     where the input began, and it said it at 1.46. Both greys rise
+     together so the quiet edge clears 3:1 (WCAG 1.4.11) and the loud
+     one stays a step above it (Q6). */
+  --fz-border: #8a8a8a;
+  --fz-border-faint: #646464;
+
+  /* The on screen keyboard is the one light surface in a dark app, so
+     its marks carry their own values: what reads on a black key
+     vanishes on a white one. Highlighted, root, label, and focus each
+     come in a dark-surface and a light-surface form. */
+  --fz-key-white: #e8e8e8;
+  --fz-key-white-on: #0e3535;
+  --fz-key-black: #101010;
+  --fz-key-black-on: #0a7070;
+  --fz-key-edge: #333333;
+  --fz-key-label: #5a5a5a;
+  --fz-key-label-on: #c0c0c0;
+  --fz-key-root: #ffb000;
+  --fz-key-root-light: #8a5000;
+  --fz-key-focus-dark: #000000;
+  --fz-key-focus-light: #ffffff;
+
+  --fz-font: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --fz-font-size: 13px;
+  --fz-radius: 3px;
+  --fz-gap: 8px;
+  --fz-focus: 2px solid var(--fz-fg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

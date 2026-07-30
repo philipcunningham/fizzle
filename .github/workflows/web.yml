@@ -13,27 +13,36 @@ on:
       - '.github/workflows/web.yml'
 
 jobs:
-  mockup:
+  app:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: web/mockup
+        working-directory: web/app
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: web/mockup/package-lock.json
+          cache-dependency-path: web/app/package-lock.json
+
+      - name: Build the WASM core
+        run: make wasm
+        working-directory: ${{ github.workspace }}
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Type check and build
-        run: npm run build
+      - name: Check (format, lint, types, tests, build, budget)
+        run: npm run check
 
-      - name: Smoke test
+      - name: Smoke test (WASM round trip)
         run: npm run smoke

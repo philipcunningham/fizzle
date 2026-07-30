@@ -8,8 +8,23 @@ Run the full check suite before submitting changes:
 make check
 ```
 
-This runs formatting, vet, lint, unit tests, CLI integration tests, and fuzz
-seed validation.
+This runs formatting, vet, lint, unit tests, CLI integration tests, fuzz
+seed validation, and the browser checks below.
+
+The browser editor has three of its own targets, and `make check` runs
+all three:
+
+- `make wasm` builds the browser core into the front end's assets
+- `make wasm-check` builds the browser target, catching a broken `js/wasm` build
+- `make web-check` runs the front end chain: format, lint, types, unit tests, build, and the payload budget
+
+Two front end gates sit outside `make check`. Run them from `web/app`:
+
+- `npm run smoke` drives the built app through a browser over the real core
+- `npm run visual` compares per-platform screenshot baselines
+
+CI skips `npm run visual` because the baselines are per-platform, so it
+needs running by hand before a UI change ships.
 
 ## Individual commands
 
@@ -36,6 +51,9 @@ seed validation.
 - `pkg/voice*/` contains voice file operations (import, extract, build, unpack, edit)
 - `pkg/disk*/` contains disk operations (format, list, add, get, copy)
 - `pkg/studio/` contains the interactive Bubble Tea TUI (`fizzle studio`), a workspace-oriented editor for FZ-1 / FZ-10M / FZ-20M sound material. Sub-packages: `app/` (root tea.Model + Update / View, modal stack, save / autosave / recovery, journey tests), `audio/` (audition path via oto with single-in-flight playback and an owner-identity guard), `clock/` (tea.Tick seam for tests), `container/` (pure FZF/disk container byte surgery: compaction, bank grow, area swap/delete/duplicate patches, unit-testable without the TUI), `fznote/` (note-name formatting shared by the layout and area editors), `loader/` (.img / .fzf loader returning a model.Model + ContainerInfo summary), `model/` (in-memory container bytes plus undo/redo and dirty flag), `nav/` (Action enum + keymap), `spaces/{workspace,pool,layout,sound}/` (one sub-package per space), `theme/` (lipgloss palette), and `widgets/` (minimap, status, toast, hint, help, confirm, areaeditor, effectseditor, envelopevisual, lfovisual, samplevisual, topbar). studio's own README is at `pkg/studio/README.md`; it carries the feature spec, key bindings, user workflows, and testing strategy.
+- `pkg/webcore/` is the session facade the browser talks to. It owns the open document, validation, capacity, undo history, and the parameter schema the voice editor renders its controls from. A document is one disk image, or the pair a split instrument spans. Every mutating call is atomic: it returns either a fresh snapshot or a structured error envelope carrying a stable machine code. Canonical state lives here, never in the layers above.
+- `web/wasm/` is the `js/wasm` entry point that exposes the facade to JavaScript. `module/` registers `fizzleCore` on the JS global and wraps each result in an `{ok, value}` or `{ok, error}` envelope. A Go panic is recovered into an envelope rather than crossing the boundary raw. `surface_js.go` pins the import surface the browser build needs, so `make wasm-check` catches a broken `js/wasm` build.
+- `web/app/` is the React and TypeScript front end. `src/boundary/contract.ts` is the typed boundary both sides agree on. `src/core/worker.ts` runs the core in a Web Worker and serialises calls onto it. `src/core/fake.ts` is the hermetic fake the unit tests drive, and `src/shell/` holds the shell and its view state. Screens, controls, and dialogs live in `src/screens/`, `src/ui/`, and `src/dialogs/`. The front end owns view state only; no FZ format logic lives outside the core.
 - `pkg/fzf*/` contains full dump operations (info, midi, output, effects). Note: `fzf build` dispatches to `pkg/voicebuild/`, `fzf unpack` to `pkg/voiceunpack/`, and `fzf edit` to `pkg/voiceedit/`.
 - `pkg/fzb*/` contains bank dump operations (info)
 - `pkg/fzv*/` contains voice info display

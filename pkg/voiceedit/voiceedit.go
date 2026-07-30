@@ -36,6 +36,21 @@ type Patch struct {
 	Bytes  []byte // multi-byte payload; when non-nil takes precedence over Size/Value
 }
 
+// ApplyToFZVBytes applies patches to FZV voice file bytes in place:
+// the same validation and patching as ApplyToFZV with no filesystem.
+func ApplyToFZVBytes(data []byte, patches []Patch) error {
+	if len(data) < disk.SectorSize {
+		return fmt.Errorf("%w (%d bytes, need at least %d)", ErrFileTooSmall, len(data), disk.SectorSize)
+	}
+	if !disk.IsPrintableName(data[disk.VoiceNameOffset : disk.VoiceNameOffset+disk.LabelSize]) {
+		return ErrNotVoiceFile
+	}
+	if err := applyPatches(data, 0, patches); err != nil {
+		return fmt.Errorf("voiceedit: %w", err)
+	}
+	return nil
+}
+
 // ApplyToFZV reads the FZV file at path, applies patches to the voice header,
 // and writes the result back atomically. Offsets are relative to the start of
 // the voice header (byte 0 of the file). The read-modify-write sequence is
@@ -52,14 +67,8 @@ func applyToFZVLocked(path string, patches []Patch) error {
 	if err != nil {
 		return fmt.Errorf("voiceedit: reading FZV: %w", err)
 	}
-	if len(data) < disk.SectorSize {
-		return fmt.Errorf("%w (%d bytes, need at least %d)", ErrFileTooSmall, len(data), disk.SectorSize)
-	}
-	if !disk.IsPrintableName(data[disk.VoiceNameOffset : disk.VoiceNameOffset+disk.LabelSize]) {
-		return fmt.Errorf("%w: %q", ErrNotVoiceFile, path)
-	}
-	if err := applyPatches(data, 0, patches); err != nil {
-		return fmt.Errorf("voiceedit: %w", err)
+	if err := ApplyToFZVBytes(data, patches); err != nil {
+		return err
 	}
 	if err := fileutil.WriteAtomic(path, data); err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
@@ -105,6 +114,31 @@ func applyToFZFVoiceLocked(path string, voiceName string, patches []Patch) error
 		return fmt.Errorf("voiceedit: %w", err)
 	}
 	log.Info().Str("file", filepath.Base(path)).Str("voice", voiceName).Msg("voice parameters updated")
+	return nil
+}
+
+// ApplyToFZFSlotBytes applies patches to one voice slot's header inside
+// FZF full dump bytes, in place: the in-memory, slot-addressed sibling
+// of ApplyToFZFVoice. Key-range patches mirror into every bank site
+// that references the slot, exactly as the file-path edit does.
+func ApplyToFZFSlotBytes(data []byte, slot int, patches []Patch) error {
+	hdr, err := fzutil.ParseFZFHeader(data)
+	if err != nil {
+		return fmt.Errorf("voiceedit: %w", err)
+	}
+	if slot < 0 || slot >= hdr.NVoice {
+		return fmt.Errorf("voiceedit: voice slot must be 0 to %d, got %d", hdr.NVoice-1, slot)
+	}
+	voiceOffset := disk.VoiceSlotOffset(hdr.VoiceAreaStart, slot)
+	if voiceOffset+disk.VoiceHeaderUsed > len(data) {
+		return fmt.Errorf("voiceedit: voice %d header extends beyond file", slot)
+	}
+	if err := applyPatches(data, voiceOffset, patches); err != nil {
+		return fmt.Errorf("voiceedit: %w", err)
+	}
+	if err := syncBankKeyRange(data, hdr, slot, voiceOffset, patches); err != nil {
+		return fmt.Errorf("voiceedit: %w", err)
+	}
 	return nil
 }
 
@@ -383,6 +417,71 @@ const (
 	// modified. It must be outside all valid parameter ranges.
 	Unchanged = -1000
 )
+
+// BuildLoopPatch creates patches setting loop index's start and end
+// sample addresses. The spec reserves flag bits inside both cells (the
+// loop-fine byte in the upper 8 bits of loopst, the skip flag in the
+// MSB of looped); origSt and origEd carry the current cell values so
+// those bits survive the write. start must be below end, and end must
+// fit the 24-bit loopst address space so the pair stays addressable.
+func BuildLoopPatch(index int, start, end uint32, origSt, origEd uint32) ([]Patch, error) {
+	if index < 0 || index >= disk.MaxGenerators {
+		return nil, fmt.Errorf("voiceedit: loop index must be 0 to %d, got %d", disk.MaxGenerators-1, index)
+	}
+	if start >= end {
+		return nil, fmt.Errorf("voiceedit: loop start %d must be below end %d", start, end)
+	}
+	if end > disk.LoopStartAddressMask {
+		return nil, fmt.Errorf("voiceedit: loop end %d exceeds the address space (%d)", end, disk.LoopStartAddressMask)
+	}
+	newSt := (origSt &^ uint32(disk.LoopStartAddressMask)) | start
+	newEd := (origEd &^ uint32(disk.LoopEndAddressMask)) | end
+	stBytes := make([]byte, 4)
+	edBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(stBytes, newSt)
+	binary.LittleEndian.PutUint32(edBytes, newEd)
+	return []Patch{
+		{Offset: disk.VoiceLoopSt0Offset + index*4, Bytes: stBytes},
+		{Offset: disk.VoiceLoopEd0Offset + index*4, Bytes: edBytes},
+	}, nil
+}
+
+// BuildLoopAttrPatch creates patches for loop index's cross-fade and
+// multi-loop time attributes (loopxf and looptm, spec §2-1). Both are
+// 16-bit little-endian entries; xf ranges 0 to disk.MaxLoopXF (0
+// disables the cross-fade) and tm ranges 0 to disk.MaxLoopTm (fresh
+// voices carry 0, so 0 passes even though the spec's lower bound is 1).
+func BuildLoopAttrPatch(index, xf, tm int) ([]Patch, error) {
+	if index < 0 || index >= disk.MaxGenerators {
+		return nil, fmt.Errorf("voiceedit: loop index must be 0 to %d, got %d", disk.MaxGenerators-1, index)
+	}
+	if xf < 0 || xf > disk.MaxLoopXF {
+		return nil, fmt.Errorf("voiceedit: loop cross-fade must be 0 to %d, got %d", disk.MaxLoopXF, xf)
+	}
+	if tm < 0 || tm > disk.MaxLoopTm {
+		return nil, fmt.Errorf("voiceedit: loop time must be 0 to %d, got %d", disk.MaxLoopTm, tm)
+	}
+	return []Patch{
+		{Offset: disk.VoiceLoopXFOffset + index*disk.LoopXFEntrySize, Size: 2, Value: bitconv.NarrowU16(xf)},
+		{Offset: disk.VoiceLoopTmOffset + index*disk.LoopTmEntrySize, Size: 2, Value: bitconv.NarrowU16(tm)},
+	}, nil
+}
+
+// BuildLoopSelectPatch creates patches for the sustain and release
+// loop designations (loop_sus, loop_end). Valid values are 0 to 7 for
+// a loop index, or disk.NoSustainLoop (8) for none.
+func BuildLoopSelectPatch(sustain, release int) ([]Patch, error) {
+	if err := ValidateByte("loop-sustain", sustain, 0, disk.NoSustainLoop); err != nil {
+		return nil, err
+	}
+	if err := ValidateByte("loop-release", release, 0, disk.NoSustainLoop); err != nil {
+		return nil, err
+	}
+	return []Patch{
+		{Offset: disk.VoiceLoopSusOffset, Size: 1, Value: bitconv.NarrowU16(sustain)},
+		{Offset: disk.VoiceLoopEndOffset, Size: 1, Value: bitconv.NarrowU16(release)},
+	}, nil
+}
 
 // BuildTunePatch creates a patch for the voice tuning (DCP field). The value
 // is in 1/256-semitone units and stored as a uint16 (two's complement).

@@ -1,6 +1,7 @@
 package fzfeffects
 
 import (
+	"bytes"
 	"os"
 	"testing"
 
@@ -296,5 +297,51 @@ func TestSetMissingFile(t *testing.T) {
 	_, err := Set("/nonexistent/path.fzf", sp)
 	if err == nil {
 		t.Error("expected error for missing file")
+	}
+}
+
+// ParseBytes and SetBytes are the pure in-memory entry points the web
+// core calls: the same results as Parse and Set with no filesystem.
+func TestParseBytesAndSetBytesMatchPathVersions(t *testing.T) {
+	fzf, path := fzfbuilder.MakeTestFZF(t, []string{"A", "B"})
+
+	fromPath, err := Parse(path)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	fromBytes, err := ParseBytes(fzf)
+	if err != nil {
+		t.Fatalf("ParseBytes: %v", err)
+	}
+	if *fromPath != *fromBytes {
+		t.Fatalf("parses differ:\n%+v\n%+v", fromPath, fromBytes)
+	}
+
+	set := Unchanged()
+	set.BendRange = 24
+	set.ModLFP = 90
+	if _, err := Set(path, set); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	pathData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	inMemory := append([]byte{}, fzf...)
+	if _, err := SetBytes(inMemory, set); err != nil {
+		t.Fatalf("SetBytes: %v", err)
+	}
+	if !bytes.Equal(pathData, inMemory) {
+		t.Fatal("SetBytes differs from Set output")
+	}
+}
+
+func TestSetBytesRejectsOutOfRange(t *testing.T) {
+	fzf, _ := fzfbuilder.MakeTestFZF(t, []string{"A"})
+	set := Unchanged()
+	set.AftDCQ = 200
+	if _, err := SetBytes(fzf, set); err == nil {
+		t.Fatal("out-of-range value accepted")
 	}
 }

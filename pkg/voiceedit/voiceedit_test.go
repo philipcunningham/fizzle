@@ -1,6 +1,7 @@
 package voiceedit
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"os"
@@ -1717,5 +1718,239 @@ func TestConcurrentApplyToFZVSafe(t *testing.T) {
 	}
 	if wonBy < 0 {
 		t.Errorf("final LFORate=%d matches no writer; possible torn write or lost-write race (lock missing?)", final)
+	}
+}
+
+// ApplyToFZVBytes is the pure in-memory entry point the web core
+// calls: the same patching as ApplyToFZV with no filesystem.
+func TestApplyToFZVBytesMatchesApplyToFZV(t *testing.T) {
+	samples := make([]int16, 2000)
+	for i := range samples {
+		samples[i] = int16(i % 211)
+	}
+	original := voiceimport.Encode(samples, 1, "PATCH ME", 0, voiceimport.NoLoop())
+
+	patches, err := BuildFilterPatches(88, 5)
+	if err != nil {
+		t.Fatalf("BuildFilterPatches: %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "PATCH ME.fzv")
+	if err := os.WriteFile(path, bytes.Clone(original), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := ApplyToFZV(path, patches); err != nil {
+		t.Fatalf("ApplyToFZV: %v", err)
+	}
+	fromFile, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	inMemory := bytes.Clone(original)
+	if err := ApplyToFZVBytes(inMemory, patches); err != nil {
+		t.Fatalf("ApplyToFZVBytes: %v", err)
+	}
+	if !bytes.Equal(fromFile, inMemory) {
+		t.Fatal("ApplyToFZVBytes differs from ApplyToFZV output")
+	}
+}
+
+func TestApplyToFZVBytesRejectsNonVoice(t *testing.T) {
+	patches, err := BuildFilterPatches(1, Unchanged)
+	if err != nil {
+		t.Fatalf("BuildFilterPatches: %v", err)
+	}
+	junk := make([]byte, disk.SectorSize*2)
+	if err := ApplyToFZVBytes(junk, patches); err == nil {
+		t.Fatal("non-voice bytes accepted")
+	}
+}
+
+// BuildLoopPatch writes a loop's start and end sample addresses while
+// preserving the spec's flag bits: the loop-fine byte in the upper 8
+// bits of loopst and the skip flag in the MSB of looped.
+func TestBuildLoopPatchPreservesFlagBits(t *testing.T) {
+	samples := make([]int16, 4096)
+	voice := voiceimport.Encode(samples, 1, "LOOPY", 0, voiceimport.LoopParams{LoopStart: 100, LoopEnd: 2000})
+
+	// Plant flag bits the patch must not disturb.
+	stOff := disk.VoiceLoopSt0Offset
+	edOff := disk.VoiceLoopEd0Offset
+	st := binary.LittleEndian.Uint32(voice[stOff : stOff+4])
+	ed := binary.LittleEndian.Uint32(voice[edOff : edOff+4])
+	binary.LittleEndian.PutUint32(voice[stOff:], st|0xAB000000)
+	binary.LittleEndian.PutUint32(voice[edOff:], ed|0x80000000)
+
+	origSt := binary.LittleEndian.Uint32(voice[stOff : stOff+4])
+	origEd := binary.LittleEndian.Uint32(voice[edOff : edOff+4])
+	patches, err := BuildLoopPatch(0, 300, 3000, origSt, origEd)
+	if err != nil {
+		t.Fatalf("BuildLoopPatch: %v", err)
+	}
+	if err := ApplyToFZVBytes(voice, patches); err != nil {
+		t.Fatalf("ApplyToFZVBytes: %v", err)
+	}
+
+	gotSt := binary.LittleEndian.Uint32(voice[stOff : stOff+4])
+	gotEd := binary.LittleEndian.Uint32(voice[edOff : edOff+4])
+	if disk.LoopStartAddress(gotSt) != 300 {
+		t.Fatalf("start = %d, want 300", disk.LoopStartAddress(gotSt))
+	}
+	if disk.LoopEndAddress(gotEd) != 3000 {
+		t.Fatalf("end = %d, want 3000", disk.LoopEndAddress(gotEd))
+	}
+	if gotSt>>24 != 0xAB {
+		t.Fatalf("loop-fine byte clobbered: %#x", gotSt)
+	}
+	if gotEd&0x80000000 == 0 {
+		t.Fatal("skip flag clobbered")
+	}
+}
+
+func TestBuildLoopPatchRejects(t *testing.T) {
+	if _, err := BuildLoopPatch(8, 0, 10, 0, 0); err == nil {
+		t.Fatal("index 8 accepted")
+	}
+	if _, err := BuildLoopPatch(-1, 0, 10, 0, 0); err == nil {
+		t.Fatal("negative index accepted")
+	}
+	if _, err := BuildLoopPatch(0, 10, 10, 0, 0); err == nil {
+		t.Fatal("collapsed loop accepted")
+	}
+	if _, err := BuildLoopPatch(0, 0, disk.LoopStartAddressMask+1, 0, 0); err == nil {
+		t.Fatal("end past the address mask accepted")
+	}
+}
+
+// BuildLoopSelectPatch sets the sustain and release loop designations.
+func TestBuildLoopSelectPatch(t *testing.T) {
+	samples := make([]int16, 1024)
+	voice := voiceimport.Encode(samples, 1, "SEL", 0, voiceimport.NoLoop())
+	patches, err := BuildLoopSelectPatch(2, 5)
+	if err != nil {
+		t.Fatalf("BuildLoopSelectPatch: %v", err)
+	}
+	if err := ApplyToFZVBytes(voice, patches); err != nil {
+		t.Fatalf("ApplyToFZVBytes: %v", err)
+	}
+	if voice[disk.VoiceLoopSusOffset] != 2 || voice[disk.VoiceLoopEndOffset] != 5 {
+		t.Fatalf("sus/end = %d/%d, want 2/5", voice[disk.VoiceLoopSusOffset], voice[disk.VoiceLoopEndOffset])
+	}
+	if _, err := BuildLoopSelectPatch(9, 0); err == nil {
+		t.Fatal("sustain 9 accepted (8 means none)")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Loop attribute (XF/Tm) and slot-addressed patching tests
+// ---------------------------------------------------------------------------
+
+func TestBuildLoopAttrPatchRoundTrips(t *testing.T) {
+	t.Parallel()
+	path := buildTestFZV(t)
+
+	patches, err := BuildLoopAttrPatch(2, 512, 700)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyToFZV(path, patches); err != nil {
+		t.Fatal(err)
+	}
+
+	params := parseFZV(t, path)
+	if params.AllLoops[2].XF != 512 || params.AllLoops[2].Tm != 700 {
+		t.Errorf("loop 2 attrs: got XF %d Tm %d, want 512 700", params.AllLoops[2].XF, params.AllLoops[2].Tm)
+	}
+	// Neighbouring entries stay untouched.
+	if params.AllLoops[1].XF != 0 || params.AllLoops[3].XF != 0 {
+		t.Errorf("neighbour XF entries changed: %d %d", params.AllLoops[1].XF, params.AllLoops[3].XF)
+	}
+}
+
+func TestBuildLoopAttrPatchRejections(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name          string
+		index, xf, tm int
+	}{
+		{"index low", -1, 0, 0},
+		{"index high", disk.MaxGenerators, 0, 0},
+		{"xf high", 0, disk.MaxLoopXF + 1, 0},
+		{"xf negative", 0, -1, 0},
+		{"tm high", 0, 0, disk.MaxLoopTm + 1},
+		{"tm negative", 0, 0, -1},
+	}
+	for _, tc := range cases {
+		if _, err := BuildLoopAttrPatch(tc.index, tc.xf, tc.tm); err == nil {
+			t.Errorf("%s: expected an error", tc.name)
+		}
+	}
+}
+
+// TestApplyToFZFSlotBytesMatchesByName pins the in-memory slot path to
+// the file path, byte for byte, including the bank key-range fan-out.
+func TestApplyToFZFSlotBytesMatchesByName(t *testing.T) {
+	t.Parallel()
+	fzfPath := extractTestFZF(t, "../../testdata/synthetic/TECHNO.img", "FULL-DATA-FZ")
+	original, err := os.ReadFile(fzfPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hdr, err := fzutil.ParseFZFHeader(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets, _, err := fzutil.ResolveVoiceTargets(original, hdr, []string{"COWBELL"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot := targets[0]
+
+	// Key-range patches exercise the bank fan-out; LFO exercises plain
+	// header bytes.
+	keyPatches, err := BuildKeyRangePatch(40, 80, 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lfoPatches, perr := BuildLFOPatches(0, 30, Unchanged, Unchanged, Unchanged, Unchanged, 60, Unchanged, 0)
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	patches := make([]Patch, 0, len(keyPatches)+len(lfoPatches))
+	patches = append(patches, keyPatches...)
+	patches = append(patches, lfoPatches...)
+
+	if err := ApplyToFZFVoice(fzfPath, "COWBELL", patches); err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile(fzfPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := make([]byte, len(original))
+	copy(got, original)
+	if err := ApplyToFZFSlotBytes(got, slot, patches); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Error("slot-addressed patch differs from the name-addressed file patch")
+	}
+}
+
+func TestApplyToFZFSlotBytesBounds(t *testing.T) {
+	t.Parallel()
+	fzfPath := extractTestFZF(t, "../../testdata/synthetic/TECHNO.img", "FULL-DATA-FZ")
+	data, err := os.ReadFile(fzfPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	patches, _ := BuildTunePatch(0)
+	if err := ApplyToFZFSlotBytes(data, -1, patches); err == nil {
+		t.Error("expected an error for a negative slot")
+	}
+	if err := ApplyToFZFSlotBytes(data, 9999, patches); err == nil {
+		t.Error("expected an error for a slot past the voice count")
 	}
 }

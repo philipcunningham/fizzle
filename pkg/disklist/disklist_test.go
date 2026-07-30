@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -384,5 +385,30 @@ func TestRenderJSONIsValidJSON(t *testing.T) {
 	}
 	if decoded.Label != "VALID" {
 		t.Errorf("decoded label = %q, want VALID", decoded.Label)
+	}
+}
+
+// ParseImage is the pure in-memory entry point the web core calls:
+// the same listing as Parse with no filesystem.
+func TestParseImageMatchesParse(t *testing.T) {
+	path := filepath.Join("..", "..", "testdata", "synthetic", "TECHNO.img")
+	fromPath, err := Parse(path)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	img, err := disk.ReadImage(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("ReadImage: %v", err)
+	}
+	fromImage, err := ParseImage(img)
+	if err != nil {
+		t.Fatalf("ParseImage: %v", err)
+	}
+	if !reflect.DeepEqual(fromPath, fromImage) {
+		t.Fatalf("listings differ:\n%+v\n%+v", fromPath, fromImage)
 	}
 }

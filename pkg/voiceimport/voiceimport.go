@@ -28,39 +28,52 @@ const (
 	MinTranspose = -127
 )
 
+// Channel selects how a stereo WAV becomes the mono signal the FZ
+// stores. Semantics match the studio TUI's import prompt.
+type Channel int
+
+const (
+	// ChannelMonoOnly rejects stereo input; the caller must ask.
+	ChannelMonoOnly Channel = iota
+	// ChannelLeft takes the left channel of a stereo file.
+	ChannelLeft
+	// ChannelRight takes the right channel.
+	ChannelRight
+	// ChannelMix averages the channels per frame.
+	ChannelMix
+)
+
 // Import converts the WAV at wavPath to an FZV voice file at fzvPath.
-// targetRate must be 36000, 18000, or 9000. The output is written atomically.
+// targetRate must be 36000, 18000, or 9000. Stereo input is rejected,
+// naming wavPath and the routes to a mono source; callers that carry a
+// channel choice use ImportBytes. The output is written atomically.
 func Import(wavPath, fzvPath string, targetRate uint32) error {
 	if err := disk.ValidateRate(targetRate); err != nil {
 		return fmt.Errorf("voiceimport: %w", err)
 	}
-	idx, _ := disk.RateIndexFor(targetRate)
-
+	// ReadWAV streams the file through wav.Read, which bounds itself at
+	// limits.MaxRead, so nothing buffers the whole WAV. Its errors name
+	// the path already, which is what E1 asks for.
 	f, err := fzutil.ReadWAV(wavPath)
 	if err != nil {
 		return fmt.Errorf("voiceimport: %w", err)
 	}
-
-	samples, err := fzutil.Resample(f, targetRate)
-	if err != nil {
-		return fmt.Errorf("voiceimport: %w", err)
+	// The CLI has no channel flag, so name the file the user typed and
+	// give a remedy that exists.
+	if f.Channels >= 2 {
+		return fmt.Errorf("voiceimport: %q is stereo and fzv import writes mono only; convert it to mono first", wavPath)
 	}
-
 	name := fzutil.VoiceName(wavPath)
+	data, nSamples, err := encodeVoice(f, name, targetRate, ChannelMonoOnly)
+	if err != nil {
+		return err
+	}
 	log.Info().
 		Str("wav", filepath.Base(wavPath)).
 		Str("name", name).
 		Uint32("rate", targetRate).
-		Int("samples", len(samples)).
+		Int("samples", nSamples).
 		Msg("importing voice")
-	data := Encode(samples, idx, name, 0, scaledLoop(f, targetRate, len(samples)))
-	// Honour the SMPL chunk's MIDIUnityNote so a WAV produced by `fzv extract`
-	// (which embeds the source voice's root key) round-trips its cent byte
-	// when re-imported. MIDIUnityNote=0 is the WAV "unset" sentinel; leave the
-	// Encode default in place in that case.
-	if f.MIDIUnityNote != 0 && len(data) > disk.VoiceKeyCentOffset {
-		data[disk.VoiceKeyCentOffset] = f.MIDIUnityNote
-	}
 	log.Debug().
 		Str("fzv", fzvPath).
 		Str("size", fmt.Sprintf("%d bytes", len(data))).
@@ -75,6 +88,63 @@ func Import(wavPath, fzvPath string, targetRate uint32) error {
 		return fmt.Errorf("voiceimport: %w", err)
 	}
 	return nil
+}
+
+// ImportBytes converts WAV bytes to FZV voice file bytes in memory:
+// the same pipeline as Import with no filesystem. A stereo file is
+// reduced to mono per channel; ChannelMonoOnly rejects it instead.
+func ImportBytes(wavData []byte, name string, targetRate uint32, channel Channel) ([]byte, error) {
+	if err := disk.ValidateRate(targetRate); err != nil {
+		return nil, fmt.Errorf("voiceimport: %w", err)
+	}
+	f, err := wav.Read(bytes.NewReader(wavData))
+	if err != nil {
+		return nil, fmt.Errorf("voiceimport: %w", err)
+	}
+	data, _, err := encodeVoice(f, name, targetRate, channel)
+	return data, err
+}
+
+// encodeVoice reduces a parsed WAV to mono, resamples it to targetRate,
+// and encodes the FZV bytes. It returns the encoded voice and the
+// resampled sample count, which Import reports. Errors carry the
+// package prefix only; a caller holding a path adds it.
+func encodeVoice(f *wav.File, name string, targetRate uint32, channel Channel) ([]byte, int, error) {
+	if err := disk.ValidateRate(targetRate); err != nil {
+		return nil, 0, fmt.Errorf("voiceimport: %w", err)
+	}
+	idx, _ := disk.RateIndexFor(targetRate)
+
+	if f.Channels >= 2 {
+		switch channel {
+		case ChannelLeft:
+			f.Samples = f.ExtractChannel(0)
+		case ChannelRight:
+			f.Samples = f.ExtractChannel(1)
+		case ChannelMix:
+			f.Samples = f.MixChannels()
+		case ChannelMonoOnly:
+			return nil, 0, fmt.Errorf("voiceimport: %q is stereo; choose left, right, or mix", name)
+		default:
+			return nil, 0, fmt.Errorf("voiceimport: invalid channel %d", channel)
+		}
+		f.Channels = 1
+	}
+
+	samples, err := fzutil.Resample(f, targetRate)
+	if err != nil {
+		return nil, 0, fmt.Errorf("voiceimport: %w", err)
+	}
+
+	data := Encode(samples, idx, name, 0, scaledLoop(f, targetRate, len(samples)))
+	// Honour the SMPL chunk's MIDIUnityNote so a WAV produced by `fzv extract`
+	// (which embeds the source voice's root key) round-trips its cent byte
+	// when re-imported. MIDIUnityNote=0 is the WAV "unset" sentinel; leave the
+	// Encode default in place in that case.
+	if f.MIDIUnityNote != 0 && len(data) > disk.VoiceKeyCentOffset {
+		data[disk.VoiceKeyCentOffset] = f.MIDIUnityNote
+	}
+	return data, len(samples), nil
 }
 
 // voiceHeader mirrors struct voicedata from the FZ-1 Data Structures document.

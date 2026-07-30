@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -239,6 +240,34 @@ func TestParseRejectsTextLikeFile(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "does not look like a voice file") {
 		t.Errorf("expected 'does not look like a voice file' in error: %v", err)
+	}
+}
+
+// Both rejections name what they read: the path when the caller
+// passed one, the data when it passed bytes. The neighbouring "does
+// not look like a voice file" branch has always named the path, and a
+// short file is the other half of the same refusal.
+func TestParseRejectionsNameWhatTheyRead(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "stub.fzv")
+	if err := os.WriteFile(p, make([]byte, 16), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Parse(p)
+	if err == nil {
+		t.Fatal("expected an error for a file below one sector")
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("%q is too small", p)) {
+		t.Errorf("Parse should name the file it read; got: %v", err)
+	}
+
+	_, err = ParseBytes(make([]byte, 16))
+	if err == nil {
+		t.Fatal("expected an error for bytes below one sector")
+	}
+	if !strings.Contains(err.Error(), "data is too small") {
+		t.Errorf("ParseBytes holds no path, so it speaks of the data; got: %v", err)
 	}
 }
 
@@ -831,4 +860,94 @@ func TestParseNormalVariantPlaybackMode(t *testing.T) {
 	if strings.Contains(buf.String(), "unknown") {
 		t.Errorf("Info output should not say 'unknown' for the documented variant:\n%s", buf.String())
 	}
+}
+
+// ParseBytes is the pure in-memory entry point the web core calls:
+// the same parse as Parse with no filesystem.
+func TestParseBytesMatchesParse(t *testing.T) {
+	samples := make([]int16, 2500)
+	for i := range samples {
+		samples[i] = int16(i % 173)
+	}
+	data := voiceimport.Encode(samples, 1, "PARSE ME", 0, voiceimport.NoLoop())
+
+	path := filepath.Join(t.TempDir(), "PARSE ME.fzv")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	fromPath, err := Parse(path)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	fromBytes, err := ParseBytes(data)
+	if err != nil {
+		t.Fatalf("ParseBytes: %v", err)
+	}
+	if !reflect.DeepEqual(fromPath, fromBytes) {
+		t.Fatalf("parses differ:\n%+v\n%+v", fromPath, fromBytes)
+	}
+}
+
+func TestParseBytesRejectsGarbage(t *testing.T) {
+	if _, err := ParseBytes([]byte("not a voice")); err == nil {
+		t.Fatal("garbage accepted")
+	}
+}
+
+// AllLoops exposes all eight loop entries (masked addresses) for the
+// Web UI's loop table. It stays out of the JSON so the corpus
+// snapshots hold.
+func TestParseBytesExposesAllLoops(t *testing.T) {
+	samples := make([]int16, 4096)
+	data := voiceimport.Encode(samples, 1, "LOOPS", 0, voiceimport.LoopParams{LoopStart: 64, LoopEnd: 1024})
+	vp, err := ParseBytes(data)
+	if err != nil {
+		t.Fatalf("ParseBytes: %v", err)
+	}
+	if vp.AllLoops[0].Start != 64 || vp.AllLoops[0].End != 1024 {
+		t.Fatalf("loop 0 = %+v, want 64..1024", vp.AllLoops[0])
+	}
+	if vp.AllLoops[0].Start != vp.LoopStart || vp.AllLoops[0].End != vp.LoopEnd {
+		t.Fatal("loop 0 disagrees with the active loop fields")
+	}
+	out, err := json.Marshal(vp)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(out), "AllLoops") || strings.Contains(string(out), "all_loops") {
+		t.Fatal("AllLoops leaked into the JSON surface")
+	}
+}
+
+// A rejection has to name the file the user typed (E1). The bytes
+// entry point has no path, so it speaks of the data instead.
+func TestParseNamesTheFileItRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "NOT A VOICE.fzv")
+	if err := os.WriteFile(path, []byte("plain text, not a voice file"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := Parse(path)
+	if err == nil {
+		t.Fatal("garbage accepted by Parse")
+	}
+	if !namesPath(err, path) {
+		t.Errorf("error should name the file; got: %v", err)
+	}
+
+	_, err = ParseBytes([]byte("plain text, not a voice file"))
+	if err == nil {
+		t.Fatal("garbage accepted by ParseBytes")
+	}
+	if !strings.Contains(err.Error(), "data") {
+		t.Errorf("the bytes entry point should speak of the data; got: %v", err)
+	}
+}
+
+// namesPath reports whether err names path the way this package writes
+// it, quoted with %q. That escapes a backslash, so a raw comparison
+// misses every Windows path and any name holding one.
+func namesPath(err error, path string) bool {
+	return err != nil && strings.Contains(err.Error(), fmt.Sprintf("%q", path))
 }

@@ -43,6 +43,9 @@ jobs:
       - name: Vet
         run: make vet
 
+      - name: WASM build check
+        run: make wasm-check
+
       - name: Lint
         if: matrix.os == 'ubuntu-latest'
         uses: golangci/golangci-lint-action@v7
