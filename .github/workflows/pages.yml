@@ -1,0 +1,69 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The published branch is rewritten each time, so the token needs write
+# access to contents and nothing else.
+permissions:
+  contents: write
+
+# A queued deploy for an older commit would overwrite a newer one, so
+# let the latest push win and cancel the rest.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/app/package-lock.json
+
+      - name: Build the browser core
+        run: make wasm
+
+      - name: Install dependencies
+        working-directory: web/app
+        run: npm ci
+
+      # A project site serves from /<repo>/, and the core is fetched at
+      # runtime rather than imported, so the base has to reach the
+      # bundle. npm run base-check proves it did.
+      - name: Build the site
+        working-directory: web/app
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: |
+          npm run build
+          npm run base-check
+
+      # Pages runs Jekyll unless told otherwise, which would drop any
+      # path it treats as private.
+      - name: Keep Pages from processing the output
+        run: touch web/app/dist/.nojekyll
+
+      - name: Publish to deploy
+        working-directory: web/app/dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init -b deploy
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "publish ${GITHUB_SHA} [skip ci]"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin deploy

@@ -299,7 +299,10 @@ void ready.catch(() => undefined);
 
 async function boot(): Promise<void> {
   const go = new Go();
-  const response = await fetch("/fizzle.wasm");
+  // Relative to the deployed base, not the server root: a project site
+  // serves from a sub-path, and an absolute URL 404s the core there
+  // while the shell loads fine.
+  const response = await fetch(`${import.meta.env.BASE_URL}fizzle.wasm`);
   if (!response.ok) {
     throw new Error(`the core module did not load (HTTP ${String(response.status)})`);
   }
