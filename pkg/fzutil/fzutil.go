@@ -68,32 +68,47 @@ const MinSampleRate = 1000
 // target hardware, so we refuse rather than allocate the buffer.
 const MaxResampleOut = disk.MaxSampleRAM / disk.BytesPerSample
 
+// ResampledLen returns the sample count Resample produces for frames
+// input samples converted from src to dst, applying the same guards.
+// Callers estimating a conversion's size share this with the
+// conversion itself, so the two can never disagree.
+func ResampledLen(frames int, src, dst uint32) (int, error) {
+	if frames <= 0 {
+		return 0, errors.New("fzutil: WAV contains no samples")
+	}
+	if src == 0 {
+		return 0, errors.New("fzutil: WAV has zero sample rate")
+	}
+	if src < MinSampleRate {
+		return 0, fmt.Errorf("fzutil: source sample rate %d Hz is below minimum %d Hz", src, MinSampleRate)
+	}
+	if src == dst {
+		return frames, nil
+	}
+	// Compute the resampled length in 64-bit floating point to avoid int
+	// overflow for pathological inputs, then bounds-check before allocating.
+	outLenF := math.Round(float64(frames) * float64(dst) / float64(src))
+	if outLenF > float64(MaxResampleOut) {
+		return 0, fmt.Errorf("fzutil: resampled length %.0f exceeds maximum %d samples", outLenF, MaxResampleOut)
+	}
+	outLen := int(outLenF)
+	if outLen < 1 {
+		outLen = 1
+	}
+	return outLen, nil
+}
+
 // Resample converts f.Samples to targetRate using linear interpolation.
 // Returns a copy when the rates are equal.
 func Resample(f *wav.File, targetRate uint32) ([]int16, error) {
-	if len(f.Samples) == 0 {
-		return nil, errors.New("fzutil: WAV contains no samples")
-	}
-	if f.SampleRate == 0 {
-		return nil, errors.New("fzutil: WAV has zero sample rate")
-	}
-	if f.SampleRate < MinSampleRate {
-		return nil, fmt.Errorf("fzutil: source sample rate %d Hz is below minimum %d Hz", f.SampleRate, MinSampleRate)
+	outLen, err := ResampledLen(len(f.Samples), f.SampleRate, targetRate)
+	if err != nil {
+		return nil, err
 	}
 	if f.SampleRate == targetRate {
 		out := make([]int16, len(f.Samples))
 		copy(out, f.Samples)
 		return out, nil
-	}
-	// Compute the resampled length in 64-bit floating point to avoid int
-	// overflow for pathological inputs, then bounds-check before allocating.
-	outLenF := math.Round(float64(len(f.Samples)) * float64(targetRate) / float64(f.SampleRate))
-	if outLenF > float64(MaxResampleOut) {
-		return nil, fmt.Errorf("fzutil: resampled length %.0f exceeds maximum %d samples", outLenF, MaxResampleOut)
-	}
-	outLen := int(outLenF)
-	if outLen < 1 {
-		outLen = 1
 	}
 	out := make([]int16, outLen)
 	src := f.Samples
