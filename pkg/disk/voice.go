@@ -356,13 +356,15 @@ const (
 
 // Key range and MIDI defaults.
 const (
-	FirstMIDINote      = 36
-	MaxMIDIChannel     = 16
-	MaxMIDINote        = 127
-	DefaultVoiceName   = "VOICE"
-	DefaultKeyHigh     = 96
-	DefaultKeyLow      = 36
-	DefaultKeyCentre   = 72
+	FirstMIDINote    = 36
+	MaxMIDIChannel   = 16
+	MaxMIDINote      = 127
+	DefaultVoiceName = "VOICE"
+	DefaultKeyHigh   = 96
+	DefaultKeyLow    = 36
+	// DefaultKeyCentre roots imported audio at C4 (MIDI 60), the SFZ
+	// pitch_keycenter default, so C4 plays the recorded pitch.
+	DefaultKeyCentre   = 60
 	MaxGenerators      = 8
 	PolyphonicAudioOut = 0xff
 	DefaultVelLow      = 1

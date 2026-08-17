@@ -762,3 +762,17 @@ func TestNamesPathSeesAQuotedPath(t *testing.T) {
 func namesPath(err error, path string) bool {
 	return err != nil && strings.Contains(err.Error(), fmt.Sprintf("%q", path))
 }
+
+// TestImportDefaultRootKey pins the default root at MIDI 60 (C4): a
+// WAV with no SMPL chunk plays at its recorded pitch on C4, matching
+// the SFZ pitch_keycenter default.
+func TestImportDefaultRootKey(t *testing.T) {
+	t.Parallel()
+	data, err := ImportBytes(monoWAVBytes(t, []int16{1, 2, 3, 4}, 18000), "ROOT", 18000, ChannelMonoOnly)
+	if err != nil {
+		t.Fatalf("ImportBytes: %v", err)
+	}
+	if got := data[disk.VoiceKeyCentOffset]; got != 60 {
+		t.Errorf("default root key = %d, want 60 (C4)", got)
+	}
+}

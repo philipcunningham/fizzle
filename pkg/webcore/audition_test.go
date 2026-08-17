@@ -21,8 +21,8 @@ func TestAuditionPCMMatchesExtract(t *testing.T) {
 	if a.SampleRate != 18000 {
 		t.Fatalf("rate = %d, want 18000", a.SampleRate)
 	}
-	if a.Root != 72 {
-		t.Fatalf("root = %d, want the import default C5 (72)", a.Root)
+	if a.Root != 60 {
+		t.Fatalf("root = %d, want the import default C4 (60)", a.Root)
 	}
 
 	// The same bytes the CLI would extract.
