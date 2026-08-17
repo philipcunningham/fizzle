@@ -21,6 +21,7 @@ const (
 
 	ReasonSampleMemory = "sample-memory"
 	ReasonDiskRoom     = "disk-room"
+	ReasonVoiceLimit   = "voice-limit"
 )
 
 // ImportEstimate is the authoritative pre-flight answer for a WAV
@@ -35,7 +36,9 @@ type ImportEstimate struct {
 	// Seconds is the batch's play time at the target rate.
 	Seconds float64 `json:"seconds"`
 	// RoomSeconds is how much more mono audio the document holds at
-	// the target rate before an import is refused.
+	// the target rate within its current disk count, bounded by real
+	// free sectors and the sampler's sample memory. A larger import
+	// may still land by splitting; the verdict reports that.
 	RoomSeconds float64 `json:"roomSeconds"`
 	Verdict     string  `json:"verdict"`
 	// Reason narrows VerdictWontFit; empty otherwise.
@@ -225,9 +228,16 @@ func estimateAt(profiles []wavProfile, doc *docProfile, rate uint32) *ImportEsti
 		if doc.placeholder {
 			newSlots--
 		}
+		// The format holds 64 voices; every import path refuses the
+		// 65th, and no rate changes the count.
+		if newSlots > disk.MaxVoices {
+			return &ImportEstimate{Verdict: VerdictWontFit, Reason: ReasonVoiceLimit, Seconds: seconds}
+		}
 		growth = (disk.VoiceAreaSectors(newSlots)-disk.VoiceAreaSectors(doc.voiceSlots))*disk.SectorSize + audioSum
 		newLen = doc.dumpLen + growth
 		splitCapable = true
+	case len(profiles) > disk.MaxVoices:
+		return &ImportEstimate{Verdict: VerdictWontFit, Reason: ReasonVoiceLimit, Seconds: seconds}
 	case len(profiles) > 1:
 		// The folder kit: one bank sector plus the voice area the
 		// batch needs.
@@ -272,13 +282,25 @@ func fitsFreeSectors(doc *docProfile, newLen int) bool {
 }
 
 // roomSeconds converts the document's remaining capacity to play
-// time at the target rate: the tighter of disk room and the
-// sampler's sample memory.
+// time at the target rate: the tightest of the dump maximum, the
+// disk's real free sectors (loose files eat them), and the sampler's
+// sample memory. The figure covers the document's current disk
+// count; a larger import may still land by splitting, which the
+// verdict reports separately.
 func roomSeconds(doc *docProfile, rate uint32) float64 {
 	room := min(
 		doc.disks*voicebuild.MaxDiskFileBytes-doc.dumpLen,
 		disk.MaxSampleRAM-doc.audioBytes,
 	)
+	if doc.hasImage && doc.disks == 1 {
+		// The same arithmetic fitsFreeSectors applies: the rewritten
+		// dump lands in what the old one gives back plus what is free.
+		oldSectors := 0
+		if doc.dumpLen > 0 {
+			oldSectors = sectorPad(doc.dumpLen) / disk.SectorSize
+		}
+		room = min(room, (doc.freeSectors+oldSectors)*disk.SectorSize-doc.dumpLen)
+	}
 	if room < 0 {
 		room = 0
 	}

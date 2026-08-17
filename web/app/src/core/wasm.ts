@@ -219,9 +219,12 @@ export function createWasmCore(): Core {
       return call<Snapshot>("addBank", payload, [payload.buffer]);
     },
     importWavToInstrument: (filename, bytes, rate, channel) => {
+      // A copy is what crosses: the dialog keeps its bytes for the
+      // estimate and for a retry after a mid-batch failure, so the
+      // transfer must never detach the caller's buffer.
       const payload: ImportWavPayload = {
         filename,
-        buffer: bytes.buffer as ArrayBuffer,
+        buffer: bytes.slice().buffer,
         rate,
         channel,
       };
@@ -310,7 +313,9 @@ export function createWasmCore(): Core {
   };
 }
 
-// Folder imports move every file's buffer across as a transferable.
+// Folder imports move a copy of every file's buffer across as a
+// transferable: the transfer is for speed, and the caller's own bytes
+// stay usable for estimates and retries.
 function folderPayload(
   files: Record<string, Uint8Array>,
   sfzPath: string,
@@ -321,7 +326,7 @@ function folderPayload(
 ): FolderPayload {
   const buffers: Record<string, ArrayBuffer> = {};
   for (const [name, bytes] of Object.entries(files)) {
-    buffers[name] = bytes.buffer as ArrayBuffer;
+    buffers[name] = bytes.slice().buffer;
   }
   return { files: buffers, sfzPath, rate, fitToDisk, split, channel };
 }

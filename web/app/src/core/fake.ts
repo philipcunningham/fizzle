@@ -848,6 +848,16 @@ export function createFakeCore(): Core {
         if (!shape) {
           return Promise.resolve(err("invalid-wav", `${name}: not a readable WAV`));
         }
+        // Mirrors fzutil.MinSampleRate: the core refuses rates a real
+        // recording never carries before doing any arithmetic on them.
+        if (shape.rate < 1000) {
+          return Promise.resolve(
+            err(
+              "invalid-wav",
+              `${name}: sample rate ${String(shape.rate)} Hz is below minimum 1000 Hz`,
+            ),
+          );
+        }
         shapes.push({ name, ...shape });
       }
       const dump = state.files.find((f) => f.type === "full");
@@ -883,6 +893,10 @@ export function createFakeCore(): Core {
           base.seconds += samples / target;
         }
         const creating = state.instrument === null;
+        const slots = (state.instrument?.voices.length ?? 0) + shapes.length;
+        if (slots > 64) {
+          return { ...base, verdict: "wont-fit", reason: "voice-limit" };
+        }
         base.bytes = audio + (creating ? FAKE_DUMP_BASE : 0);
         const newLen = dumpLen + base.bytes;
         const splitCapable = !creating || shapes.length > 1;

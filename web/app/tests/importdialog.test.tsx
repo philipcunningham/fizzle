@@ -6,7 +6,7 @@
 // only in the footer.
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { Core, Snapshot } from "../src/boundary/contract";
+import type { Core, SFZImportResult, Snapshot } from "../src/boundary/contract";
 import { err } from "../src/boundary/contract";
 import { createFakeCore } from "../src/core/fake";
 import { openDisk, openInstrumentDisk, pickFiles, wavFixture } from "./helpers";
@@ -87,6 +87,9 @@ describe("an import that cannot land", () => {
     const refusal = await screen.findByText(/more than the sampler's memory/);
     expect(refusal.textContent).toContain("59.4 s");
     expect(refusal.textContent).toContain("18 kHz");
+    // The ceiling figure comes from the core as capSeconds; a fake or
+    // wiring regression would render "(0.0 s max)" here.
+    expect(refusal.textContent).toContain("(58.3 s max)");
     expect(refusal.textContent).toContain("9 kHz fits");
     expect(convertButton().disabled).toBe(true);
 
@@ -101,9 +104,100 @@ describe("an import that cannot land", () => {
     pickFiles([wavFile("one.wav", 1, 18000, 450000), wavFile("two.wav", 1, 18000, 450000)]);
 
     await screen.findByText("Import 2 WAVs");
-    await screen.findByText(/two disks/);
-    expect(screen.getByText(/export both/i).textContent).toBeTruthy();
+    await screen.findByText(/spreads the instrument across two disks. Export both images./);
     expect(convertButton().disabled).toBe(false);
+  });
+});
+
+describe("the dialog's answers start fresh", () => {
+  // The rate and stereo answers live in the shell so the estimate can
+  // react to them, but they are per-import questions: a Left picked
+  // for one batch must not silently apply to the next.
+  it("resets rate and stereo when a new import dialog opens", async () => {
+    await openDisk();
+    pickFiles([wavFile("st.wav", 2, 44100, 1000)]);
+    await screen.findByText("Import 1 WAV");
+    fireEvent.click(await screen.findByRole("radio", { name: "Left" }));
+    fireEvent.click(screen.getByRole("radio", { name: "9 kHz" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    pickFiles([wavFile("st2.wav", 2, 44100, 1000)]);
+    await screen.findByText("Import 1 WAV");
+    expect(
+      (await screen.findByRole<HTMLInputElement>("radio", { name: "Mix" })).dataset.state,
+    ).toBe("checked");
+    expect(screen.getByRole<HTMLInputElement>("radio", { name: "18 kHz" }).dataset.state).toBe(
+      "checked",
+    );
+  });
+});
+
+describe("the estimate follows the document", () => {
+  it("re-estimates after the document changed, not from a stale cache", async () => {
+    await openDisk();
+    pickFiles([wavFile("pad.wav", 1, 18000, 18000)]);
+    const first = (await screen.findByText(/room for about/)).textContent;
+    fireEvent.click(convertButton());
+    await screen.findByText(/Voices \(1\/64\)/);
+
+    // The same file again: the dump grew, so the room shrank. A
+    // cached answer keyed only on the files would repeat `first`.
+    pickFiles([wavFile("pad.wav", 1, 18000, 18000)]);
+    await screen.findByText(/room for about/);
+    await waitFor(() => {
+      expect(screen.getByText(/room for about/).textContent).not.toBe(first);
+    });
+  });
+
+  it("keeps the refusal, and Convert disabled, while a re-estimate is in flight", async () => {
+    const inner = createFakeCore();
+    const gate: { release?: () => void } = {};
+    const core: Core = {
+      ...inner,
+      estimateImport: (files, rate, channel) =>
+        rate === 9000
+          ? new Promise((resolve) => {
+              gate.release = () => {
+                void inner.estimateImport(files, rate, channel).then(resolve);
+              };
+            })
+          : inner.estimateImport(files, rate, channel),
+    };
+    await openDisk(core);
+    pickFiles([wavFile("long.wav", 2, 44100, 2619540)]);
+
+    await screen.findByText(/more than the sampler's memory/);
+    expect(convertButton().disabled).toBe(true);
+
+    // Switch to the rate that fits; the answer is parked. The shown
+    // verdict must not lapse into an enabled Convert while waiting.
+    fireEvent.click(screen.getByRole("radio", { name: "9 kHz" }));
+    expect(screen.getByText(/more than the sampler's memory/)).toBeDefined();
+    expect(convertButton().disabled).toBe(true);
+
+    gate.release?.();
+    await screen.findByText(/Becomes about/);
+    expect(convertButton().disabled).toBe(false);
+  });
+});
+
+describe("an instrument at the voice limit", () => {
+  it("names the limit and disables Convert", async () => {
+    const inner = createFakeCore();
+    const core: Core = {
+      ...inner,
+      estimateImport: async (files, rate, channel) => {
+        const r = await inner.estimateImport(files, rate, channel);
+        if (!r.ok) return r;
+        return { ok: true, value: { ...r.value, verdict: "wont-fit", reason: "voice-limit" } };
+      },
+    };
+    await openDisk(core);
+    pickFiles([wavFile("extra.wav", 1, 18000, 100)]);
+
+    await screen.findByText("Import 1 WAV");
+    await screen.findByText(/more voices than the 64 an instrument holds/);
+    expect(convertButton().disabled).toBe(true);
   });
 });
 
@@ -123,6 +217,26 @@ describe("a conversion that fails", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("the data chunk is truncated");
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(convertButton().disabled).toBe(false);
+  });
+
+  it("reports a failed folder conversion in the open dialog", async () => {
+    const inner = createFakeCore();
+    const core: Core = {
+      ...inner,
+      importWavFolder: () =>
+        Promise.resolve(err<SFZImportResult>("invalid-wav", "the batch would not convert")),
+    };
+    // No instrument: two or more files take the folder route.
+    await openDisk(core);
+    pickFiles([wavFile("kick.wav", 1, 18000, 1000), wavFile("snare.wav", 1, 18000, 1000)]);
+
+    await screen.findByText("Import 2 WAVs");
+    fireEvent.click(convertButton());
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("the batch would not convert");
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(convertButton().disabled).toBe(false);
   });

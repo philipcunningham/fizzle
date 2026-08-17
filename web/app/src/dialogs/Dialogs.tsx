@@ -11,7 +11,7 @@ import { formatBytes } from "../ui/format";
 
 export type PendingDialog =
   | { kind: "newDisk"; then?: NamedBytes[] }
-  | { kind: "wavImport"; files: NamedBytes[]; channels: number | null }
+  | { kind: "wavImport"; files: NamedBytes[] }
   | {
       kind: "sfzImport";
       files: NamedBytes[];
@@ -121,6 +121,9 @@ function estimateCopy(est: ImportEstimate, rateKHz: string, count: number): stri
       `${subject} is ${s(est.fileSeconds)} s, more than the sampler's memory can load ` +
       `at ${rateKHz} kHz (${s(est.capSeconds)} s max).${fitsTail(est.fitsAtRates)}`
     );
+  }
+  if (est.verdict === "wont-fit" && est.reason === "voice-limit") {
+    return "This import needs more voices than the 64 an instrument holds.";
   }
   if (est.verdict === "wont-fit") {
     return `Not enough room on the disk at ${rateKHz} kHz.${fitsTail(est.fitsAtRates)}`;

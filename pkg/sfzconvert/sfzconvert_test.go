@@ -1337,7 +1337,7 @@ func TestConvertDirMaxVoicesKeyAssignment(t *testing.T) {
 
 // TestPitchKeycenterPatchesVoiceHeaderCent guards finding F11: the SFZ region's
 // pitch_keycenter must reach the FZV voice header's cent byte (spec §2-1,
-// offset 0xB0). Previously voiceimport.Encode left it at DefaultKeyCentre (72)
+// offset 0xB0). Previously voiceimport.Encode left it at DefaultKeyCentre
 // so fzv extract / sfz export rebuilt the wrong root key on round-trip.
 func TestPitchKeycenterPatchesVoiceHeaderCent(t *testing.T) {
 	t.Parallel()
@@ -1345,7 +1345,7 @@ func TestPitchKeycenterPatchesVoiceHeaderCent(t *testing.T) {
 	wavPath := filepath.Join(dir, "tone.wav")
 	testutil.WriteTestWAV(t, wavPath, 36000, 1000)
 
-	// Use pitch_keycenter=48 (which differs from DefaultKeyCentre=72) on a
+	// Use pitch_keycenter=48 (which differs from DefaultKeyCentre) on a
 	// region whose key range does not contain 48, so a half-fix that only
 	// updates the bank's per-key cent[i] (which buildKeygroup already does)
 	// would not also write the voice header at offset 0xB0.

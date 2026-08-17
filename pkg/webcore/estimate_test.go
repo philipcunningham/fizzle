@@ -3,6 +3,7 @@ package webcore
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
@@ -176,7 +177,7 @@ func TestEstimateImportReportsSplit(t *testing.T) {
 	if _, cerr := s.ImportWAVToInstrument("first.wav", monoRateWAV(t, 450000, 18000), 18000, ChannelMix); cerr != nil {
 		t.Fatalf("first import: %v", cerr)
 	}
-	est, cerr := s.EstimateImport(map[string][]byte{"second.wav": monoRateWAV(t, 450000, 18000)}, 18000, ChannelMix)
+	est, cerr := s.EstimateImport(map[string][]byte{"overflow.wav": monoRateWAV(t, 450000, 18000)}, 18000, ChannelMix)
 	if cerr != nil {
 		t.Fatalf("EstimateImport: %v", cerr)
 	}
@@ -320,5 +321,159 @@ func TestEstimateImportRoomAgainstDiskFileMax(t *testing.T) {
 	}
 	if est.RoomSeconds < want-1 {
 		t.Errorf("room %f s, want within a second of %f", est.RoomSeconds, want)
+	}
+}
+
+// A full instrument refuses one more voice whatever the rate, and the
+// estimate says so before the import fails with voice-limit.
+func TestEstimateImportRefusesPastVoiceLimit(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("EST"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	batch := make(map[string][]byte, disk.MaxVoices)
+	for i := 0; i < disk.MaxVoices; i++ {
+		batch[fmt.Sprintf("v%02d.wav", i)] = monoRateWAV(t, 64, 18000)
+	}
+	if _, cerr := s.ImportWAVFolder(batch, 18000, false, ChannelMix); cerr != nil {
+		t.Fatalf("ImportWAVFolder: %v", cerr)
+	}
+	est, cerr := s.EstimateImport(map[string][]byte{"extra.wav": monoRateWAV(t, 64, 18000)}, 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("EstimateImport: %v", cerr)
+	}
+	if est.Verdict != VerdictWontFit || est.Reason != ReasonVoiceLimit {
+		t.Errorf("verdict %q reason %q, want %q %q", est.Verdict, est.Reason, VerdictWontFit, ReasonVoiceLimit)
+	}
+	if len(est.FitsAtRates) != 0 {
+		t.Errorf("fits at %v, want none: no rate adds a 65th voice", est.FitsAtRates)
+	}
+}
+
+// A folder of 65 WAVs cannot become an instrument at any rate.
+func TestEstimateImportRefusesOversizeBatch(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("EST"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	batch := make(map[string][]byte, disk.MaxVoices+1)
+	for i := 0; i <= disk.MaxVoices; i++ {
+		batch[fmt.Sprintf("v%02d.wav", i)] = monoRateWAV(t, 64, 18000)
+	}
+	est, cerr := s.EstimateImport(batch, 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("EstimateImport: %v", cerr)
+	}
+	if est.Verdict != VerdictWontFit || est.Reason != ReasonVoiceLimit {
+		t.Errorf("verdict %q reason %q, want %q %q", est.Verdict, est.Reason, VerdictWontFit, ReasonVoiceLimit)
+	}
+}
+
+// Loose files eat sectors the naive dump arithmetic never sees: the
+// room figure and the fits verdict both have to shrink with them.
+func TestEstimateImportHonoursLooseFiles(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("EST"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	empty, cerr := s.EstimateImport(map[string][]byte{"probe.wav": monoRateWAV(t, 100, 18000)}, 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("estimate on empty disk: %v", cerr)
+	}
+	for _, name := range []string{"looseone.wav", "loosetwo.wav"} {
+		if _, cerr := s.ImportWAV(name, monoRateWAV(t, 250000, 18000), 18000, ChannelMix); cerr != nil {
+			t.Fatalf("ImportWAV %s: %v", name, cerr)
+		}
+	}
+	crowded, cerr := s.EstimateImport(map[string][]byte{"probe.wav": monoRateWAV(t, 100, 18000)}, 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("estimate on crowded disk: %v", cerr)
+	}
+	if crowded.RoomSeconds >= empty.RoomSeconds {
+		t.Errorf("room %f s did not shrink from %f s though loose files hold 1 MB", crowded.RoomSeconds, empty.RoomSeconds)
+	}
+	// Under the one disk dump maximum, but over what the crowded disk
+	// actually has free: only the free sector check refuses this.
+	est, cerr := s.EstimateImport(map[string][]byte{"big.wav": monoRateWAV(t, 200000, 18000)}, 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("estimate big: %v", cerr)
+	}
+	if est.Verdict != VerdictWontFit || est.Reason != ReasonDiskRoom {
+		t.Errorf("verdict %q reason %q, want %q %q", est.Verdict, est.Reason, VerdictWontFit, ReasonDiskRoom)
+	}
+}
+
+// A split fills disk 1 completely, so a loose file blocks it: the
+// estimate must refuse rather than promise the split the writer would
+// then reject.
+func TestEstimateImportSplitBlockedByLooseFile(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("EST"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	if _, cerr := s.ImportWAV("loose.wav", monoRateWAV(t, 500, 18000), 18000, ChannelMix); cerr != nil {
+		t.Fatalf("ImportWAV: %v", cerr)
+	}
+	if _, cerr := s.ImportWAVToInstrument("first.wav", monoRateWAV(t, 450000, 18000), 18000, ChannelMix); cerr != nil {
+		t.Fatalf("first import: %v", cerr)
+	}
+	est, cerr := s.EstimateImport(map[string][]byte{"blocked.wav": monoRateWAV(t, 450000, 18000)}, 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("EstimateImport: %v", cerr)
+	}
+	if est.Verdict != VerdictWontFit || est.Reason != ReasonDiskRoom {
+		t.Errorf("verdict %q reason %q, want %q %q (a loose file blocks the split)", est.Verdict, est.Reason, VerdictWontFit, ReasonDiskRoom)
+	}
+}
+
+// The first join fills an empty instrument's placeholder slot, so the
+// estimate must charge no voice sector for it: pinned byte for byte
+// against the import.
+func TestEstimateImportPlaceholderGrowthMatches(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("EST"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	if _, cerr := s.NewInstrument("PAD"); cerr != nil {
+		t.Fatalf("NewInstrument: %v", cerr)
+	}
+	before := dumpLen(t, s)
+	wavData := monoRateWAV(t, 30000, 18000)
+	est, cerr := s.EstimateImport(map[string][]byte{"first.wav": wavData}, 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("EstimateImport: %v", cerr)
+	}
+	if _, cerr := s.ImportWAVToInstrument("first.wav", wavData, 18000, ChannelMix); cerr != nil {
+		t.Fatalf("ImportWAVToInstrument: %v", cerr)
+	}
+	if got := dumpLen(t, s) - before; est.Bytes != got {
+		t.Errorf("estimated %d bytes, actual growth %d", est.Bytes, got)
+	}
+}
+
+// A split document estimates against the pair's capacity, with the
+// sampler's 2 MB sample memory as the binding ceiling.
+func TestEstimateImportTwoDiskRoom(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("EST"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	for _, name := range []string{"first.wav", "half two.wav"} {
+		if _, cerr := s.ImportWAVToInstrument(name, monoRateWAV(t, 450000, 18000), 18000, ChannelMix); cerr != nil {
+			t.Fatalf("import %s: %v", name, cerr)
+		}
+	}
+	snap := s.Snapshot()
+	if snap.Disk == nil || snap.Disk.Disks != 2 {
+		t.Fatalf("document did not split to two disks")
+	}
+	est, cerr := s.EstimateImport(map[string][]byte{"probe two.wav": monoRateWAV(t, 100, 18000)}, 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("EstimateImport: %v", cerr)
+	}
+	// 2 MB sample memory minus the 1.8 MB of audio on the pair leaves
+	// about 8.2 s at 18 kHz; the disk arithmetic alone would say 11.
+	if est.RoomSeconds < 7.5 || est.RoomSeconds > 9 {
+		t.Errorf("room = %f s, want the memory bound of about 8.2", est.RoomSeconds)
 	}
 }

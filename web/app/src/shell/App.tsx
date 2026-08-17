@@ -57,10 +57,11 @@ function describe(e: unknown): string {
 }
 
 /**
- * The widest channel count across a batch: 1 when every file is mono,
- * so the import prompt can drop the stereo question. Null when any
- * file is unreadable here, which keeps the question rather than
- * guessing on the core's behalf.
+ * The widest channel count across an SFZ folder's WAVs: 1 when every
+ * file is mono, so the conversion prompt can drop the stereo
+ * question. Null when any file is unreadable here, which keeps the
+ * question rather than guessing. The WAV import dialog asks the core
+ * instead, through the estimate.
  */
 function batchChannels(files: NamedBytes[]): number | null {
   return files.reduce<number | null>((worst, f) => {
@@ -252,8 +253,14 @@ function Shell({ core }: { core: Core }) {
   // new drop starts fresh.
   const wavDialog = dialog?.kind === "wavImport" ? dialog : null;
   const estimateQuery = useQuery({
+    // revision is part of the key: the answer reads the live document
+    // (room, free sectors), so an edit must invalidate it. The cached
+    // verdict of the previous key stays on screen while the new one
+    // is in flight, so a shown refusal cannot lapse into an enabled
+    // Convert between radio click and reply.
     queryKey: [
       "estimate",
+      revision,
       wavDialog?.files.map((f) => `${f.name}:${String(f.bytes.length)}`).join("|") ?? "",
       rate,
       stereo,
@@ -265,6 +272,7 @@ function Shell({ core }: { core: Core }) {
         stereo.toLowerCase() as Channel,
       ),
     enabled: wavDialog !== null,
+    placeholderData: keepPreviousData,
   });
   const estimateResult = wavDialog !== null ? (estimateQuery.data ?? null) : null;
   const estimate = estimateResult?.ok ? estimateResult.value : null;
@@ -424,6 +432,10 @@ function Shell({ core }: { core: Core }) {
     const active = document.activeElement;
     focusReturn.current = active instanceof HTMLElement && active !== document.body ? active : null;
     setConvertError(null);
+    // The conversion answers are per import: a rate or a Left picked
+    // for an earlier batch must not silently apply to this one.
+    setRate("18");
+    setStereo("Mix");
     setDialog(next);
   };
 
@@ -690,11 +702,7 @@ function Shell({ core }: { core: Core }) {
         });
         break;
       case "wavs":
-        openDialog({
-          kind: "wavImport",
-          files: placement.files,
-          channels: batchChannels(placement.files),
-        });
+        openDialog({ kind: "wavImport", files: placement.files });
         break;
       case "sfz":
         openDialog({
@@ -843,7 +851,7 @@ function Shell({ core }: { core: Core }) {
                 ? result.error.message
                 : `file ${String(index + 1)} of ${String(files.length)} failed: ${result.error.message}`,
             );
-            setDialog({ kind: "wavImport", files: files.slice(index), channels: null });
+            setDialog({ kind: "wavImport", files: files.slice(index) });
           });
       };
       joinNext(0);

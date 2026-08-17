@@ -587,7 +587,17 @@ describe("fake core import estimate", () => {
     expect(r.value.reason).toBe("sample-memory");
     expect(r.value.overCapFile).toBe("long.wav");
     expect(r.value.fileSeconds).toBeCloseTo(59.4, 1);
+    expect(r.value.capSeconds).toBeCloseTo(29.1, 1);
     expect(r.value.fitsAtRates).toEqual([9000]);
+  });
+
+  it("refuses a source rate below the core's minimum", async () => {
+    const core = await withDisk();
+    const r = await core.estimateImport({ "slow.wav": wavFixture(1, 500, 100) }, 18000, "mix");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("invalid-wav");
+    expect(r.error.message).toContain("slow.wav");
   });
 
   it("refuses a lone first voice too big for one disk, for room", async () => {
@@ -609,6 +619,18 @@ describe("fake core import estimate", () => {
     );
     if (!r.ok) throw new Error(r.error.message);
     expect(r.value.verdict).toBe("splits");
+  });
+
+  it("refuses a 65th voice with the voice-limit reason", async () => {
+    const core = await withDisk();
+    const files: Record<string, Uint8Array> = {};
+    for (let i = 0; i <= 64; i++)
+      files[`v${String(i).padStart(2, "0")}.wav`] = wavFixture(1, 18000, 100);
+    const r = await core.estimateImport(files, 18000, "mix");
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.verdict).toBe("wont-fit");
+    expect(r.value.reason).toBe("voice-limit");
+    expect(r.value.fitsAtRates).toEqual([]);
   });
 
   it("refuses an unreadable file by name", async () => {
