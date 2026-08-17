@@ -9,6 +9,7 @@ import type {
   Core,
   CoreError,
   CoreResult,
+  ImportEstimate,
   SFZImportResult,
   SchemaField,
   Snapshot,
@@ -237,6 +238,17 @@ export function createWasmCore(): Core {
     importWavFolder: (files, rate, fitToDisk, channel) => {
       const payload = folderPayload(files, "", rate, fitToDisk, false, channel);
       return call<SFZImportResult>("importWavFolder", payload, Object.values(payload.files));
+    },
+    estimateImport: (files, rate, channel) => {
+      const payload = folderPayload(files, "", rate, false, false, channel);
+      // No transfer list: the buffers are cloned, staying usable for
+      // the re-estimate on the next radio change and the conversion
+      // itself.
+      return call<ImportEstimate>("estimateImport", {
+        files: payload.files,
+        rate,
+        channel,
+      });
     },
     setDebug: (debug) => call<null>("setDebug", debug),
     setSlotParamNumber: (slot, field, value) =>

@@ -35,15 +35,17 @@ class FakeWorker {
   onerror: Handler<ErrorEvent> = null;
   onmessageerror: Handler<MessageEvent<unknown>> = null;
   readonly sent: WorkerRequest[] = [];
+  readonly transfers: Transferable[][] = [];
   postThrows: Error | null = null;
 
   constructor() {
     FakeWorker.last = this;
   }
 
-  postMessage(request: WorkerRequest): void {
+  postMessage(request: WorkerRequest, transfer: Transferable[] = []): void {
     if (this.postThrows) throw this.postThrows;
     this.sent.push(request);
+    this.transfers.push(transfer);
   }
 }
 
@@ -151,6 +153,26 @@ describe("core boundary, main thread half", () => {
       method: "setGeneration",
       payload: { file: "KICK", start: 40, end: 200 },
     });
+  });
+
+  // The dialog re-estimates on every radio change and then converts
+  // the same bytes, so the estimate must copy its buffers across the
+  // boundary; a transfer would detach them and starve the next call.
+  it("posts the estimate without transferring the file buffers", () => {
+    const core = newCore();
+    const worker = activeWorker();
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+
+    void core.estimateImport({ "kick.wav": bytes }, 36000, "mix");
+    expect(lastRequest(worker)).toMatchObject({
+      method: "estimateImport",
+      payload: { rate: 36000, channel: "mix" },
+    });
+    expect(worker.transfers.at(-1)).toEqual([]);
+    expect(bytes.byteLength).toBe(4);
+
+    void core.importWavFolder({ "kick.wav": bytes }, 36000, false, "mix");
+    expect(worker.transfers.at(-1)).toHaveLength(1);
   });
 });
 

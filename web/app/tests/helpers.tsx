@@ -29,6 +29,23 @@ export function pickFiles(files: File[]) {
   fireEvent.change(screen.getByLabelText("fz files"), { target: { files } });
 }
 
+/**
+ * A 44-byte WAV header whose fmt and data fields declare the given
+ * shape. Header-only scans (channels, rate, frame count) read the
+ * declared sizes, so no sample data needs allocating.
+ */
+export function wavFixture(
+  channels: number,
+  rate: number,
+  frames: number,
+): Uint8Array<ArrayBuffer> {
+  const b = wavHeader(channels);
+  const dv = new DataView(b.buffer);
+  dv.setUint32(24, rate, true);
+  dv.setUint32(40, frames * channels * 2, true);
+  return b;
+}
+
 /** A 44-byte WAV header, enough for the shell's channel count scan. */
 export function wavHeader(channels: number): Uint8Array<ArrayBuffer> {
   const b = new Uint8Array(44);

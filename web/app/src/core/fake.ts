@@ -5,6 +5,7 @@ import type {
   Core,
   CoreResult,
   FileSnapshot,
+  ImportEstimate,
   InstrumentSnapshot,
   InstrumentVoice,
   SFZImportResult,
@@ -13,7 +14,21 @@ import type {
   Snapshot,
   VoiceDetail,
 } from "../boundary/contract";
-import { IMAGE_SIZE, MAX_LABEL_LENGTH, err, ok } from "../boundary/contract";
+import {
+  CHANNELS,
+  IMAGE_SIZE,
+  MAX_LABEL_LENGTH,
+  SAMPLE_RATES,
+  err,
+  ok,
+} from "../boundary/contract";
+
+// The estimate's capacity model, scaled-down mirrors of the core's:
+// the sampler's sample memory in samples, the dump one disk holds,
+// and the empty instrument a first voice brings with it.
+const FAKE_SAMPLE_CAP = 1_048_576;
+const FAKE_DUMP_MAX = IMAGE_SIZE - 4096;
+const FAKE_DUMP_BASE = 1024;
 
 // Mirrors fzutil.VoiceName: basename, extension stripped, uppercased,
 // runs of other characters collapsing to single spaces, 12 chars.
@@ -794,7 +809,7 @@ export function createFakeCore(): Core {
     importWavToInstrument(
       filename: string,
       wav: Uint8Array,
-      _rate: SampleRate,
+      rate: SampleRate,
       _channel: Channel,
     ): Promise<CoreResult<Snapshot>> {
       if (wav.length === 0) {
@@ -802,7 +817,91 @@ export function createFakeCore(): Core {
       }
       const next = clone(state);
       next.label ??= "FIZZLE";
-      return Promise.resolve(ok(mutate(joinVoice(next, voiceName(filename)))));
+      joinVoice(next, voiceName(filename));
+      // The dump grows by the converted audio, so a later estimate
+      // sees the room this import used up, as the core's would.
+      const shape = wavShape(wav);
+      const grown = shape ? convertedBytes(shape, rate) : wav.length;
+      const dump = next.files.find((f) => f.type === "full");
+      if (dump) dump.sizeBytes += grown;
+      next.used += grown;
+      return Promise.resolve(ok(mutate(next)));
+    },
+
+    estimateImport(
+      files: Record<string, Uint8Array>,
+      rate: SampleRate,
+      channel: Channel,
+    ): Promise<CoreResult<ImportEstimate>> {
+      if (!CHANNELS.includes(channel)) {
+        return Promise.resolve(
+          err("invalid-channel", `channel ${channel} is not left, right, or mix`),
+        );
+      }
+      const names = Object.keys(files).sort();
+      if (names.length === 0) {
+        return Promise.resolve(err("invalid-value", "no files to estimate"));
+      }
+      const shapes: { name: string; channels: number; rate: number; frames: number }[] = [];
+      for (const name of names) {
+        const shape = wavShape(files[name] ?? new Uint8Array());
+        if (!shape) {
+          return Promise.resolve(err("invalid-wav", `${name}: not a readable WAV`));
+        }
+        shapes.push({ name, ...shape });
+      }
+      const dump = state.files.find((f) => f.type === "full");
+      const dumpLen = dump?.sizeBytes ?? 0;
+      const disks = state.bytes2 ? 2 : 1;
+      const estimateAt = (target: number): ImportEstimate => {
+        const base: ImportEstimate = {
+          bytes: 0,
+          seconds: 0,
+          roomSeconds: 0,
+          verdict: "fits",
+          reason: "",
+          anyStereo: shapes.some((s) => s.channels >= 2),
+          overCapFile: "",
+          fileSeconds: 0,
+          fitsAtRates: [],
+        };
+        let audio = 0;
+        for (const s of shapes) {
+          const samples = Math.round((s.frames * target) / s.rate);
+          if (samples > FAKE_SAMPLE_CAP) {
+            return {
+              ...base,
+              verdict: "wont-fit",
+              reason: "sample-memory",
+              overCapFile: s.name,
+              fileSeconds: s.frames / s.rate,
+            };
+          }
+          audio += samples * 2;
+          base.seconds += samples / target;
+        }
+        const creating = state.instrument === null;
+        base.bytes = audio + (creating ? FAKE_DUMP_BASE : 0);
+        const newLen = dumpLen + base.bytes;
+        const splitCapable = !creating || shapes.length > 1;
+        if (newLen <= FAKE_DUMP_MAX) {
+          base.verdict = "fits";
+        } else if (splitCapable && newLen <= 2 * FAKE_DUMP_MAX && newLen <= 2 * 1024 * 1024) {
+          base.verdict = "splits";
+        } else {
+          base.verdict = "wont-fit";
+          base.reason = "disk-room";
+        }
+        return base;
+      };
+      const est = estimateAt(rate);
+      est.roomSeconds = Math.max(0, disks * FAKE_DUMP_MAX - dumpLen) / 2 / rate;
+      if (est.verdict === "wont-fit") {
+        est.fitsAtRates = SAMPLE_RATES.filter((r) => estimateAt(r).verdict !== "wont-fit").map(
+          (r) => r,
+        );
+      }
+      return Promise.resolve(ok(est));
     },
 
     openImagePair(a: Uint8Array, b: Uint8Array): Promise<CoreResult<Snapshot>> {
@@ -1171,6 +1270,39 @@ function voiceCount(s: FakeState): number {
  * list and mapped to a fresh area (membership is reference on the FZ
  * format), creating the instrument when the document has none.
  */
+/**
+ * A header scan for the shape the estimate needs: channels, source
+ * rate, and frame count, all from the declared sizes. Mirrors the
+ * core's read of the same fields; null for anything that is not a
+ * parseable WAV.
+ */
+function wavShape(bytes: Uint8Array): { channels: number; rate: number; frames: number } | null {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const tag = (at: number) =>
+    bytes.length >= at + 4 ? String.fromCharCode(...bytes.subarray(at, at + 4)) : "";
+  if (tag(0) !== "RIFF" || tag(8) !== "WAVE") return null;
+  let at = 12;
+  let channels = 0;
+  let rate = 0;
+  let dataBytes = -1;
+  while (at + 8 <= bytes.length) {
+    const size = dv.getUint32(at + 4, true);
+    if (tag(at) === "fmt " && at + 26 <= bytes.length) {
+      channels = dv.getUint16(at + 10, true);
+      rate = dv.getUint32(at + 12, true);
+    }
+    if (tag(at) === "data") dataBytes = size;
+    at += 8 + size + (size % 2);
+  }
+  if (channels < 1 || rate < 1 || dataBytes < 0) return null;
+  return { channels, rate, frames: Math.floor(dataBytes / (2 * channels)) };
+}
+
+/** Mono audio bytes a file becomes at the target rate. */
+function convertedBytes(shape: { rate: number; frames: number }, rate: number): number {
+  return Math.round((shape.frames * rate) / shape.rate) * 2;
+}
+
 function joinVoice(next: FakeState, name: string): FakeState {
   if (!next.instrument) {
     next.instrument = {
