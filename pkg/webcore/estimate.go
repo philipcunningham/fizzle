@@ -217,7 +217,7 @@ func estimateAt(profiles []wavProfile, doc *docProfile, rate uint32) *ImportEsti
 	}
 
 	hasInstrument := doc.dumpLen > 0
-	growth, newLen := 0, 0
+	var growth, newLen int
 	splitCapable := false
 	switch {
 	case hasInstrument:

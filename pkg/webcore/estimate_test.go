@@ -75,7 +75,7 @@ func TestEstimateImportSmallMonoFits(t *testing.T) {
 	if _, cerr := s.NewDisk("EST"); cerr != nil {
 		t.Fatalf("NewDisk: %v", cerr)
 	}
-	est, cerr := s.EstimateImport(map[string][]byte{"kick.wav": monoRateWAV(t, 18000, 18000)}, 18000, ChannelMix)
+	est, cerr := s.EstimateImport(map[string][]byte{"hat.wav": monoRateWAV(t, 18000, 18000)}, 18000, ChannelMix)
 	if cerr != nil {
 		t.Fatalf("EstimateImport: %v", cerr)
 	}
@@ -212,8 +212,8 @@ func TestEstimateImportBatchSplits(t *testing.T) {
 		t.Fatalf("NewDisk: %v", cerr)
 	}
 	est, cerr := s.EstimateImport(map[string][]byte{
-		"a.wav": monoRateWAV(t, 450000, 18000),
-		"b.wav": monoRateWAV(t, 450000, 18000),
+		"left half.wav":  monoRateWAV(t, 450000, 18000),
+		"right half.wav": monoRateWAV(t, 450000, 18000),
 	}, 18000, ChannelMix)
 	if cerr != nil {
 		t.Fatalf("EstimateImport: %v", cerr)
@@ -230,9 +230,9 @@ func TestEstimateImportOverTwoDisks(t *testing.T) {
 		t.Fatalf("NewDisk: %v", cerr)
 	}
 	files := map[string][]byte{
-		"a.wav": monoRateWAV(t, 1000000, 9000),
-		"b.wav": monoRateWAV(t, 1000000, 9000),
-		"c.wav": monoRateWAV(t, 1000000, 9000),
+		"slab one.wav":   monoRateWAV(t, 1000000, 9000),
+		"slab two.wav":   monoRateWAV(t, 1000000, 9000),
+		"slab three.wav": monoRateWAV(t, 1000000, 9000),
 	}
 	est, cerr := s.EstimateImport(files, 9000, ChannelMix)
 	if cerr != nil {
@@ -270,7 +270,7 @@ func TestEstimateImportLeavesSessionUntouched(t *testing.T) {
 		t.Fatalf("NewDisk: %v", cerr)
 	}
 	before := s.Snapshot()
-	if _, cerr := s.EstimateImport(map[string][]byte{"kick.wav": monoRateWAV(t, 500, 18000)}, 18000, ChannelMix); cerr != nil {
+	if _, cerr := s.EstimateImport(map[string][]byte{"quiet.wav": monoRateWAV(t, 500, 18000)}, 18000, ChannelMix); cerr != nil {
 		t.Fatalf("EstimateImport: %v", cerr)
 	}
 	after := s.Snapshot()
@@ -310,7 +310,7 @@ func TestEstimateImportRoomAgainstDiskFileMax(t *testing.T) {
 	if _, cerr := s.NewDisk("EST"); cerr != nil {
 		t.Fatalf("NewDisk: %v", cerr)
 	}
-	est, cerr := s.EstimateImport(map[string][]byte{"kick.wav": monoRateWAV(t, 100, 36000)}, 36000, ChannelMix)
+	est, cerr := s.EstimateImport(map[string][]byte{"tick.wav": monoRateWAV(t, 100, 36000)}, 36000, ChannelMix)
 	if cerr != nil {
 		t.Fatalf("EstimateImport: %v", cerr)
 	}

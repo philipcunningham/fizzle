@@ -12,7 +12,7 @@ import { createFakeCore } from "../src/core/fake";
 import { openDisk, openInstrumentDisk, pickFiles, wavFixture } from "./helpers";
 
 function convertButton(): HTMLButtonElement {
-  return screen.getByRole("button", { name: "Convert" }) as HTMLButtonElement;
+  return screen.getByRole<HTMLButtonElement>("button", { name: "Convert" });
 }
 
 function wavFile(name: string, channels: number, rate: number, frames: number): File {
