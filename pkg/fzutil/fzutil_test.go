@@ -84,6 +84,61 @@ func TestResampleHalvesLength(t *testing.T) {
 	}
 }
 
+// ResampledLen and Resample must agree exactly: the estimate a
+// caller shows before converting has to match the samples the
+// conversion then produces.
+func TestResampledLenMatchesResample(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		frames int
+		src    uint32
+		dst    uint32
+	}{
+		{3600, 36000, 36000},
+		{3600, 36000, 18000},
+		{3600, 36000, 9000},
+		{44100, 44100, 36000},
+		{44100, 44100, 18000},
+		{44100, 44100, 9000},
+		{2619, 44100, 36000},
+		{1, 44100, 9000},
+		{7, 22050, 36000},
+		{48000, 48000, 36000},
+	}
+	for _, tc := range cases {
+		f := &wav.File{SampleRate: tc.src, Samples: make([]int16, tc.frames)}
+		out, err := Resample(f, tc.dst)
+		if err != nil {
+			t.Fatalf("Resample(%d, %d, %d): %v", tc.frames, tc.src, tc.dst, err)
+		}
+		got, err := ResampledLen(tc.frames, tc.src, tc.dst)
+		if err != nil {
+			t.Fatalf("ResampledLen(%d, %d, %d): %v", tc.frames, tc.src, tc.dst, err)
+		}
+		if got != len(out) {
+			t.Errorf("ResampledLen(%d, %d, %d) = %d, want %d", tc.frames, tc.src, tc.dst, got, len(out))
+		}
+	}
+}
+
+// ResampledLen mirrors Resample's guards, so an estimate refuses
+// exactly where the conversion would.
+func TestResampledLenGuards(t *testing.T) {
+	t.Parallel()
+	if _, err := ResampledLen(0, 44100, 36000); err == nil {
+		t.Error("expected error for zero frames")
+	}
+	if _, err := ResampledLen(16, 1, 36000); err == nil {
+		t.Error("expected error for source rate below minimum")
+	}
+	if _, err := ResampledLen(MaxResampleOut, MinSampleRate, MinSampleRate*2); err == nil {
+		t.Error("expected error for output over the RAM cap")
+	}
+	if got, err := ResampledLen(MaxResampleOut+5, 36000, 36000); err != nil || got != MaxResampleOut+5 {
+		t.Errorf("same-rate copy = %d, %v; want %d, nil", got, err, MaxResampleOut+5)
+	}
+}
+
 func TestResampleEmptySamplesErrors(t *testing.T) {
 	t.Parallel()
 	f := &wav.File{SampleRate: 36000, Samples: nil}
