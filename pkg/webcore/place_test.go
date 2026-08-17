@@ -206,6 +206,26 @@ func TestImportWAVToInstrumentNoDisk(t *testing.T) {
 	}
 }
 
+// A first import roots at MIDI 60 (C4) in both the voice header and
+// the bank area, so playing C4 reproduces the recorded pitch.
+func TestImportWAVToInstrumentRootsAtC4(t *testing.T) {
+	s := NewSession()
+	snap, cerr := s.ImportWAVToInstrument("piano.wav", wavBytes(t, 500), 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("ImportWAVToInstrument: %v", cerr)
+	}
+	inst := snap.Disk.Instrument
+	if inst == nil {
+		t.Fatal("no instrument in snapshot")
+	}
+	if got := inst.Voices[0].Params["rootKey"]; got != 60 {
+		t.Errorf("voice rootKey = %v, want 60", got)
+	}
+	if got := inst.Banks[0].Areas[0].Root; got != 60 {
+		t.Errorf("area root = %d, want 60", got)
+	}
+}
+
 func TestImportWAVToInstrumentRejectsBadChannel(t *testing.T) {
 	s := twoVoiceSession(t)
 	_, cerr := s.ImportWAVToInstrument("x.wav", wavBytes(t, 100), 18000, "both")

@@ -698,7 +698,7 @@ func regionToFZVFromFile(r sfz.Region, f *wav.File, rateIdx uint8, targetRate ui
 	}
 	// Patch the FZV voice header's keynote centre (spec §2-1, offset 0xB0) so
 	// the per-voice root key reflects the SFZ region's pitch_keycenter. Without
-	// this, voiceimport.Encode leaves the header at DefaultKeyCentre (72) while
+	// this, voiceimport.Encode leaves the header at DefaultKeyCentre while
 	// buildKeygroup writes the per-key bank sector cent[i], causing a
 	// round-trip leak on fzv extract / sfz export (which read VoiceKeyCentOffset).
 	fzv[disk.VoiceKeyCentOffset] = r.PitchKeycenter
