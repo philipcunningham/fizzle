@@ -863,6 +863,7 @@ export function createFakeCore(): Core {
           anyStereo: shapes.some((s) => s.channels >= 2),
           overCapFile: "",
           fileSeconds: 0,
+          capSeconds: 0,
           fitsAtRates: [],
         };
         let audio = 0;
@@ -875,6 +876,7 @@ export function createFakeCore(): Core {
               reason: "sample-memory",
               overCapFile: s.name,
               fileSeconds: s.frames / s.rate,
+              capSeconds: FAKE_SAMPLE_CAP / target,
             };
           }
           audio += samples * 2;

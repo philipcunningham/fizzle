@@ -7,7 +7,14 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { QueryClientProvider, keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Core, CoreError, CoreResult, Snapshot } from "../boundary/contract";
+import type {
+  Channel,
+  Core,
+  CoreError,
+  CoreResult,
+  SampleRate,
+  Snapshot,
+} from "../boundary/contract";
 import { IMAGE_SIZE, isCoreCrash } from "../boundary/contract";
 import type { DialogActions, PendingDialog } from "../dialogs/Dialogs";
 import { Dialogs } from "../dialogs/Dialogs";
@@ -143,6 +150,12 @@ function Shell({ core }: { core: Core }) {
   const [selectedLoop, setSelectedLoop] = useState(0);
   const [dialog, setDialog] = useState<PendingDialog | null>(null);
   const [busy, setBusy] = useState(false);
+  // The two conversion answers live here rather than in the dialog,
+  // so the import estimate can re-query as they change.
+  const [rate, setRate] = useState("18");
+  const [stereo, setStereo] = useState("Mix");
+  // A conversion failure, shown inside the open dialog (E1).
+  const [convertError, setConvertError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [barError, setBarError] = useState<{ text: string; seq: number } | null>(null);
   // Set once the core says it can no longer answer: the session is
@@ -232,6 +245,31 @@ function Shell({ core }: { core: Core }) {
     placeholderData: keepPreviousData,
   });
   const auditionData = auditionQuery.data?.ok ? auditionQuery.data.value : null;
+
+  // The import dialog's pre-flight (R6): the core's estimate for the
+  // pending files at the chosen rate and stereo answer. Keyed by the
+  // batch's shape and both answers, so a radio change re-asks and a
+  // new drop starts fresh.
+  const wavDialog = dialog?.kind === "wavImport" ? dialog : null;
+  const estimateQuery = useQuery({
+    queryKey: [
+      "estimate",
+      wavDialog?.files.map((f) => `${f.name}:${String(f.bytes.length)}`).join("|") ?? "",
+      rate,
+      stereo,
+    ],
+    queryFn: () =>
+      core.estimateImport(
+        toFileMap(wavDialog?.files ?? []),
+        (Number(rate) * 1000) as SampleRate,
+        stereo.toLowerCase() as Channel,
+      ),
+    enabled: wavDialog !== null,
+  });
+  const estimateResult = wavDialog !== null ? (estimateQuery.data ?? null) : null;
+  const estimate = estimateResult?.ok ? estimateResult.value : null;
+  const estimateError =
+    estimateResult !== null && !estimateResult.ok ? estimateResult.error.message : null;
 
   const noteOn = (note: number, velocity: number) => {
     if (!auditionData) return;
@@ -367,6 +405,7 @@ function Shell({ core }: { core: Core }) {
   const closeDialog = () => {
     setDialog(null);
     setBusy(false);
+    setConvertError(null);
   };
 
   // Focus must not fall to the body when a dialog closes (Q5). On the
@@ -384,6 +423,7 @@ function Shell({ core }: { core: Core }) {
   const openDialog = (next: PendingDialog) => {
     const active = document.activeElement;
     focusReturn.current = active instanceof HTMLElement && active !== document.body ? active : null;
+    setConvertError(null);
     setDialog(next);
   };
 
@@ -750,12 +790,13 @@ function Shell({ core }: { core: Core }) {
         }
       });
     },
-    onConvertWavs: (files, rate, channel) => {
+    onConvertWavs: (files, sampleRate, channel) => {
+      setConvertError(null);
       setBusy(true);
       if (files.length > 1 && !instrument) {
         // A batch with no instrument: the core's sequential kit (R8).
         void core
-          .importWavFolder(toFileMap(files), rate, false, channel as "left" | "right" | "mix")
+          .importWavFolder(toFileMap(files), sampleRate, false, channel as Channel)
           .then((result) => {
             setBusy(false);
             if (result.ok) {
@@ -763,10 +804,11 @@ function Shell({ core }: { core: Core }) {
               closeDialog();
               say(`${String(files.length)} WAVs mapped up the keyboard`);
             } else {
-              // The error lands in the status bar, so the dialog must
-              // clear out of its way (E1: shown where the user acted).
-              closeDialog();
+              // The failure shows where the user acted (E1): in the
+              // dialog, which stays open for another try. The status
+              // bar carries an echo for after it closes.
               report(result.error);
+              setConvertError(result.error.message);
             }
           });
         return;
@@ -784,10 +826,24 @@ function Shell({ core }: { core: Core }) {
           return;
         }
         void core
-          .importWavToInstrument(file.name, file.bytes, rate, channel as "left" | "right" | "mix")
+          .importWavToInstrument(file.name, file.bytes, sampleRate, channel as Channel)
           .then((result) => {
-            if (applyEdit(result)) joinNext(index + 1);
-            else closeDialog();
+            if (result.ok) {
+              applyEdit(result);
+              joinNext(index + 1);
+              return;
+            }
+            // The failure shows in the open dialog (E1), and the files
+            // not yet imported stay in it, so a retry resumes at the
+            // failed file instead of importing the batch twice.
+            applyEdit(result);
+            setBusy(false);
+            setConvertError(
+              files.length === 1
+                ? result.error.message
+                : `file ${String(index + 1)} of ${String(files.length)} failed: ${result.error.message}`,
+            );
+            setDialog({ kind: "wavImport", files: files.slice(index), channels: null });
           });
       };
       joinNext(0);
@@ -1530,10 +1586,15 @@ function Shell({ core }: { core: Core }) {
         <Dialogs
           dialog={dialog}
           dirty={dirty}
-          usedBytes={disk?.usedBytes ?? 0}
-          disks={disk?.disks ?? 1}
           actions={dialogActions}
           busy={busy}
+          rate={rate}
+          onRateChange={setRate}
+          stereo={stereo}
+          onStereoChange={setStereo}
+          estimate={estimate}
+          estimateError={estimateError}
+          convertError={convertError}
         />
       )}
     </div>
