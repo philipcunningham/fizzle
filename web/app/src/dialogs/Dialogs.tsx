@@ -4,8 +4,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useState } from "react";
-import type { SampleRate } from "../boundary/contract";
-import { IMAGE_SIZE } from "../boundary/contract";
+import type { ImportEstimate, SampleRate } from "../boundary/contract";
 import type { NamedBytes } from "../viewstate/place";
 import { sfzCandidates } from "../viewstate/place";
 import { formatBytes } from "../ui/format";
@@ -99,32 +98,74 @@ function StereoRow({
   );
 }
 
+/**
+ * The refusal's way out: the rates the whole batch would land at,
+ * phrased for the sentence's tail.
+ */
+function fitsTail(rates: number[]): string {
+  if (rates.length === 0) return " No rate fits.";
+  const labels = rates.map((r) => String(r / 1000));
+  return labels.length === 1 ? ` ${labels[0]} kHz fits.` : ` ${labels.join(" or ")} kHz fit.`;
+}
+
+/**
+ * The size line, from the core's estimate alone: what the batch
+ * becomes, the room left at this rate, and, when the import cannot
+ * land, which constraint bit and which rate is the way out.
+ */
+function estimateCopy(est: ImportEstimate, rateKHz: string, count: number): string {
+  const s = (n: number) => n.toFixed(1);
+  if (est.verdict === "wont-fit" && est.reason === "sample-memory") {
+    const subject = count === 1 ? "This sample" : `"${est.overCapFile}"`;
+    return (
+      `${subject} is ${s(est.fileSeconds)} s, more than the sampler's memory can load ` +
+      `at ${rateKHz} kHz (${s(est.capSeconds)} s max).${fitsTail(est.fitsAtRates)}`
+    );
+  }
+  if (est.verdict === "wont-fit") {
+    return `Not enough room on the disk at ${rateKHz} kHz.${fitsTail(est.fitsAtRates)}`;
+  }
+  const size = `Becomes about ${formatBytes(est.bytes)} (${s(est.seconds)} s)`;
+  if (est.verdict === "splits") {
+    return `${size}; spreads the instrument across two disks. Export both images.`;
+  }
+  return `${size}; room for about ${s(est.roomSeconds)} s more at ${rateKHz} kHz.`;
+}
+
 export function Dialogs({
   dialog,
   dirty,
-  usedBytes,
-  disks,
   actions,
   busy = false,
+  rate,
+  onRateChange,
+  stereo,
+  onStereoChange,
+  estimate = null,
+  estimateError = null,
+  convertError = null,
 }: {
   dialog: PendingDialog;
   dirty: boolean;
-  usedBytes: number;
-  /** 1, or 2 when the document already spans an image pair. */
-  disks: number;
   actions: DialogActions;
   /** A conversion is running; its button shows progress. */
   busy?: boolean;
+  /** The rate answer, held by the shell so the estimate can react. */
+  rate: string;
+  onRateChange: (rate: string) => void;
+  /** The stereo answer, held by the shell for the same reason. */
+  stereo: string;
+  onStereoChange: (stereo: string) => void;
+  /** The core's answer for the WAV dialog's current files and rate. */
+  estimate?: ImportEstimate | null;
+  /** The estimate's refusal, when the files would not even parse. */
+  estimateError?: string | null;
+  /** A conversion failure, shown where the user acted (E1). */
+  convertError?: string | null;
 }) {
   const [label, setLabel] = useState("FZ DISK 1");
-  const [rate, setRate] = useState("18");
-  const [stereo, setStereo] = useState("Mix");
 
   const d = dialog;
-  // Free space is what the document holds today: one image, or the
-  // pair when it already spans two. A one disk document must not be
-  // told it has a second disk's worth of room.
-  const freeBytes = Math.max(0, IMAGE_SIZE * disks - usedBytes);
   const close = actions.onClose;
 
   return (
@@ -191,7 +232,7 @@ export function Dialogs({
                 <RadioGroup.Root
                   className="row"
                   value={rate}
-                  onValueChange={setRate}
+                  onValueChange={onRateChange}
                   aria-label="sample rate"
                   name="sample-rate"
                 >
@@ -203,18 +244,30 @@ export function Dialogs({
                   ))}
                 </RadioGroup.Root>
               </div>
-              <StereoRow channels={d.channels} value={stereo} onValueChange={setStereo} />
-              <p className="desc">
-                Adds about {formatBytes(d.files.reduce((n, f) => n + f.bytes.length, 0))} of source
-                audio; {formatBytes(freeBytes)} free{disks === 2 ? " across the set" : ""}.
-              </p>
+              <StereoRow
+                channels={estimate?.anyStereo ? 2 : 1}
+                value={stereo}
+                onValueChange={onStereoChange}
+              />
+              {estimate ? (
+                <p className={estimate.verdict === "wont-fit" ? "desc dangertext" : "desc"}>
+                  {estimateCopy(estimate, rate, d.files.length)}
+                </p>
+              ) : (
+                estimateError !== null && <p className="desc">{estimateError}</p>
+              )}
+              {convertError !== null && (
+                <p className="desc dangertext" role="alert">
+                  {convertError}
+                </p>
+              )}
               <div className="buttons">
                 <button className="btn" onClick={close}>
                   Cancel
                 </button>
                 <button
                   className="btn solid"
-                  disabled={busy}
+                  disabled={busy || estimate?.verdict === "wont-fit"}
                   aria-busy={busy || undefined}
                   onClick={() => {
                     actions.onConvertWavs(
@@ -237,9 +290,9 @@ export function Dialogs({
               actions={actions}
               busy={busy}
               rate={rate}
-              setRate={setRate}
+              setRate={onRateChange}
               stereo={stereo}
-              setStereo={setStereo}
+              setStereo={onStereoChange}
             />
           )}
 

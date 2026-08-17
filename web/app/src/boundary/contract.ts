@@ -435,6 +435,8 @@ export interface ImportEstimate {
   overCapFile: string;
   /** That file's play time in seconds; 0 when no file is over. */
   fileSeconds: number;
+  /** Longest play time the sampler's memory loads at this rate. */
+  capSeconds: number;
   /** Rates at which the whole batch would be accepted. */
   fitsAtRates: number[];
 }

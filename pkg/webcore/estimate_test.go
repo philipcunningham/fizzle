@@ -7,6 +7,7 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskget"
+	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 	"github.com/philipcunningham/fizzle/pkg/wav"
 )
@@ -142,6 +143,10 @@ func TestEstimateImportOverSampleMemory(t *testing.T) {
 		}
 		if est.FileSeconds < 59.3 || est.FileSeconds > 59.5 {
 			t.Errorf("at %d: file seconds %f, want about 59.4", rate, est.FileSeconds)
+		}
+		wantCap := float64(fzutil.MaxResampleOut) / float64(rate)
+		if est.CapSeconds != wantCap {
+			t.Errorf("at %d: cap seconds %f, want %f", rate, est.CapSeconds, wantCap)
 		}
 		if len(est.FitsAtRates) != 1 || est.FitsAtRates[0] != 9000 {
 			t.Errorf("at %d: fits at %v, want [9000]", rate, est.FitsAtRates)

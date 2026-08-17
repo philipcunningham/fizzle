@@ -45,9 +45,11 @@ type ImportEstimate struct {
 	// asking.
 	AnyStereo bool `json:"anyStereo"`
 	// OverCapFile names the first file over the sampler's memory at
-	// the target rate, with its play time in FileSeconds.
+	// the target rate, with its play time in FileSeconds and the
+	// longest play time that memory loads at this rate in CapSeconds.
 	OverCapFile string  `json:"overCapFile,omitempty"`
 	FileSeconds float64 `json:"fileSeconds,omitempty"`
+	CapSeconds  float64 `json:"capSeconds,omitempty"`
 	// FitsAtRates lists the rates at which the whole batch would be
 	// accepted, for a refusal's way out; empty when none would.
 	FitsAtRates []int `json:"fitsAtRates,omitempty"`
@@ -207,6 +209,7 @@ func estimateAt(profiles []wavProfile, doc *docProfile, rate uint32) *ImportEsti
 				Reason:      ReasonSampleMemory,
 				OverCapFile: p.name,
 				FileSeconds: float64(p.frames) / float64(p.srcRate),
+				CapSeconds:  float64(fzutil.MaxResampleOut) / float64(rate),
 			}
 		}
 		audioSum += sectorPad(samples * disk.BytesPerSample)

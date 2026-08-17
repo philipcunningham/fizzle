@@ -8,7 +8,7 @@ import { IMAGE_SIZE } from "../src/boundary/contract";
 import { createFakeCore, fakeCalls } from "../src/core/fake";
 import { App } from "../src/shell/App";
 import { classifyInput, sfzCandidates } from "../src/viewstate/place";
-import { openDisk, openInstrumentDisk, pickFiles, wavHeader } from "./helpers";
+import { openDisk, openInstrumentDisk, pickFiles, wavFixture, wavHeader } from "./helpers";
 
 const bytes = (fill: number, length = 8) => new Uint8Array(length).fill(fill);
 const named = (name: string, data: Uint8Array = bytes(1)) => ({ name, bytes: data });
@@ -149,12 +149,16 @@ describe("placement routing", () => {
 
   it("the folder import carries the one stereo answer to the core (R8)", async () => {
     // No instrument yet, so the batch takes the folder route, where
-    // the answer used to be dropped on the floor.
+    // the answer used to be dropped on the floor. The files are
+    // stereo, which is what makes the question appear at all.
     await openDisk();
-    pickFiles([new File([bytes(1)], "01 kick.wav"), new File([bytes(2)], "02 snare.wav")]);
+    pickFiles([
+      new File([wavFixture(2, 44100, 100)], "01 kick.wav"),
+      new File([wavFixture(2, 44100, 100)], "02 snare.wav"),
+    ]);
 
     await screen.findByText("Import 2 WAVs");
-    fireEvent.click(screen.getByRole("radio", { name: "Mix" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Mix" }));
     fireEvent.click(screen.getByRole("button", { name: "Convert" }));
 
     await waitFor(() => {

@@ -476,6 +476,7 @@ func main() {
 			"anyStereo":   est.AnyStereo,
 			"overCapFile": est.OverCapFile,
 			"fileSeconds": est.FileSeconds,
+			"capSeconds":  est.CapSeconds,
 			"fitsAtRates": fitsAt,
 		})
 	})
