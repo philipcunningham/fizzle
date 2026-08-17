@@ -337,6 +337,17 @@ export interface Core {
     fitToDisk: boolean,
     channel: Channel,
   ): Promise<CoreResult<SFZImportResult>>;
+  /**
+   * Pre-flight for the WAV import dialog: what the batch becomes at
+   * the rate and whether it lands (R6). Read only, and re-queried on
+   * every rate or channel change, so the caller's buffers must stay
+   * usable: implementations copy rather than transfer them.
+   */
+  estimateImport(
+    files: Record<string, Uint8Array>,
+    rate: SampleRate,
+    channel: Channel,
+  ): Promise<CoreResult<ImportEstimate>>;
   /** Core log verbosity to the console: the CLI debug flag's analogue (E4). */
   setDebug(debug: boolean): Promise<CoreResult<null>>;
   /** Slot-addressed voice editing: the instrument's voices (R14). */
@@ -401,4 +412,29 @@ export interface ExtractedVoice {
 export interface SFZImportResult {
   snapshot: Snapshot;
   rate: number;
+}
+
+/**
+ * The import dialog's pre-flight answer, computed by the core with
+ * the conversion's own arithmetic. verdict names what the matching
+ * import call would do; reason narrows a "wont-fit" to the
+ * constraint that bites first.
+ */
+export interface ImportEstimate {
+  /** Document growth in bytes: audio plus the headers around it. */
+  bytes: number;
+  /** The batch's play time at the target rate. */
+  seconds: number;
+  /** Play time the document still holds at the target rate. */
+  roomSeconds: number;
+  verdict: "fits" | "splits" | "wont-fit";
+  reason: "sample-memory" | "disk-room" | "";
+  /** At least one file carries a left and right to choose between. */
+  anyStereo: boolean;
+  /** First file over the sampler's memory at this rate, or empty. */
+  overCapFile: string;
+  /** That file's play time in seconds; 0 when no file is over. */
+  fileSeconds: number;
+  /** Rates at which the whole batch would be accepted. */
+  fitsAtRates: number[];
 }

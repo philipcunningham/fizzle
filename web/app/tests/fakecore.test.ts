@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { IMAGE_SIZE } from "../src/boundary/contract";
 import { createFakeCore } from "../src/core/fake";
+import { wavFixture } from "./helpers";
 
 function image(fill: number): Uint8Array {
   return new Uint8Array(IMAGE_SIZE).fill(fill);
@@ -542,5 +543,93 @@ describe("fake core document ops", () => {
     const again = await core.newInstrument("TWICE");
     expect(again.ok).toBe(false);
     if (!again.ok) expect(again.error.code).toBe("instrument-exists");
+  });
+});
+
+// The estimate drives the import dialog's reactive line, so the fake
+// mirrors the core's semantics: rate-scaled sizes, the sampler memory
+// cap, the split verdict, and read-only behaviour.
+describe("fake core import estimate", () => {
+  async function withDisk() {
+    const core = createFakeCore();
+    await core.newDisk("KIT");
+    return core;
+  }
+
+  it("scales the estimate with the chosen rate", async () => {
+    const core = await withDisk();
+    const files = { "pad.wav": wavFixture(1, 36000, 36000) };
+    const at36 = await core.estimateImport(files, 36000, "mix");
+    const at9 = await core.estimateImport(files, 9000, "mix");
+    if (!at36.ok || !at9.ok) throw new Error("estimate failed");
+    expect(at36.value.verdict).toBe("fits");
+    expect(at36.value.seconds).toBeCloseTo(1, 2);
+    expect(at9.value.seconds).toBeCloseTo(1, 2);
+    expect(at9.value.bytes).toBeLessThan(at36.value.bytes);
+    expect(at36.value.anyStereo).toBe(false);
+    expect(at36.value.roomSeconds).toBeGreaterThan(10);
+  });
+
+  it("flags a stereo file so the dialog asks the stereo question", async () => {
+    const core = await withDisk();
+    const r = await core.estimateImport({ "st.wav": wavFixture(2, 44100, 1000) }, 18000, "mix");
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.anyStereo).toBe(true);
+  });
+
+  it("refuses a file over the sampler's memory and names the way out", async () => {
+    const core = await withDisk();
+    // 59.4 s of stereo 44.1 kHz: over the cap at 36 and 18, fits at 9.
+    const files = { "long.wav": wavFixture(2, 44100, 2619540) };
+    const r = await core.estimateImport(files, 36000, "mix");
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.verdict).toBe("wont-fit");
+    expect(r.value.reason).toBe("sample-memory");
+    expect(r.value.overCapFile).toBe("long.wav");
+    expect(r.value.fileSeconds).toBeCloseTo(59.4, 1);
+    expect(r.value.fitsAtRates).toEqual([9000]);
+  });
+
+  it("refuses a lone first voice too big for one disk, for room", async () => {
+    const core = await withDisk();
+    const r = await core.estimateImport({ "big.wav": wavFixture(1, 18000, 720000) }, 18000, "mix");
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.verdict).toBe("wont-fit");
+    expect(r.value.reason).toBe("disk-room");
+    expect(r.value.fitsAtRates).toEqual([9000]);
+  });
+
+  it("reports the two disk split for a join past one disk", async () => {
+    const core = await withDisk();
+    await core.importWavToInstrument("first.wav", wavFixture(1, 18000, 450000), 18000, "mix");
+    const r = await core.estimateImport(
+      { "second.wav": wavFixture(1, 18000, 450000) },
+      18000,
+      "mix",
+    );
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.verdict).toBe("splits");
+  });
+
+  it("refuses an unreadable file by name", async () => {
+    const core = await withDisk();
+    const r = await core.estimateImport(
+      { "ok.wav": wavFixture(1, 18000, 100), "bad.wav": new Uint8Array([1, 2, 3]) },
+      18000,
+      "mix",
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("invalid-wav");
+    expect(r.error.message).toContain("bad.wav");
+  });
+
+  it("leaves the session untouched", async () => {
+    const core = await withDisk();
+    const before = await core.snapshot();
+    await core.estimateImport({ "kick.wav": wavFixture(1, 18000, 500) }, 18000, "mix");
+    const after = await core.snapshot();
+    if (!before.ok || !after.ok) throw new Error("snapshot failed");
+    expect(after.value.revision).toBe(before.value.revision);
   });
 });

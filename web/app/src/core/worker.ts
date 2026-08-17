@@ -2,7 +2,13 @@
 // serialises calls onto it. One request in, one response out, matched
 // by id; exported image bytes travel back as a transferable.
 import { coreCrash, err } from "../boundary/contract";
-import type { Channel, CoreResult, SchemaField, Snapshot } from "../boundary/contract";
+import type {
+  Channel,
+  CoreResult,
+  ImportEstimate,
+  SchemaField,
+  Snapshot,
+} from "../boundary/contract";
 import "./generated/wasm_exec.js";
 
 interface FizzleCore {
@@ -71,6 +77,11 @@ interface FizzleCore {
     fitToDisk: boolean,
     channel: string,
   ): CoreResult<{ snapshot: Snapshot; rate: number }>;
+  estimateImport(
+    files: Record<string, Uint8Array>,
+    rate: number,
+    channel: string,
+  ): CoreResult<ImportEstimate>;
   setDebug(debug: boolean): CoreResult<null>;
   setSlotParamNumber(slot: number, field: string, value: number): CoreResult<Snapshot>;
   setSlotParamOption(slot: number, field: string, option: string): CoreResult<Snapshot>;
@@ -180,6 +191,13 @@ export interface FolderPayload {
   channel: Channel;
 }
 
+/** The estimate call: files plus the two dialog answers. */
+export interface EstimatePayload {
+  files: Record<string, ArrayBuffer>;
+  rate: number;
+  channel: Channel;
+}
+
 function folderFiles(files: Record<string, ArrayBuffer>): Record<string, Uint8Array> {
   const out: Record<string, Uint8Array> = {};
   for (const [name, buffer] of Object.entries(files)) {
@@ -227,6 +245,7 @@ export interface WorkerRequest {
     | "openImagePair"
     | "importSfz"
     | "importWavFolder"
+    | "estimateImport"
     | "setDebug"
     | "setSlotParamNumber"
     | "setSlotParamOption"
@@ -479,6 +498,10 @@ function dispatch(request: WorkerRequest): CoreResult<unknown> | undefined {
     case "importWavFolder": {
       const p = request.payload as FolderPayload;
       return core().importWavFolder(folderFiles(p.files), p.rate, p.fitToDisk, p.channel);
+    }
+    case "estimateImport": {
+      const p = request.payload as EstimatePayload;
+      return core().estimateImport(folderFiles(p.files), p.rate, p.channel);
     }
     case "setDebug":
       return core().setDebug(request.payload as boolean);
