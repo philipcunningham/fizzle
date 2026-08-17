@@ -457,6 +457,28 @@ func main() {
 		return sfzResultJS(session.ImportWAVFolder(
 			filesArg(args[0]), args[1].Int(), args[2].Bool(), args[3].String()))
 	})
+	core["estimateImport"] = method(func(args []js.Value) map[string]any {
+		// #nosec G115 -- webcore validates the rate.
+		est, cerr := session.EstimateImport(filesArg(args[0]), uint32(args[1].Int()), args[2].String())
+		if cerr != nil {
+			return errEnvelope(cerr)
+		}
+		fitsAt := make([]any, 0, len(est.FitsAtRates))
+		for _, r := range est.FitsAtRates {
+			fitsAt = append(fitsAt, r)
+		}
+		return okEnvelope(map[string]any{
+			"bytes":       est.Bytes,
+			"seconds":     est.Seconds,
+			"roomSeconds": est.RoomSeconds,
+			"verdict":     est.Verdict,
+			"reason":      est.Reason,
+			"anyStereo":   est.AnyStereo,
+			"overCapFile": est.OverCapFile,
+			"fileSeconds": est.FileSeconds,
+			"fitsAtRates": fitsAt,
+		})
+	})
 	core["setDebug"] = method(func(args []js.Value) map[string]any {
 		// Core logs reach the console through the stderr shim; this is
 		// the CLI debug flag's analogue (E4).
