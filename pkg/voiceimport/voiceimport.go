@@ -243,7 +243,7 @@ func NoLoop() LoopParams { return LoopParams{LoopStart: -1, LoopEnd: -1} }
 // and optional loop points. Use NoLoop() for one-shot samples.
 //
 // Default values produce a one-shot voice with a full-open amplitude
-// envelope and MIDI key range C2-C7 centred on C5. When loop.LoopStart >= 0,
+// envelope and MIDI key range C2-C7 centred on C4. When loop.LoopStart >= 0,
 // the voice is configured for loop_sustain: it plays to the loop start,
 // loops between LoopStart and LoopEnd while the key is held, then releases
 // after note-off.

@@ -425,10 +425,14 @@ export interface ImportEstimate {
   bytes: number;
   /** The batch's play time at the target rate. */
   seconds: number;
-  /** Play time the document still holds at the target rate. */
+  /**
+   * Play time the document still holds at the target rate, within
+   * its current disk count; a larger import may still land by
+   * splitting, which the verdict reports.
+   */
   roomSeconds: number;
   verdict: "fits" | "splits" | "wont-fit";
-  reason: "sample-memory" | "disk-room" | "";
+  reason: "sample-memory" | "disk-room" | "voice-limit" | "";
   /** At least one file carries a left and right to choose between. */
   anyStereo: boolean;
   /** First file over the sampler's memory at this rate, or empty. */

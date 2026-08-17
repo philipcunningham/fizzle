@@ -210,7 +210,7 @@ Convert a mono PCM WAV file (16, 24, or 32-bit) into a voice file. The WAV is re
 |------|------|---------|-------|
 | `--rate` | int | 36000 | Target sample rate. Must be 36000, 18000, or 9000. |
 
-The resulting voice has its sound type set to Normal (one of the five playback modes the FZ supports; see [Loops and playback modes](#loops-and-playback-modes)). The DCA envelope is set to instant attack at full level and a moderate release; the DCF is set fully open. Velocity sensitivity is set to a usable default so notes respond to MIDI velocity. The voice's MIDI key range is C2 to C7 with root C5; change this with `fzv edit --key-low`, `--key-high`, and `--root`.
+The resulting voice has its sound type set to Normal (one of the five playback modes the FZ supports; see [Loops and playback modes](#loops-and-playback-modes)). The DCA envelope is set to instant attack at full level and a moderate release; the DCF is set fully open. Velocity sensitivity is set to a usable default so notes respond to MIDI velocity. The voice's MIDI key range is C2 to C7 with root C4; change this with `fzv edit --key-low`, `--key-high`, and `--root`.
 
 ### `fzv extract`
 
@@ -650,7 +650,7 @@ fizzle disk add first-kick.img kick.fzv
 fizzle disk ls first-kick.img
 ```
 
-Copy `first-kick.img` to the Gotek (or a real floppy). On the sampler, load the disk and the voice appears as `KICK`, playing at original pitch on the root key (C5, MIDI 72).
+Copy `first-kick.img` to the Gotek (or a real floppy). On the sampler, load the disk and the voice appears as `KICK`, playing at original pitch on the root key (C4, MIDI 60).
 
 ### Build a drum kit
 

@@ -163,7 +163,7 @@ func nextFreeKey(d *dumpState, bank, skipArea int) uint8 {
 //
 // The rule: a voice that carries a key range of its own keeps it, and a
 // voice that carries the WAV importer's fixed default does not. Every
-// voice that importer produces reads 36 to 96 root 72, so honouring the
+// voice that importer produces reads 36 to 96 root 60, so honouring the
 // incoming header stacked eight dropped WAVs on the same two octaves
 // and one key sounded all eight. R7's .wav and .fzv cells promise
 // sequential mapping, and J5 promises the next free key range.

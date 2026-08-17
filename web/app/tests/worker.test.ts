@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { isCoreCrash } from "../src/boundary/contract";
 import { createWasmCore } from "../src/core/wasm";
 import type { Core } from "../src/boundary/contract";
-import type { WorkerRequest, WorkerResponse } from "../src/core/worker";
+import type { ImportWavPayload, WorkerRequest, WorkerResponse } from "../src/core/worker";
 
 const UNSETTLED = "unsettled";
 
@@ -169,10 +169,28 @@ describe("core boundary, main thread half", () => {
       payload: { rate: 36000, channel: "mix" },
     });
     expect(worker.transfers.at(-1)).toEqual([]);
-    expect(bytes.byteLength).toBe(4);
+  });
+
+  // The dialog keeps its file bytes after Convert: the estimate reads
+  // them again and a failed batch retries from the failed file. The
+  // import calls transfer for speed, so what they transfer has to be
+  // a copy, never the caller's own buffer.
+  it("imports transfer a copy, leaving the caller's buffers usable", () => {
+    const core = newCore();
+    const worker = activeWorker();
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+
+    void core.importWavToInstrument("kick.wav", bytes, 36000, "mix");
+    const single = worker.transfers.at(-1) ?? [];
+    expect(single).toHaveLength(1);
+    expect(single[0]).not.toBe(bytes.buffer);
+    const posted = lastRequest(worker).payload as ImportWavPayload;
+    expect(Array.from(new Uint8Array(posted.buffer))).toEqual([1, 2, 3, 4]);
 
     void core.importWavFolder({ "kick.wav": bytes }, 36000, false, "mix");
-    expect(worker.transfers.at(-1)).toHaveLength(1);
+    const batch = worker.transfers.at(-1) ?? [];
+    expect(batch).toHaveLength(1);
+    expect(batch[0]).not.toBe(bytes.buffer);
   });
 });
 
