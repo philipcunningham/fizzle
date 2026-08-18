@@ -75,21 +75,21 @@ async function walk(entry: FileSystemEntry, prefix: string, out: DroppedFile[]):
 }
 
 /**
- * Walks the dropped entries depth first. Paths are relative to the
- * dropped folder, not to its parent, which is what an SFZ instrument
- * needs to resolve the samples it references.
- *
- * A dropped folder's own name is left out, because the folder picker
- * leaves it out too: webkitRelativePath reads "MyKit/kick.wav" and the
- * shell strips the first segment. The conversion pipeline reads the
- * root of the filesystem it is handed, so a leading segment would hide
- * every WAV in the folder and the import would report finding none.
+ * Walks the dropped entries depth first. A single dropped folder is
+ * the root itself, so its own name is left out, matching the folder
+ * picker: webkitRelativePath reads "MyKit/kick.wav" and the shell
+ * strips the first segment; keeping the name would hide every WAV one
+ * level below the root the conversion pipeline reads. A drop holding
+ * several entries is rooted at the drop point instead, so each folder
+ * keeps its name: an .sfz dropped beside its samples folder resolves
+ * "samples/kick.wav" the way the .sfz references it.
  */
 export async function walkEntries(entries: FileSystemEntry[]): Promise<DroppedFile[]> {
   const out: DroppedFile[] = [];
+  const loneFolder = entries.length === 1 && entries[0]?.isDirectory === true;
   for (const entry of entries) {
     if (hidden(entry.name)) continue;
-    if (entry.isDirectory) {
+    if (entry.isDirectory && loneFolder) {
       for (const child of await readDir(entry as FileSystemDirectoryEntry)) {
         await walk(child, "", out);
       }

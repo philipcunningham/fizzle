@@ -157,6 +157,12 @@ function Shell({ core }: { core: Core }) {
   const [stereo, setStereo] = useState("Mix");
   // A conversion failure, shown inside the open dialog (E1).
   const [convertError, setConvertError] = useState<string | null>(null);
+  // A lone .sfz awaiting its samples. The browser cannot read the
+  // files an .sfz references unless the user hands them over, so the
+  // folder picked next joins this file. It survives only the hop from
+  // the prompt to the picker: every other dialog open and the close
+  // path clear it, so a stale .sfz cannot leak into a later import.
+  const [pendingSfz, setPendingSfz] = useState<NamedBytes | null>(null);
   const [dirty, setDirty] = useState(false);
   const [barError, setBarError] = useState<{ text: string; seq: number } | null>(null);
   // Set once the core says it can no longer answer: the session is
@@ -414,6 +420,7 @@ function Shell({ core }: { core: Core }) {
     setDialog(null);
     setBusy(false);
     setConvertError(null);
+    setPendingSfz(null);
   };
 
   // Focus must not fall to the body when a dialog closes (Q5). On the
@@ -432,6 +439,7 @@ function Shell({ core }: { core: Core }) {
     const active = document.activeElement;
     focusReturn.current = active instanceof HTMLElement && active !== document.body ? active : null;
     setConvertError(null);
+    setPendingSfz(null);
     // The conversion answers are per import: a rate or a Left picked
     // for an earlier batch must not silently apply to this one.
     setRate("18");
@@ -704,7 +712,18 @@ function Shell({ core }: { core: Core }) {
       case "wavs":
         openDialog({ kind: "wavImport", files: placement.files });
         break;
-      case "sfz":
+      case "sfz": {
+        // A bare .sfz carries no audio of its own; without its WAVs
+        // the conversion cannot start, so ask for the folder instead
+        // of offering a convert that must fail. setPendingSfz comes
+        // after openDialog, which clears it.
+        const wavs = placement.files.filter((f) => f.name.toLowerCase().endsWith(".wav"));
+        const soleSfz = placement.files.find((f) => f.name.toLowerCase().endsWith(".sfz"));
+        if (wavs.length === 0 && soleSfz) {
+          openDialog({ kind: "sfzFolder", name: soleSfz.name });
+          setPendingSfz(soleSfz);
+          break;
+        }
         openDialog({
           kind: "sfzImport",
           files: placement.files,
@@ -712,11 +731,10 @@ function Shell({ core }: { core: Core }) {
           hasInstrument: instrument !== null,
           // An SFZ folder carries its samples alongside the .sfz, so
           // the WAVs in the set are what the conversion reads.
-          channels: batchChannels(
-            placement.files.filter((f) => f.name.toLowerCase().endsWith(".wav")),
-          ),
+          channels: batchChannels(wavs),
         });
         break;
+      }
       case "unsupported":
         fail(`not an FZ input: ${placement.names.join(", ")}`);
         break;
@@ -991,6 +1009,14 @@ function Shell({ core }: { core: Core }) {
       });
     },
     onExport: exportImage,
+    onPickSfzFolder: () => {
+      // Not closeDialog: that would clear the pending .sfz the picked
+      // folder is about to join.
+      setDialog(null);
+      setBusy(false);
+      setConvertError(null);
+      folderRef.current?.click();
+    },
     onCloseDisk: () => {
       void core.closeDisk().then((r) => {
         const closed = apply(r);
@@ -1189,10 +1215,30 @@ function Shell({ core }: { core: Core }) {
         onChange={(e) => {
           const files = e.target.files;
           if (files?.length) {
-            placeFiles(
-              files,
-              Array.from(files).map((f) => relativePath(f)),
-            );
+            const list = Array.from(files);
+            const sfz = pendingSfz;
+            setPendingSfz(null);
+            if (sfz && !list.some((f) => f.name.toLowerCase().endsWith(".sfz"))) {
+              // The picked folder holds the samples alone: keep its
+              // name in every path so the .sfz's references resolve,
+              // and put the remembered .sfz beside it at the root.
+              void Promise.all(list.map(readBytes)).then((buffers) => {
+                routeNamed([
+                  { name: sfz.name, bytes: sfz.bytes },
+                  ...list.map((f, i) => ({
+                    name: f.webkitRelativePath === "" ? f.name : f.webkitRelativePath,
+                    bytes: buffers[i] ?? new Uint8Array(),
+                  })),
+                ]);
+              });
+            } else {
+              // An instrument folder (the .sfz inside it) or an
+              // ordinary folder: the normal stripped route resolves it.
+              placeFiles(
+                files,
+                list.map((f) => relativePath(f)),
+              );
+            }
           }
           e.target.value = "";
         }}

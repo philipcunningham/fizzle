@@ -3,7 +3,7 @@
 // the fake core.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { Channel, SampleRate } from "../src/boundary/contract";
+import type { Channel, Core, SampleRate } from "../src/boundary/contract";
 import { IMAGE_SIZE } from "../src/boundary/contract";
 import { createFakeCore, fakeCalls } from "../src/core/fake";
 import { App } from "../src/shell/App";
@@ -110,7 +110,9 @@ describe("placement routing", () => {
   it("an incomplete SFZ names its missing samples (R9)", async () => {
     await openInstrumentDisk();
     const sfz = new TextEncoder().encode("<region> sample=wavs/gone.wav\n");
-    pickFiles([new File([sfz], "broken.sfz")]);
+    // A WAV rides along so the batch passes the lone-.sfz gate; the
+    // referenced sample is still absent, which is the case under test.
+    pickFiles([new File([sfz], "broken.sfz"), new File([wavHeader(1)], "other.wav")]);
 
     await screen.findByText("SFZ conversion");
     fireEvent.click(screen.getByRole("button", { name: "Two disk split" }));
@@ -388,5 +390,98 @@ describe("sidebar file actions", () => {
 
     await screen.findByText(/exported OPENED\.fzf/);
     expect(asked).toEqual(["FULL-DATA-FZ"]);
+  });
+});
+
+// A bare .sfz is only the instrument's recipe: the browser cannot
+// read the samples it references unasked, so the shell asks for the
+// folder instead of offering a conversion that must fail.
+describe("a lone .sfz asks for its samples", () => {
+  function sfzFile(name = "JUNGLISM.sfz"): File {
+    return new File(["<region> sample=JUNGLISM Samples/amen 01.wav\n"], name);
+  }
+
+  function folderFile(relativePath: string): File {
+    const name = relativePath.split("/").pop() ?? relativePath;
+    const file = new File([wavFixture(1, 18000, 100)], name);
+    Object.defineProperty(file, "webkitRelativePath", { value: relativePath });
+    return file;
+  }
+
+  function pickFolder(files: File[]) {
+    fireEvent.change(screen.getByLabelText("folder"), { target: { files } });
+  }
+
+  /** A core that records the paths each SFZ conversion was handed. */
+  function recordingCore() {
+    const inner = createFakeCore();
+    const sfzCallKeys: string[][] = [];
+    const core: Core = {
+      ...inner,
+      importSfz: (files, sfzPath, rate, fit, split, channel) => {
+        sfzCallKeys.push(Object.keys(files).sort());
+        return inner.importSfz(files, sfzPath, rate, fit, split, channel);
+      },
+    };
+    return { core, sfzCallKeys };
+  }
+
+  it("prompts for the folder instead of opening the conversion", async () => {
+    await openDisk();
+    pickFiles([sfzFile()]);
+    await screen.findByText("This SFZ needs its samples");
+    expect(screen.queryByText("SFZ conversion")).toBeNull();
+  });
+
+  it("joins the remembered .sfz to a picked samples folder, paths intact", async () => {
+    const { core, sfzCallKeys } = recordingCore();
+    await openDisk(core);
+    pickFiles([sfzFile()]);
+    fireEvent.click(await screen.findByRole("button", { name: "Pick folder" }));
+    pickFolder([
+      folderFile("JUNGLISM Samples/amen 01.wav"),
+      folderFile("JUNGLISM Samples/amen 02.wav"),
+    ]);
+
+    await screen.findByText("SFZ conversion");
+    fireEvent.click(screen.getByRole("button", { name: "Fit to disk (downsample)" }));
+    await waitFor(() => {
+      expect(sfzCallKeys).toHaveLength(1);
+    });
+    expect(sfzCallKeys[0]).toEqual([
+      "JUNGLISM Samples/amen 01.wav",
+      "JUNGLISM Samples/amen 02.wav",
+      "JUNGLISM.sfz",
+    ]);
+  });
+
+  it("routes a picked instrument folder the normal stripped way", async () => {
+    const { core, sfzCallKeys } = recordingCore();
+    await openDisk(core);
+    pickFiles([sfzFile()]);
+    fireEvent.click(await screen.findByRole("button", { name: "Pick folder" }));
+    pickFolder([
+      folderFile("JUNGLISM/JUNGLISM.sfz"),
+      folderFile("JUNGLISM/JUNGLISM Samples/amen 01.wav"),
+    ]);
+
+    await screen.findByText("SFZ conversion");
+    fireEvent.click(screen.getByRole("button", { name: "Fit to disk (downsample)" }));
+    await waitFor(() => {
+      expect(sfzCallKeys).toHaveLength(1);
+    });
+    expect(sfzCallKeys[0]).toEqual(["JUNGLISM Samples/amen 01.wav", "JUNGLISM.sfz"]);
+  });
+
+  it("forgets the .sfz on cancel, so a later folder import stays a WAV import", async () => {
+    const { core, sfzCallKeys } = recordingCore();
+    await openDisk(core);
+    pickFiles([sfzFile()]);
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    pickFolder([folderFile("drums/kick.wav")]);
+
+    await screen.findByText("Import 1 WAV");
+    expect(sfzCallKeys).toHaveLength(0);
+    expect(screen.queryByText("SFZ conversion")).toBeNull();
   });
 });
