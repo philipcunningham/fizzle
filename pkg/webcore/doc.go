@@ -51,12 +51,9 @@ func (s *Session) RenameDisk(label string) (Snapshot, *Error) {
 // full dump deletes the instrument; on a split pair the second disk
 // goes with it.
 func (s *Session) DeleteFile(name string) (Snapshot, *Error) {
-	if s.image == nil {
-		return s.Snapshot(), errf(codeNoDisk, "no disk is open")
-	}
-	img, rerr := disk.ReadImage(bytes.NewReader(s.image))
-	if rerr != nil {
-		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: %v", rerr)
+	img, cerr := s.openedImage()
+	if cerr != nil {
+		return s.Snapshot(), cerr
 	}
 	if err := img.RemoveFile(name); err != nil {
 		return s.Snapshot(), errf(codeNotFound, "%v", err)
@@ -71,12 +68,9 @@ func (s *Session) DeleteFile(name string) (Snapshot, *Error) {
 // The full dump of a split pair comes back stitched, the whole
 // instrument in one file.
 func (s *Session) ExtractFile(name string) ([]byte, *Error) {
-	if s.image == nil {
-		return nil, errf(codeNoDisk, "no disk is open")
-	}
-	img, rerr := disk.ReadImage(bytes.NewReader(s.image))
-	if rerr != nil {
-		return nil, errf("invalid-image", "not a readable FZ image: %v", rerr)
+	img, cerr := s.openedImage()
+	if cerr != nil {
+		return nil, cerr
 	}
 	if name == disk.FullDumpName && s.image2 != nil {
 		return s.stitchedDump(img)

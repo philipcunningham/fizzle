@@ -1,9 +1,6 @@
 package webcore
 
 import (
-	"bytes"
-
-	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskget"
 	"github.com/philipcunningham/fizzle/pkg/voiceextract"
 )
@@ -24,9 +21,9 @@ func (s *Session) Peaks(fileName string, startFrame, endFrame, buckets int) ([]i
 	if buckets <= 0 || buckets > maxPeakBuckets {
 		return nil, errf(codeInvalidValue, "buckets must be 1 to %d, got %d", maxPeakBuckets, buckets)
 	}
-	img, rerr := disk.ReadImage(bytes.NewReader(s.image))
-	if rerr != nil {
-		return nil, errf("invalid-image", "not a readable FZ image: %v", rerr)
+	img, ierr := s.openedImage()
+	if ierr != nil {
+		return nil, ierr
 	}
 	voiceBytes, gerr := diskget.FromImage(img, fileName)
 	if gerr != nil {

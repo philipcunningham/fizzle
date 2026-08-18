@@ -400,9 +400,9 @@ func (s *Session) patchDump(build func(d *dumpState) ([]model.Patch, *Error)) (S
 	if s.instrument == nil {
 		return s.Snapshot(), errf("no-instrument", "the disk has no full dump to edit")
 	}
-	img, rerr := disk.ReadImage(bytes.NewReader(s.image))
-	if rerr != nil {
-		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: %v", rerr)
+	img, ierr := s.openedImage()
+	if ierr != nil {
+		return s.Snapshot(), ierr
 	}
 	fzf, cerr := s.stitchedDump(img)
 	if cerr != nil {
