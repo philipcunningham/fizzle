@@ -338,7 +338,7 @@ export function Dialogs({
               </Dialog.Title>
               <p className="desc">
                 {d.intent === "close"
-                  ? "Closing this disk set discards edits that haven't been exported."
+                  ? "Ejecting this disk set discards edits that haven't been exported."
                   : "Opening a different disk set discards edits that haven't been exported."}
               </p>
               <div className="buttons">

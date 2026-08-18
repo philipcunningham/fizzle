@@ -9,7 +9,7 @@ import { createFakeCore } from "../src/core/fake";
 import { App } from "../src/shell/App";
 import { ErrorBoundary } from "../src/shell/ErrorBoundary";
 import { Keyboard } from "../src/ui/Keyboard";
-import { openInstrumentDisk, pickFiles } from "./helpers";
+import { openDisk, openInstrumentDisk, pickFiles } from "./helpers";
 
 describe("unsupported browser notice", () => {
   it("appears where the save picker is missing and dismisses", async () => {
@@ -25,7 +25,7 @@ describe("dismissible errors (E1)", () => {
   it("an operation failure shows in the status bar and dismisses", async () => {
     render(<App core={createFakeCore()} />);
     // A bad image through the picker: the core rejects with an envelope.
-    fireEvent.click(await screen.findByRole("button", { name: "Browse…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
     fireEvent.change(screen.getByLabelText("fz files"), {
       target: { files: [new File([new Uint8Array(16)], "bad.img")] },
     });
@@ -117,7 +117,7 @@ describe("rendering error boundary (E5)", () => {
   it("contains a crash outside the sidebar and tab body, and still exports", async () => {
     const { core, exports } = crashingStatusBarCore();
     render(<App core={core} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Browse…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
     pickFiles([new File([new Uint8Array(IMAGE_SIZE)], "TECHNO.img")]);
 
     const alert = await screen.findByRole("alert", { name: "rendering failure" });
@@ -141,7 +141,7 @@ describe("QA fixes in the shell", () => {
     fireEvent.blur(rate);
     await screen.findByText("●");
 
-    fireEvent.click(screen.getByRole("button", { name: "Close disk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Eject disk" }));
     fireEvent.click(await screen.findByRole("button", { name: "Export first" }));
 
     // The guard is gone and the disk is closed, not left in a stale dialog.
@@ -176,5 +176,24 @@ describe("QA fixes in the shell", () => {
     await waitFor(() => {
       expect(screen.getAllByText("shared").length).toBe(1);
     });
+  });
+});
+
+// Menu and button labels state the action plainly; the trailing
+// ellipsis affordance is not this UI's idiom.
+describe("labels carry no trailing ellipsis", () => {
+  it("the import menu items and browse button state the action plainly", async () => {
+    await openDisk();
+    // Radix opens its menu on pointerdown.
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Import ▾" }), {
+      pointerType: "mouse",
+      button: 0,
+    });
+    expect(await screen.findByRole("menuitem", { name: "WAV files" })).toBeDefined();
+    expect(screen.getByRole("menuitem", { name: "Folder (WAVs or SFZ)" })).toBeDefined();
+    expect(screen.getByRole("menuitem", { name: "FZ files or images" })).toBeDefined();
+    for (const item of screen.getAllByRole("menuitem")) {
+      expect(item.textContent).not.toMatch(/…$/);
+    }
   });
 });

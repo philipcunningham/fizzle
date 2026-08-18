@@ -20,7 +20,7 @@ export async function openDisk(core: Core = createFakeCore()) {
 export async function openInstrumentDisk(core: Core = createFakeCore()) {
   render(<App core={core} />);
   const image = new File([new Uint8Array(IMAGE_SIZE)], "TECHNO.img");
-  fireEvent.click(await screen.findByRole("button", { name: "Browse…" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
   fireEvent.change(screen.getByLabelText("fz files"), { target: { files: [image] } });
   await screen.findByText("[OPENED]");
 }

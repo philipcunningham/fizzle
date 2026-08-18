@@ -279,7 +279,7 @@ describe("placement routing", () => {
 
   it("material with no disk open asks for a disk label first (R7)", async () => {
     render(<App core={createFakeCore()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Browse…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
     pickFiles([new File([bytes(6)], "SOLO.fzv")]);
 
     // The new disk dialog runs first, then the import continues.
@@ -313,7 +313,7 @@ describe("split pairs in the shell (R5)", () => {
 
   it("two images open together as one two disk instrument", async () => {
     render(<App core={createFakeCore()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Browse…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
     pickFiles([half(2, "b.img"), half(1, "a.img")]);
     await screen.findByText("[PAIR]");
     await screen.findByText(/two disk set/);
@@ -321,7 +321,7 @@ describe("split pairs in the shell (R5)", () => {
 
   it("a lone half banners its missing twin, and the twin completes it", async () => {
     render(<App core={createFakeCore()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Browse…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
     pickFiles([half(1, "a.img")]);
 
     const banner = await screen.findByRole("alert", { name: "missing disk" });

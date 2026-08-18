@@ -35,7 +35,7 @@ describe("shell frame", () => {
 
   it("close disk returns to the start screen when clean", async () => {
     await openDisk();
-    fireEvent.click(screen.getByRole("button", { name: "Close disk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Eject disk" }));
     await screen.findByRole("button", { name: "New disk" });
     expect(screen.queryByRole("tab", { name: "Voices" })).toBeNull();
   });
@@ -46,11 +46,11 @@ describe("shell frame", () => {
     fireEvent.change(field, { target: { value: "5" } });
     fireEvent.blur(field);
     await screen.findByText("●");
-    fireEvent.click(screen.getByRole("button", { name: "Close disk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Eject disk" }));
     await screen.findByText("Unexported changes");
     fireEvent.click(screen.getByRole("button", { name: "Keep working" }));
     expect(screen.getByRole("tab", { name: "Voices" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Close disk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Eject disk" }));
     fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
     await screen.findByRole("button", { name: "New disk" });
   });

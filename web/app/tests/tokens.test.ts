@@ -157,3 +157,28 @@ describe("hierarchy from brightness and colour (Q6)", () => {
     expect(styleValue(mockup, ".filerow.selected", "font-weight")).toBe("700");
   });
 });
+
+// The keyboard's in-range keys must read as a lit range against the
+// page, never as a void: a fill too close to the background makes the
+// key range invisible, which is a meaning carried by colour alone.
+describe("keyboard range visibility", () => {
+  it("the highlighted range reads against the page", () => {
+    expect(contrast(token("key-white-on"), token("bg"))).toBeGreaterThanOrEqual(NON_TEXT);
+    expect(contrast(token("key-black-on"), token("bg"))).toBeGreaterThanOrEqual(NON_TEXT);
+  });
+});
+
+// Text needs air inside its box: the drop zone's browse button was
+// flush against the prompt line, and the matrix controller labels sat
+// on the cell border.
+describe("labels get room from their boxes", () => {
+  it("the drop zone separates its prompt from the browse button", () => {
+    expect(
+      parseInt(styleValue(mockup, ".start .dropzone .btn", "margin-top"), 10),
+    ).toBeGreaterThanOrEqual(12);
+  });
+
+  it("the matrix controller labels clear the cell border", () => {
+    expect(styleValue(mockup, "table.term.matrix td.matrixrow", "padding")).toBe("4px 10px");
+  });
+});

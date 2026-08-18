@@ -1111,16 +1111,16 @@ function Shell({ core }: { core: Core }) {
             <DropdownMenu.Portal>
               <DropdownMenu.Content className="menu-content" align="end">
                 <DropdownMenu.Item className="menu-item" onSelect={() => wavRef.current?.click()}>
-                  WAV files…
+                  WAV files
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   className="menu-item"
                   onSelect={() => folderRef.current?.click()}
                 >
-                  Folder (WAVs or SFZ)…
+                  Folder (WAVs or SFZ)
                 </DropdownMenu.Item>
                 <DropdownMenu.Item className="menu-item" onSelect={() => anyRef.current?.click()}>
-                  FZ files or images…
+                  FZ files or images
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
@@ -1150,7 +1150,7 @@ function Shell({ core }: { core: Core }) {
               Export
             </button>
             <button className="btn" onClick={requestClose}>
-              Close disk
+              Eject disk
             </button>
           </>
         )}
@@ -1255,7 +1255,7 @@ function Shell({ core }: { core: Core }) {
                           twinRef.current?.click();
                         }}
                       >
-                        Open disk {disk.missingDisk}…
+                        Open disk {disk.missingDisk}
                       </button>
                       <input
                         ref={twinRef}
