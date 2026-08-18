@@ -341,6 +341,15 @@ export function createFakeCore(): Core {
     return snap();
   };
 
+  // commit is the fake's adoptPair: every accepted mutation lands
+  // here, so the missing-disk refusal sits after each method's own
+  // argument validation, exactly as the real session orders them.
+  const commit = (next: FakeState): CoreResult<Snapshot> => {
+    const guard = missingGuard();
+    if (guard) return guard;
+    return ok(mutate(next));
+  };
+
   // Mirrors Session.checkWholeDocument: every mutation on a lone half
   // of a split pair refuses without touching the document. Opens,
   // undo, redo, and the gesture brackets stay allowed, as the real
@@ -451,8 +460,6 @@ export function createFakeCore(): Core {
     },
 
     setAreaField(bank: number, area: number, field: string, value: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const target = next.instrument?.banks[bank]?.areas[area];
       if (!next.instrument || !target) {
@@ -496,12 +503,10 @@ export function createFakeCore(): Core {
           return Promise.resolve(err("invalid-field", `${field} is not an area field`));
       }
       refreshReferenced(next.instrument);
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     renameBank(bank: number, name: string) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       if (name.length === 0 || name.length > 12) {
         return Promise.resolve(err("invalid-value", "bank name must be 1 to 12 characters"));
       }
@@ -509,12 +514,10 @@ export function createFakeCore(): Core {
       const target = next.instrument?.banks[bank];
       if (!target) return Promise.resolve(err("invalid-value", "no such bank"));
       target.name = name;
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     swapAreas(bank: number, a: number, b: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const areas = next.instrument?.banks[bank]?.areas;
       const left = areas?.[a];
@@ -524,12 +527,10 @@ export function createFakeCore(): Core {
       }
       areas[a] = right;
       areas[b] = left;
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     deleteArea(bank: number, area: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const bankSnap = next.instrument?.banks[bank];
       if (!next.instrument || !bankSnap?.areas[area]) {
@@ -548,15 +549,23 @@ export function createFakeCore(): Core {
         b.areas.some((a) => a.voiceSlot === freedSlot),
       );
       if (!stillPlayed) {
-        next.instrument.voices = next.instrument.voices.filter((v) => v.slot !== freedSlot);
+        // The core sizes the voice area from the banks, so a freed
+        // slot leaves and every slot above it shifts down with the
+        // areas that play them renumbered to match.
+        next.instrument.voices = next.instrument.voices
+          .filter((v) => v.slot !== freedSlot)
+          .map((v) => (v.slot > freedSlot ? { ...v, slot: v.slot - 1 } : v));
+        for (const b of next.instrument.banks) {
+          for (const a of b.areas) {
+            if (a.voiceSlot > freedSlot) a.voiceSlot -= 1;
+          }
+        }
       }
       refreshReferenced(next.instrument);
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     addArea(bank: number, voiceSlot: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const bankSnap = next.instrument?.banks[bank];
       const voice = next.instrument?.voices.find((v) => v.slot === voiceSlot);
@@ -565,12 +574,10 @@ export function createFakeCore(): Core {
       }
       bankSnap.areas.push(fakeArea(voice.slot, voice.name));
       refreshReferenced(next.instrument);
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     duplicateArea(bank: number, area: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const bankSnap = next.instrument?.banks[bank];
       const src = bankSnap?.areas[area];
@@ -584,35 +591,29 @@ export function createFakeCore(): Core {
       next.instrument.voices.push(duplicate);
       bankSnap.areas.push({ ...src, voiceSlot: newSlot });
       refreshReferenced(next.instrument);
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     setEffectCell(controller: number, target: number, value: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const row = next.instrument?.effects?.matrix[controller];
       if (!next.instrument?.effects || !row || target < 0 || target > 6) {
         return Promise.resolve(err("invalid-value", "no such cell"));
       }
       row[target] = clampNum(value, 0, 127);
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     setBendRange(value: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       if (!next.instrument?.effects) {
         return Promise.resolve(err("invalid-value", "no effects block"));
       }
       next.instrument.effects.bendRange = clampNum(value, 0, 127);
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     mapVoice(voiceSlot: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const voice = next.instrument?.voices.find((v) => v.slot === voiceSlot);
       const bankSnap = next.instrument?.banks[0];
@@ -621,7 +622,7 @@ export function createFakeCore(): Core {
       }
       bankSnap.areas.push(fakeArea(voice.slot, voice.name));
       refreshReferenced(next.instrument);
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     auditionSlot(slot: number): Promise<CoreResult<AuditionData>> {
@@ -654,8 +655,6 @@ export function createFakeCore(): Core {
     },
 
     loadFzf(bytes: Uint8Array): Promise<CoreResult<Snapshot>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       if (bytes.length === 0) {
         return Promise.resolve(err("invalid-fzf", "empty dump"));
       }
@@ -670,12 +669,10 @@ export function createFakeCore(): Core {
         voices: [{ slot: 0, name: "LOADED", referenced: true }],
       };
       next.files = [{ name: "FULL-DATA-FZ", type: "full", sizeBytes: bytes.length }];
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     addVoice(bytes: Uint8Array): Promise<CoreResult<Snapshot>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       if (bytes.length === 0) {
         return Promise.resolve(err("not-a-voice", "empty voice file"));
       }
@@ -685,8 +682,6 @@ export function createFakeCore(): Core {
     },
 
     addBank(bytes: Uint8Array, slot: number): Promise<CoreResult<Snapshot>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       if (bytes.length === 0) {
         return Promise.resolve(err("invalid-fzb", "empty bank file"));
       }
@@ -698,7 +693,7 @@ export function createFakeCore(): Core {
           banks: [{ name: "FZB BANK", areas: [fakeArea(0, "FZB VOICE")] }],
           voices: [{ slot: 0, name: "FZB VOICE", referenced: true }],
         };
-        return Promise.resolve(ok(mutate(next)));
+        return Promise.resolve(commit(next));
       }
       if (slot < 0 || slot > next.instrument.banks.length || slot >= 8) {
         return Promise.resolve(err("invalid-value", `bank slot ${slot} out of range`));
@@ -710,7 +705,7 @@ export function createFakeCore(): Core {
         next.instrument.banks[slot] = joined;
       }
       refreshReferenced(next.instrument);
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     importWavToInstrument(
@@ -719,8 +714,6 @@ export function createFakeCore(): Core {
       rate: SampleRate,
       _channel: Channel,
     ): Promise<CoreResult<Snapshot>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       if (wav.length === 0) {
         return Promise.resolve(err("invalid-wav", "empty WAV"));
       }
@@ -734,7 +727,7 @@ export function createFakeCore(): Core {
       const dump = next.files.find((f) => f.type === "full");
       if (dump) dump.sizeBytes += grown;
       next.used += grown;
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     estimateImport(
@@ -751,6 +744,10 @@ export function createFakeCore(): Core {
       if (names.length === 0) {
         return Promise.resolve(err("invalid-value", "no files to estimate"));
       }
+      // The real core refuses the estimate on a lone half of a pair,
+      // because the import it describes would be refused too.
+      const missing = missingGuard();
+      if (missing) return Promise.resolve(missing);
       const shapes: { name: string; channels: number; rate: number; frames: number }[] = [];
       for (const name of names) {
         const shape = wavShape(files[name] ?? new Uint8Array());
@@ -867,8 +864,6 @@ export function createFakeCore(): Core {
       split: boolean,
       channel: Channel,
     ): Promise<CoreResult<SFZImportResult>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       fakeCalls.sfzChannel = channel;
       if (fitToDisk && split) {
         return Promise.resolve(
@@ -919,6 +914,8 @@ export function createFakeCore(): Core {
         voices,
       };
       next.files = [{ name: "FULL-DATA-FZ", type: "full", sizeBytes: 8192 }];
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const snapshot = mutate(next);
       return Promise.resolve(ok({ snapshot, rate: fitToDisk ? 9000 : rate }));
     },
@@ -929,8 +926,6 @@ export function createFakeCore(): Core {
       fitToDisk: boolean,
       channel: Channel,
     ): Promise<CoreResult<SFZImportResult>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       fakeCalls.wavFolderChannel = channel;
       const names = Object.keys(files)
         .filter((n) => n.toLowerCase().endsWith(".wav"))
@@ -956,6 +951,8 @@ export function createFakeCore(): Core {
         voices,
       };
       next.files = [{ name: "FULL-DATA-FZ", type: "full", sizeBytes: 8192 }];
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const snapshot = mutate(next);
       return Promise.resolve(ok({ snapshot, rate: fitToDisk ? 9000 : rate }));
     },
@@ -965,8 +962,6 @@ export function createFakeCore(): Core {
     },
 
     setSlotParamNumber(slot: number, field: string, value: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const spec = FAKE_SCHEMA.find((f) => f.id === field);
       if (!spec || spec.kind === "select") {
         return Promise.resolve(err("invalid-field", `${field} is not a numeric schema field`));
@@ -977,12 +972,10 @@ export function createFakeCore(): Core {
         return Promise.resolve(err("invalid-value", `voice slot ${slot} out of range`));
       }
       voice.params[field] = Math.min(spec.max, Math.max(spec.min, value));
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     setSlotParamOption(slot: number, field: string, option: string) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const spec = FAKE_SCHEMA.find((f) => f.id === field);
       if (!spec || spec.kind !== "select") {
         return Promise.resolve(err("invalid-field", `${field} is not a select schema field`));
@@ -996,12 +989,10 @@ export function createFakeCore(): Core {
         return Promise.resolve(err("invalid-value", `voice slot ${slot} out of range`));
       }
       voice.params[field] = option;
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     setSlotLoop(slot: number, index: number, start: number, end: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const detail = next.instrument?.voices.find((v) => v.slot === slot)?.voice;
       const loop = detail?.loops[index];
@@ -1010,12 +1001,10 @@ export function createFakeCore(): Core {
       }
       loop.start = clampNum(start, 0, detail.frames - 1);
       loop.end = clampNum(end, loop.start + 1, detail.frames);
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     setSlotGeneration(slot: number, start: number, end: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const detail = next.instrument?.voices.find((v) => v.slot === slot)?.voice;
       if (!detail) {
@@ -1024,12 +1013,10 @@ export function createFakeCore(): Core {
       const [lo, hi] = clampGeneration(detail.frames, start, end);
       detail.genStart = lo;
       detail.genEnd = hi;
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     setSlotLoopAttr(slot: number, index: number, xf: number, tm: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const loop = next.instrument?.voices.find((v) => v.slot === slot)?.voice?.loops[index];
       if (!loop) {
@@ -1037,12 +1024,10 @@ export function createFakeCore(): Core {
       }
       loop.xf = clampNum(xf, 0, 1023);
       loop.tm = clampNum(tm, 0, 1022);
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     setSlotLoopSelect(slot: number, sustain: number, release: number) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const detail = next.instrument?.voices.find((v) => v.slot === slot)?.voice;
       if (!detail) {
@@ -1050,7 +1035,7 @@ export function createFakeCore(): Core {
       }
       detail.loopSustain = clampNum(sustain, 0, 8);
       detail.loopRelease = clampNum(release, 0, 8);
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     setSlotEnvelope(
@@ -1061,8 +1046,6 @@ export function createFakeCore(): Core {
       rates: number[],
       stops: number[],
     ) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       if (rates.length !== 8 || stops.length !== 8) {
         return Promise.resolve(err("invalid-value", "envelopes carry 8 stages"));
       }
@@ -1077,12 +1060,10 @@ export function createFakeCore(): Core {
         rates: rates.map((v) => clampNum(v, 0, 99)),
         stops: stops.map((v) => clampNum(v, 0, 99)),
       };
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     renameVoiceSlot(slot: number, name: string) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       if (name.length === 0 || name.length > 12) {
         return Promise.resolve(err("invalid-value", "voice name must be 1 to 12 characters"));
       }
@@ -1097,7 +1078,7 @@ export function createFakeCore(): Core {
           if (area.voiceSlot === slot) area.voiceName = name;
         }
       }
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     slotPeaks(
@@ -1135,8 +1116,6 @@ export function createFakeCore(): Core {
     },
 
     renameDisk(label: string) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       if (state.label === null) {
         return Promise.resolve(err("no-disk", "no disk is open"));
       }
@@ -1147,12 +1126,10 @@ export function createFakeCore(): Core {
       }
       const next = clone(state);
       next.label = label;
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     deleteFile(name: string) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       if (state.label === null) {
         return Promise.resolve(err("no-disk", "no disk is open"));
       }
@@ -1167,14 +1144,17 @@ export function createFakeCore(): Core {
         next.instrument = null;
         next.bytes2 = null;
       }
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     newInstrument(name: string) {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
       if (state.instrument) {
         return Promise.resolve(err("instrument-exists", "the disk already has an instrument"));
+      }
+      if (/[^ -~]/.test(name)) {
+        return Promise.resolve(
+          err("invalid-value", "instrument name contains a non-ASCII character"),
+        );
       }
       const next = clone(state);
       next.label ??= "FIZZLE";
@@ -1187,7 +1167,7 @@ export function createFakeCore(): Core {
         ...next.files.filter((f) => f.name !== "FULL-DATA-FZ"),
         { name: "FULL-DATA-FZ", type: "full", sizeBytes: 2048 },
       ];
-      return Promise.resolve(ok(mutate(next)));
+      return Promise.resolve(commit(next));
     },
 
     extractFile(name: string): Promise<CoreResult<Uint8Array>> {

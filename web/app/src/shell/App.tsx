@@ -546,8 +546,15 @@ function Shell({ core }: { core: Core }) {
    */
   const openDialog = (next: PendingDialog) => {
     promptOpened.current = true;
-    const active = document.activeElement;
-    focusReturn.current = active instanceof HTMLElement && active !== document.body ? active : null;
+    // Only the first dialog of a chain records where focus came from:
+    // a queued prompt opening from inside a closing dialog's handler
+    // would otherwise capture that dialog's own button, which is gone
+    // by the time focus wants restoring.
+    if (dialog === null) {
+      const active = document.activeElement;
+      focusReturn.current =
+        active instanceof HTMLElement && active !== document.body ? active : null;
+    }
     setConvertError(null);
     setPendingSfz(null);
     // The conversion answers are per import: a rate or a Left picked
@@ -734,12 +741,18 @@ function Shell({ core }: { core: Core }) {
       return;
     }
     if (disk.missingDisk) {
+      // This route decides whether to prompt only after two core
+      // calls, so the queue holds: draining now would open a second
+      // dialog that the late prompt would then replace, losing the
+      // files it carries. The drain resumes when this settles.
+      promptOpened.current = true;
       // The open disk awaits its twin: try the pair, either order (R5).
       // The transport detaches what it transfers, so the attempt gets a
       // copy and the original survives for the fallback below.
       void core.exportImageAt(0).then((current) => {
         if (!current.ok) {
           report(current.error);
+          drainPlacements();
           return;
         }
         void core.openImagePair(current.value, file.bytes.slice()).then((paired) => {
@@ -748,6 +761,7 @@ function Shell({ core }: { core: Core }) {
             // the document stays dirty.
             apply(paired);
             say("the pair is whole; editing both disks as one instrument");
+            drainPlacements();
           } else {
             openDialog({ kind: "switchDisk", intent: { file } });
           }
@@ -1017,6 +1031,7 @@ function Shell({ core }: { core: Core }) {
     },
     onConvertSfz: (files, sfzPath, requested, mode, channel) => {
       setBusy(true);
+      const epoch = convertEpoch.current;
       void core
         .importSfz(
           toFileMap(files),
@@ -1027,6 +1042,11 @@ function Shell({ core }: { core: Core }) {
           channel as "left" | "right" | "mix",
         )
         .then((result) => {
+          // The dialog closed underneath the conversion: the document
+          // change already happened in the core, but the UI must not
+          // close a dialog the user opened since, bump the epoch under
+          // a running batch, or yank the tab.
+          if (convertEpoch.current !== epoch) return;
           setBusy(false);
           if (!result.ok) {
             closeDialog();

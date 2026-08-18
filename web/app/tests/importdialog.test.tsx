@@ -4,11 +4,12 @@
 // that cannot land is blocked with the way out named, and a failed
 // conversion reports in the dialog where the user acted rather than
 // only in the footer.
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Core, SFZImportResult, Snapshot } from "../src/boundary/contract";
 import { err } from "../src/boundary/contract";
 import { createFakeCore } from "../src/core/fake";
+import { App } from "../src/shell/App";
 import { openDisk, openInstrumentDisk, pickFiles, wavFixture } from "./helpers";
 
 function convertButton(): HTMLButtonElement {
@@ -384,5 +385,24 @@ describe("refusals read as words", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("kick.wav holds no audio");
     expect(alert.textContent).not.toContain("invalid-wav:");
+  });
+
+  // The status bar carries the same words: a code prefix here would
+  // put the machine code back on screen.
+  it("puts no machine code in the status bar either", async () => {
+    const inner = createFakeCore();
+    const core: Core = {
+      ...inner,
+      newDisk: () => Promise.resolve(err<Snapshot>("invalid-label", "that label is not ASCII")),
+    };
+    render(<App core={core} />);
+    fireEvent.click(await screen.findByRole("button", { name: "New disk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    const bar = await screen.findByText(/that label is not ASCII/);
+    // The dismiss control shares the line; the message itself carries
+    // no code prefix.
+    expect(bar.textContent.startsWith("that label is not ASCII")).toBe(true);
+    expect(bar.textContent).not.toContain("invalid-label");
   });
 });

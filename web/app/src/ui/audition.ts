@@ -133,9 +133,17 @@ export function createAudition(
           // Stop after the fade lands, and detach only once the
           // source ends: an immediate stop cuts at the current gain
           // and clicks on every release.
-          source.onended = () => {
+          // A one shot that already played out fires no further ended
+          // event, so the detach also runs on a timer: whichever comes
+          // first wins and the second call is harmless.
+          let detached = false;
+          const detach = () => {
+            if (detached) return;
+            detached = true;
             gain.disconnect();
           };
+          source.onended = detach;
+          setTimeout(detach, 100);
           source.stop(at + 0.06);
         } catch {
           // A source that already ended throws on stop; harmless.

@@ -153,11 +153,11 @@ export function createWasmCore(): Core {
       );
     },
     loadFzf: (bytes) => {
-      const payload: BytesPayload = { buffer: bytes.buffer as ArrayBuffer };
+      const payload: BytesPayload = { buffer: wholeBytes(bytes) };
       return call<Snapshot>("loadFzf", payload, [payload.buffer]);
     },
     addVoice: (bytes) => {
-      const payload: BytesPayload = { buffer: bytes.buffer as ArrayBuffer };
+      const payload: BytesPayload = { buffer: wholeBytes(bytes) };
       return call<Snapshot>("addVoice", payload, [payload.buffer]);
     },
     addBank: (bytes, slot) => {

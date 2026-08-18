@@ -78,6 +78,13 @@ func (s *Session) AddVoice(fzvData []byte) (Snapshot, *Error) {
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
+	// A dump this session could not parse still belongs to the user:
+	// replaceDump would overwrite it, so an unreadable instrument is
+	// refused rather than silently replaced.
+	if hasFile(img, disk.FullDumpName) {
+		return s.Snapshot(), errItemf("unreadable-instrument", disk.FullDumpName,
+			"this disk's instrument cannot be read, so fizzle will not replace it; delete it first to import over it")
+	}
 	// Through replaceDump rather than diskadd directly: a first voice
 	// too large for one disk then splits across a pair, the same way
 	// a join or an SFZ conversion does.
@@ -419,8 +426,11 @@ func wavRefusal(filename string, err error) *Error {
 		return say("%s carries more than two channels; export it as mono or stereo", filename)
 	case errors.Is(err, wav.ErrSampleRate):
 		return say("%s declares a sample rate fizzle cannot read", filename)
-	case errors.Is(err, wav.ErrTooManySamples), errors.Is(err, wav.ErrDataTooLarge):
-		return say("%s is too large to load", filename)
+	case errors.Is(err, wav.ErrTooManySamples), errors.Is(err, wav.ErrDataTooLarge),
+		errors.Is(err, fzutil.ErrTooLong):
+		return say("%s is longer than the sampler's memory holds at this rate; choose a lower rate", filename)
+	case errors.Is(err, fzutil.ErrSourceRateTooLow):
+		return say("%s was recorded at too low a sample rate to convert", filename)
 	default:
 		return say("%s could not be read as a WAV", filename)
 	}
