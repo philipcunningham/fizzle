@@ -24,10 +24,11 @@
      vanishes on a white one. Highlighted, root, label, and focus each
      come in a dark-surface and a light-surface form. */
   --fz-key-white: #e8e8e8;
-  --fz-key-white-on: #0f6b66;
+  --fz-key-white-on: #10706a;
   --fz-key-black: #101010;
   --fz-key-black-on: #0a7070;
   --fz-key-edge: #333333;
+  --fz-key-edge-on: #000000;
   --fz-key-label: #5a5a5a;
   --fz-key-label-on: #e8e8e8;
   --fz-key-root: #ffb000;

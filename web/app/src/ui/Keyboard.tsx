@@ -128,7 +128,7 @@ export function Keyboard({
             width={WHITE_W - 1}
             height={WHITE_H}
             fill={inRange(note) ? "var(--fz-key-white-on)" : "var(--fz-key-white)"}
-            stroke="var(--fz-key-edge)"
+            stroke={inRange(note) ? "var(--fz-key-edge-on)" : "var(--fz-key-edge)"}
             style={{ cursor: "pointer" }}
             {...keyProps(note)}
           />
@@ -164,7 +164,7 @@ export function Keyboard({
             width={BLACK_W}
             height={BLACK_H}
             fill={inRange(note) ? "var(--fz-key-black-on)" : "var(--fz-key-black)"}
-            stroke="var(--fz-key-edge)"
+            stroke={inRange(note) ? "var(--fz-key-edge-on)" : "var(--fz-key-edge)"}
             style={{ cursor: "pointer" }}
             {...keyProps(note)}
           />
