@@ -186,6 +186,21 @@ function Shell({ core }: { core: Core }) {
   const folderRef = useRef<HTMLInputElement>(null);
   const twinRef = useRef<HTMLInputElement>(null);
 
+  // A dismissed OS folder picker fires cancel, not change, and React
+  // declares no onCancel for inputs: the remembered .sfz must not
+  // outlive the pick it was waiting on, so the listener lands by ref.
+  useEffect(() => {
+    const input = folderRef.current;
+    if (!input) return;
+    const forget = () => {
+      setPendingSfz(null);
+    };
+    input.addEventListener("cancel", forget);
+    return () => {
+      input.removeEventListener("cancel", forget);
+    };
+  }, []);
+
   // The CLI debug flag's analogue (E4): ?debug=1 raises the core's
   // console log level for the session.
   useEffect(() => {
@@ -229,8 +244,15 @@ function Shell({ core }: { core: Core }) {
           typeof voice.params["keyHigh"] === "number"
         ? [{ lo: voice.params["keyLow"], hi: voice.params["keyHigh"] }]
         : null;
+  // On the banks tab both the marker and the sound come from the
+  // selected area's root, the cent byte the hardware pitches by; the
+  // voices tab reads the voice header's own root.
   const focusRoot =
-    typeof focusVoice?.params?.["rootKey"] === "number" ? focusVoice.params["rootKey"] : null;
+    tab === "banks"
+      ? (area?.root ?? null)
+      : typeof focusVoice?.params?.["rootKey"] === "number"
+        ? focusVoice.params["rootKey"]
+        : null;
 
   // Peaks for the selected voice's waveform (R17): the full extent,
   // zoomed inside wavesurfer.
@@ -325,10 +347,12 @@ function Shell({ core }: { core: Core }) {
     // area's root, the cent byte the sampler itself pitches by. A key
     // no area covers stays silent.
     if (tab === "banks" && bank) {
+      const matches = matchAreas(bank.areas, note, velocity);
+      if (matches.length === 0) return;
       heldNotes.current.get(note)?.();
       const releases: (() => void)[] = [];
       let released = false;
-      for (const matched of matchAreas(bank.areas, note, velocity)) {
+      for (const matched of matches) {
         const slotVoice = instrument.voices.find((v) => v.slot === matched.voiceSlot);
         void slotPCM(matched.voiceSlot, slotVoice?.audioKey ?? "").then((r) => {
           if (!r.ok || released) return;
@@ -780,10 +804,19 @@ function Shell({ core }: { core: Core }) {
       case "sfz": {
         // A bare .sfz carries no audio of its own; without its WAVs
         // the conversion cannot start, so ask for the folder instead
-        // of offering a convert that must fail. setPendingSfz comes
-        // after openDialog, which clears it.
+        // of offering a convert that must fail. Several bare .sfz
+        // files are refused outright: remembering one would silently
+        // drop the rest, and the chooser cannot help without samples.
+        // setPendingSfz comes after openDialog, which clears it.
         const wavs = placement.files.filter((f) => f.name.toLowerCase().endsWith(".wav"));
-        const soleSfz = placement.files.find((f) => f.name.toLowerCase().endsWith(".sfz"));
+        const sfzs = placement.files.filter((f) => f.name.toLowerCase().endsWith(".sfz"));
+        if (wavs.length === 0 && sfzs.length > 1) {
+          fail(
+            `${String(sfzs.length)} .sfz files arrived without their samples; import the instrument's folder instead`,
+          );
+          break;
+        }
+        const soleSfz = sfzs[0];
         if (wavs.length === 0 && soleSfz) {
           openDialog({ kind: "sfzFolder", name: soleSfz.name });
           setPendingSfz(soleSfz);
@@ -1287,15 +1320,22 @@ function Shell({ core }: { core: Core }) {
               // The picked folder holds the samples alone: keep its
               // name in every path so the .sfz's references resolve,
               // and put the remembered .sfz beside it at the root.
-              void Promise.all(list.map(readBytes)).then((buffers) => {
-                routeNamed([
-                  { name: sfz.name, bytes: sfz.bytes },
-                  ...list.map((f, i) => ({
-                    name: f.webkitRelativePath === "" ? f.name : f.webkitRelativePath,
-                    bytes: buffers[i] ?? new Uint8Array(),
-                  })),
-                ]);
-              });
+              void Promise.all(list.map(readBytes)).then(
+                (buffers) => {
+                  routeNamed([
+                    { name: sfz.name, bytes: sfz.bytes },
+                    ...list.map((f, i) => ({
+                      name: f.webkitRelativePath === "" ? f.name : f.webkitRelativePath,
+                      bytes: buffers[i] ?? new Uint8Array(),
+                    })),
+                  ]);
+                },
+                // One unreadable file must not discard the selection in
+                // silence (E1: the failure shows where the user acted).
+                (e: unknown) => {
+                  fail(`could not read the files: ${describe(e)}`);
+                },
+              );
             } else {
               // An instrument folder (the .sfz inside it) or an
               // ordinary folder: the normal stripped route resolves it.
