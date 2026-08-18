@@ -31,11 +31,9 @@ mem.prof
 !.claude/skills/
 !.claude/settings.json
 
-# Generated attribution and SBOM (regenerated each `make build`)
+# Generated attribution (regenerated each `make build`)
 /internal/licenses/THIRD_PARTY_LICENSES.txt
 /internal/licenses/LICENSE.txt
-/internal/licenses/sbom.cdx.json
-/*.cdx.json
 /*.spdx.json
 
 # Browser automation session artifacts (Playwright MCP)

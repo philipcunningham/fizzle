@@ -35,10 +35,9 @@ needs running by hand before a UI change ships.
 - `make fmt` formats code
 - `make vet` runs go vet
 - `make integration-test` runs CLI integration tests (builds binary automatically)
-- `make build` builds the binary (regenerates `internal/licenses/THIRD_PARTY_LICENSES.txt` and `fizzle.cdx.json` first, with `-tags release` so the attribution is embedded)
-- `make tools` installs the pinned supply-chain tooling (`go-licenses`, `cyclonedx-gomod`); run once before the first `make build`
+- `make build` builds the binary (regenerates `internal/licenses/THIRD_PARTY_LICENSES.txt` first, with `-tags release` so the attribution is embedded)
+- `make tools` installs the pinned `go-licenses` tool; run once before the first `make build`
 - `make licenses` regenerates third-party attribution and copies `LICENSE` into the embed directory
-- `make sbom` regenerates the CycloneDX SBOM at `fizzle.cdx.json`
 
 ## Project structure
 
@@ -67,7 +66,7 @@ needs running by hand before a UI change ships.
 - `pkg/feature/` contains studio's feature specs: end-to-end tests that drive the compiled TUI through a real PTY and a virtual-terminal emulator, behind the `feature` build tag (`make feature-test`, UNIX only)
 - `pkg/internal/bitconv/` contains PCM sample bit-pattern conversions (centralises gosec G115 suppressions)
 - `pkg/internal/limits/` contains shared upper bounds for untrusted-input reads (`MaxRead = 256 MiB`) to bound memory use on malformed input
-- `internal/licenses/` exposes the project license, third-party attribution, and CycloneDX SBOM to the CLI's `licenses` subcommand (`fizzle licenses` for full text, `fizzle licenses --json` for the SBOM). Stub strings ship without the `release` build tag so plain `go build`/`go test` work without running `make licenses` first; `make build` adds `-tags release` and the embedded text replaces the stubs.
+- `internal/licenses/` exposes the project license and third-party attribution to the CLI's `licenses` subcommand (`fizzle licenses` prints the full text). Stub strings ship without the `release` build tag so plain `go build`/`go test` work without running `make licenses` first; `make build` adds `-tags release` and the embedded text replaces the stubs.
 - `pkg/internal/testutil/` contains shared test helpers
 - `docs/` contains the long-form user manual (`fizzle-manual.md`) and the benchmarking notes (`fizzle-benchmarking.md`). The FZ-1 data-structures specification (markdown transcription plus the original Casio R&D PDF) lives in `llm-wiki/sources/`; format findings and synthesis live in `llm-wiki/`
 

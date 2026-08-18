@@ -39,30 +39,13 @@ func licensesCmd() *cli.Command {
 		Name:  "licenses",
 		Usage: "show the project license and third-party attribution",
 		UsageText: `Print the project license followed by the full text of every
-third-party dependency's license. Use --json to emit the CycloneDX
-software bill of materials (SBOM) instead, which lists each module
-and its license identifier in structured JSON suitable for
-supply-chain tooling.
-
-The text output satisfies the attribution clauses of the permissive
-licenses in the dependency graph (MIT, BSD, Apache-2.0). The SBOM
-alone does not, because it carries license identifiers but not the
-verbatim notices those licenses require.
+third-party dependency's license. The output satisfies the
+attribution clauses of the permissive licenses in the dependency
+graph (MIT, BSD, Apache-2.0).
 
 Example:
-   fizzle licenses
-   fizzle licenses --json | jq '.components[] | {name, licenses}'`,
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:  flagJSON,
-				Usage: "emit the CycloneDX SBOM as JSON instead of full attribution text",
-			},
-		},
-		Action: func(_ context.Context, cmd *cli.Command) error {
-			if cmd.Bool(flagJSON) {
-				fmt.Println(licenses.SBOM)
-				return nil
-			}
+   fizzle licenses`,
+		Action: func(_ context.Context, _ *cli.Command) error {
 			fmt.Print(licenses.Project)
 			fmt.Print(licenses.ThirdParty)
 			return nil

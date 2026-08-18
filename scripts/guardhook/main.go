@@ -19,8 +19,6 @@ var protectedPrefixes = []string{
 	"testdata/",
 	"internal/licenses/THIRD_PARTY_LICENSES.txt",
 	"internal/licenses/LICENSE.txt",
-	"internal/licenses/sbom.cdx.json",
-	"fizzle.cdx.json",
 	"web/app/package-lock.json",
 }
 

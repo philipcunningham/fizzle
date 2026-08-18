@@ -23,10 +23,10 @@ jobs:
         with:
           go-version: '1.26'
 
-      - name: Install supply-chain tooling
+      - name: Install attribution tooling
         run: make tools
 
-      - name: Cross-compile binaries and generate SBOM
+      - name: Cross-compile binaries
         env:
           VERSION: ${{ github.ref_name }}
         run: make release
@@ -82,7 +82,6 @@ jobs:
           cp fizzle-darwin-amd64      "release-assets/fizzle-${TAG}-darwin-amd64"
           cp fizzle-darwin-arm64      "release-assets/fizzle-${TAG}-darwin-arm64"
           cp fizzle-windows-amd64.exe "release-assets/fizzle-${TAG}-windows-amd64.exe"
-          cp fizzle.cdx.json          "release-assets/fizzle-${TAG}.cdx.json"
           cp docs/fizzle-manual.md    "release-assets/fizzle-${TAG}-manual.md"
           cd release-assets
           sha256sum * > SHA256SUMS.txt

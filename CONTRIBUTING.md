@@ -31,14 +31,13 @@ If your issue includes a patch, please make sure that:
 ```sh
 git clone https://github.com/philipcunningham/fizzle
 cd fizzle
-make tools   # one-off: installs go-licenses and cyclonedx-gomod at pinned versions
+make tools   # one-off: installs go-licenses at a pinned version
 make build
 ```
 
-`make build` regenerates `internal/licenses/THIRD_PARTY_LICENSES.txt` and
-`fizzle.cdx.json` (a CycloneDX SBOM) every time, and compiles with
-`-tags release` so the binary embeds those artefacts. Both generated
-files are gitignored.
+`make build` regenerates `internal/licenses/THIRD_PARTY_LICENSES.txt`
+every time, and compiles with `-tags release` so the binary embeds the
+attribution text. The generated file is gitignored.
 
 Plain `go build`, `go test`, `go vet`, and `make check` work without
 running `make tools` or `make licenses`: they compile the
@@ -49,8 +48,7 @@ the stub.
 To inspect the embedded attribution after a release build:
 
 ```sh
-./fizzle licenses | less                       # full text (compliance-grade)
-./fizzle licenses --json | jq '.components'    # CycloneDX SBOM (supply-chain tooling)
+./fizzle licenses | less
 ```
 
 ## Testing
