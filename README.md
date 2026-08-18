@@ -4,7 +4,7 @@
 
 The FZ series are 16-bit samplers from the late 1980s, still used in jungle and experimental music for their distinctive sound. fizzle turns modern material (WAV files, SFZ instruments) into the voices, full dumps, and disk images the sampler reads. It doesn't emulate an FZ. You bring the sampler and a floppy emulator; fizzle prepares what goes on the disk.
 
-fizzle has two front ends over the same core: a command-line tool and a [browser editor](#browser-editor). The releases carry the CLI; the browser editor runs from source.
+fizzle has two front ends over the same core: a command-line tool and a [browser editor](#browser-editor). The editor is live at [philipcunningham.github.io/fizzle](https://philipcunningham.github.io/fizzle/). The releases carry the CLI.
 
 [docs/fizzle-manual.md](docs/fizzle-manual.md) is the full reference. It covers every flag and where each parameter lives on the sampler. This README is the quickstart.
 
@@ -97,18 +97,22 @@ The manual's [Quickstart walkthroughs](docs/fizzle-manual.md#quickstart-walkthro
 
 ## Browser editor
 
+**[philipcunningham.github.io/fizzle](https://philipcunningham.github.io/fizzle/)** opens the editor. Nothing to install.
+
+It is the same fizzle core compiled to WebAssembly, behind a React front end. Create a disk or open an `.img` file, import WAVs or an SFZ instrument as voices, edit them, then export the image for your floppy emulator. Voices preview in the tab through Web Audio.
+
+**Your files stay on your machine.** The page loads its assets and then makes no network requests, so your samples and disk images never reach a server. There is no account, no upload, and no telemetry. Closing the tab discards the open disk, so export before you leave.
+
+**Use Chrome.** Desktop Chromium browsers are the supported target, and Chrome is where fizzle is tested. Other browsers and mobile are out of scope, and the editor says so when it can't rely on what it needs.
+
+To run it from source, against your own build of the core:
+
 ```sh
 make wasm          # build the browser core
 cd web/app
 npm install
 npm run dev        # then open the printed localhost URL
 ```
-
-The browser editor is the same fizzle core compiled to WebAssembly, behind a React front end. Create a disk or open an `.img` file, import WAVs as voices, edit them, then export the image. Voices preview in the tab through Web Audio.
-
-Desktop Chromium is the only supported browser. Other browsers and mobile are out of scope.
-
-Everything happens in the tab. The page loads its assets and then makes no network requests, so your samples and disk images never leave the machine.
 
 For the front end layout and its checks see [web/app/README.md](web/app/README.md).
 
