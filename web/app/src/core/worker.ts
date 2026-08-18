@@ -88,13 +88,6 @@ interface FizzleCore {
 
 export type AreaArgs = number[];
 
-
-
-
-
-
-
-
 export interface ImportWavPayload {
   filename: string;
   buffer: ArrayBuffer;
@@ -349,7 +342,8 @@ function dispatch(request: WorkerRequest): CoreResult<unknown> | undefined {
     case "setBendRange": {
       const p = request.payload as AreaArgs;
       return core().setBendRange(p[0] ?? 0);
-    }    case "auditionSlot": {
+    }
+    case "auditionSlot": {
       const p = request.payload as AreaArgs;
       return core().auditionSlot(p[0] ?? 0);
     }

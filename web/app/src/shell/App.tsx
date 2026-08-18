@@ -861,11 +861,14 @@ function Shell({ core }: { core: Core }) {
   // Routes queued placements until one opens a dialog; the rest wait
   // for that dialog to close.
   const drainPlacements = () => {
+    // routeOne sets the flag through openDialog, so the read has to
+    // go through a call the narrowing cannot see past.
+    const opened = () => promptOpened.current;
     while (placementQueue.current.length > 0) {
       promptOpened.current = false;
       const next = placementQueue.current.shift();
       if (next) routeOne(next);
-      if (promptOpened.current) return;
+      if (opened()) return;
     }
   };
 

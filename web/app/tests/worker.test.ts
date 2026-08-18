@@ -147,7 +147,6 @@ describe("core boundary, main thread half", () => {
       method: "setSlotGeneration",
       payload: [2, 100, 900],
     });
-
   });
 
   // A subarray view must send only its own bytes: posting the backing

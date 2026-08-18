@@ -184,9 +184,9 @@ describe("keyboard range visibility", () => {
 // on the cell border.
 describe("labels get room from their boxes", () => {
   it("the drop zone separates its prompt from the browse button", () => {
-    expect(
-      parseInt(styleValue(mockup, ".dropzone .btn", "margin-top"), 10),
-    ).toBeGreaterThanOrEqual(12);
+    expect(parseInt(styleValue(mockup, ".dropzone .btn", "margin-top"), 10)).toBeGreaterThanOrEqual(
+      12,
+    );
   });
 
   it("the matrix controller labels clear the cell border", () => {

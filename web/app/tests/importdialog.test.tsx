@@ -318,10 +318,7 @@ describe("cancelling a running conversion", () => {
 describe("mixed selections queue their prompts", () => {
   it("shows the replace prompt first, then the WAV dialog", async () => {
     await openInstrumentDisk();
-    pickFiles([
-      new File([new Uint8Array(4096)], "other.fzf"),
-      wavFile("kick.wav", 1, 18000, 500),
-    ]);
+    pickFiles([new File([new Uint8Array(4096)], "other.fzf"), wavFile("kick.wav", 1, 18000, 500)]);
 
     await screen.findByText("Replace the instrument?");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -351,7 +348,7 @@ describe("imports reveal what arrived", () => {
     await waitFor(() => {
       const selected = screen
         .getAllByRole("row")
-        .find((r) => r.getAttribute("aria-selected") === "true" && r.textContent?.includes("HIT"));
+        .find((r) => r.getAttribute("aria-selected") === "true" && r.textContent.includes("HIT"));
       expect(selected?.textContent).toContain("FRESH HIT");
     });
   });
