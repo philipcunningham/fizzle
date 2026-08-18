@@ -195,7 +195,7 @@ func DecodePlaybackRange(data []byte, leadInSamples int) (sampleRate uint32, sam
 }
 
 // Decode extracts the sample rate and PCM samples from raw FZV data. It is
-// exported so the studio TUI and integration tests can reuse it without
+// exported so in-memory callers and integration tests can reuse it without
 // writing intermediate files.
 func Decode(data []byte) (sampleRate uint32, samples []int16, err error) {
 	sampleRate, audioData, maxSamples, err := parseVoiceAudio(data)

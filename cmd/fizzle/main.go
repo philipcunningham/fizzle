@@ -75,7 +75,6 @@ func run() int {
 			fzfCmd(),
 			fzbCmd(),
 			sfzCmd(),
-			studioCmd(),
 			licensesCmd(),
 		},
 	}

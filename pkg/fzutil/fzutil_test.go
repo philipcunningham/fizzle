@@ -451,8 +451,8 @@ func TestParseFZFHeader(t *testing.T) {
 	}
 }
 
-// TestIsMultiDiskFirstHalf pins the shared helper studio uses to
-// gate destructive operations against multi-disk dumps. A standalone
+// TestIsMultiDiskFirstHalf pins the shared helper that gates
+// destructive operations against multi-disk dumps. A standalone
 // single-disk FZF must return false; a synthesised disk-1-like
 // payload (BankTotalWaveOffset claiming more audio than is present,
 // plus a plausible voice with wavst past local audio) must return

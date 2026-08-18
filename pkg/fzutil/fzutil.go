@@ -304,7 +304,7 @@ func CountAllVoices(data []byte) int {
 // name. Single-voice FZFs (e.g. emitted by `fizzle voice import`) seed the
 // voice-area sector with the voice name written at offset 0x282 alongside
 // bstep=0, so requiring bstep>0 here keeps the bank/voice-area boundary
-// unambiguous. Callers that produce empty trailing banks (studio's
+// unambiguous. Callers that produce empty trailing banks (for example
 // auto-grow on rename or assign-skip) must compact them at save time;
 // otherwise the trailing banks vanish on reload.
 func CountBankSectors(data []byte) int {
@@ -634,8 +634,8 @@ func ResolveVoiceTargets(data []byte, hdr *FZFHeader, voiceNames []string, allVo
 // check prevents false positives. Mirrors the heuristic in fzfinfo
 // without pulling in the renderer it doesn't need.
 //
-// Callers use this to gate destructive operations (e.g. studio's
-// growBanksTo refuses on disk 1 of a split because BankCount is
+// Callers use this to gate destructive operations (for example a bank
+// grow must refuse on disk 1 of a split because BankCount is
 // shared with disk 2; growing one would desync the pair).
 func IsMultiDiskFirstHalf(data []byte) bool {
 	if len(data) < disk.SectorSize+8 {

@@ -255,7 +255,7 @@ const (
 	//
 	// The +1 then clamp-to-64 post-processing makes
 	// [0x0488] = min(disk_bstep+1, 64). fizzle writes
-	// bstep = voice_count (see voicebuild and studio/model for the
+	// bstep = voice_count (see voicebuild and pkg/model for the
 	// single-voice wrappers). Real Casio factory disks round-trip
 	// correctly under this convention, so [0x0488] is not a literal
 	// voice count for the load screen: it is a "highest index

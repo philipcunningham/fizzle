@@ -10,7 +10,7 @@ import (
 // FZF byte slice (already loaded into memory by the caller) and returns
 // one FZV byte slice per voice plus the parallel file-level slot indices.
 //
-// Studio v2's audition path uses this to render the currently-edited voice
+// Audition paths use this to render the currently-edited voice
 // to FZV without round-tripping through disk: edits land in
 // model.(*Model).bytes, the bytes are unpacked here, the resulting FZV is
 // handed to voiceextract.ExtractPlayback, and the WAV is auditioned.

@@ -159,7 +159,7 @@ func TestAddVoiceJoinsVoiceList(t *testing.T) {
 }
 
 // Growing past a voice sector boundary keeps every earlier voice
-// intact; the studio TUI's grow-at-boundary behaviour.
+// intact; the grow-at-boundary behaviour.
 func TestAddVoiceGrowsVoiceArea(t *testing.T) {
 	s := twoVoiceSession(t)
 	for i := range 4 {

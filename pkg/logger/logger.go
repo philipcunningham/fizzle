@@ -47,7 +47,7 @@ func initLogger(debug bool, w io.Writer, noColor bool) {
 
 // Silence replaces the global zerolog logger with one that discards all output
 // and returns a function that restores the previous logger. It is intended for
-// short-lived processes (such as the studio TUI) that need to suppress library
+// callers (such as benchmarks) that need to suppress library
 // log noise without redirecting their own stderr. Callers should defer the
 // returned function so the swap is reversed on exit.
 func Silence() func() {

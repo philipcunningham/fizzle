@@ -5,13 +5,13 @@ import (
 	"encoding/binary"
 	"errors"
 
+	"github.com/philipcunningham/fizzle/pkg/container"
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/internal/bitconv"
-	"github.com/philipcunningham/fizzle/pkg/container"
 	"github.com/philipcunningham/fizzle/pkg/model"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
@@ -351,8 +351,8 @@ func addBankPatches(d *dumpState, fzb []byte, slot int) ([]model.Patch, *Error) 
 }
 
 // appendVoiceToDump appends an .fzv (header sector plus PCM) to a full
-// dump as a fresh voice slot, mirroring the studio TUI's pool assign
-// byte for byte: grow the voice area at the boundary when the slot
+// dump as a fresh voice slot, matching the retired studio TUI's pool
+// assign byte for byte: grow the voice area at the boundary when the slot
 // needs it, land the PCM at the end of the audio area, and rewrite the
 // header's wave pointers to absolute sample offsets. An empty
 // instrument's silent placeholder slot is filled rather than appended

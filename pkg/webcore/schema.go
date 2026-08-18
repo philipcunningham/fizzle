@@ -227,7 +227,7 @@ func optionPatches(id, option string, voiceBytes []byte) ([]voiceedit.Patch, err
 // bytes and their count, and only the speed they are read back at
 // changes. voiceedit has no builder of its own here (the CLI's fzv edit
 // does not expose the rate), so the one byte patch is written directly
-// against disk's own offset, the way the studio TUI's Sample row does.
+// against disk's own offset.
 // A rate the hardware has no index for is refused rather than rounded.
 func sampleRatePatches(option string) ([]voiceedit.Patch, error) {
 	hz, err := strconv.ParseUint(option, 10, 32)
