@@ -625,3 +625,19 @@ func TestPlaceholderAreaRetunesToTheFilledVoice(t *testing.T) {
 		t.Errorf("placeholder area output = %d, want %d", area.Output, disk.PolyphonicAudioOut)
 	}
 }
+
+// A first voice too large for one disk splits across a pair, the same
+// way a join does: the assembled dump routes through replaceDump.
+func TestFirstImportSplitsAcrossTwoDisks(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("SPLIT"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	snap, cerr := s.ImportWAVToInstrument("long.wav", monoRateWAV(t, 720000, 18000), 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("ImportWAVToInstrument: %v", cerr)
+	}
+	if snap.Disk == nil || snap.Disk.Disks != 2 {
+		t.Fatalf("disks = %v, want a split pair", snap.Disk)
+	}
+}

@@ -96,6 +96,11 @@ func (s *Session) EstimateImport(files map[string][]byte, rate uint32, channel s
 	if len(files) == 0 {
 		return nil, errf(codeInvalidValue, "no files to estimate")
 	}
+	// A lone half of a split pair refuses every mutation, so the
+	// estimate refuses too rather than promise a doomed import.
+	if cerr := s.checkWholeDocument(); cerr != nil {
+		return nil, cerr
+	}
 
 	profiles, cerr := profileWAVs(files)
 	if cerr != nil {
@@ -221,7 +226,6 @@ func estimateAt(profiles []wavProfile, doc *docProfile, rate uint32) *ImportEsti
 
 	hasInstrument := doc.dumpLen > 0
 	var growth, newLen int
-	splitCapable := false
 	switch {
 	case hasInstrument:
 		newSlots := doc.voiceSlots + len(profiles)
@@ -235,21 +239,16 @@ func estimateAt(profiles []wavProfile, doc *docProfile, rate uint32) *ImportEsti
 		}
 		growth = (disk.VoiceAreaSectors(newSlots)-disk.VoiceAreaSectors(doc.voiceSlots))*disk.SectorSize + audioSum
 		newLen = doc.dumpLen + growth
-		splitCapable = true
 	case len(profiles) > disk.MaxVoices:
 		return &ImportEstimate{Verdict: VerdictWontFit, Reason: ReasonVoiceLimit, Seconds: seconds}
-	case len(profiles) > 1:
-		// The folder kit: one bank sector plus the voice area the
-		// batch needs.
+	default:
+		// A fresh instrument: one bank sector plus the voice area the
+		// batch needs. Every path re-splits as its size dictates, the
+		// lone first voice included.
 		newLen = (1+disk.VoiceAreaSectors(len(profiles)))*disk.SectorSize + audioSum
 		growth = newLen
-		splitCapable = true
-	default:
-		// A lone first voice assembles a dump that lands whole with
-		// no split path.
-		newLen = (1+disk.VoiceAreaSectors(1))*disk.SectorSize + audioSum
-		growth = newLen
 	}
+	splitCapable := true
 
 	est := &ImportEstimate{Bytes: growth, Seconds: seconds}
 	switch {

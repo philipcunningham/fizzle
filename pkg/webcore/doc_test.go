@@ -286,3 +286,15 @@ func TestInstrumentFromSixtyFourVoicesIsCheap(t *testing.T) {
 	}
 	t.Logf("100 enriched 64-voice parses: %v", elapsed)
 }
+
+// NewInstrument holds names to the same printable ASCII rule every
+// rename path enforces.
+func TestNewInstrumentRefusesUnprintableName(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("NAME"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	if _, cerr := s.NewInstrument("h\x01i"); cerr == nil {
+		t.Fatal("control byte accepted in an instrument name")
+	}
+}

@@ -685,3 +685,24 @@ func TestDuplicateAreaRefusesWhenVoicesAreFull(t *testing.T) {
 		t.Errorf("voices = %d, want %d", got, voices)
 	}
 }
+
+// Swapping areas moves every per-area field together, the MIDI
+// receive channel included: the channel belongs to the key split the
+// user is reordering.
+func TestSwapAreasMovesMIDIChannel(t *testing.T) {
+	s := twoVoiceSession(t)
+	if _, cerr := s.SetAreaField(0, 0, "midiChannel", 5); cerr != nil {
+		t.Fatalf("SetAreaField: %v", cerr)
+	}
+	snap, cerr := s.SwapAreas(0, 0, 1)
+	if cerr != nil {
+		t.Fatalf("SwapAreas: %v", cerr)
+	}
+	areas := snap.Disk.Instrument.Banks[0].Areas
+	if areas[1].MidiChannel != 5 {
+		t.Errorf("area 1 channel = %d after swap, want 5 to travel with the area", areas[1].MidiChannel)
+	}
+	if areas[0].MidiChannel == 5 {
+		t.Errorf("area 0 kept channel 5 after the swap")
+	}
+}

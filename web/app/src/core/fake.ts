@@ -504,6 +504,8 @@ export function createFakeCore(): Core {
           past = [...past, gestureBase].slice(-HISTORY_CAP);
           gestureBase = null;
           landed = true;
+          // The landed entry is new state, as in the real session.
+          revision += 1;
         }
       }
       return Promise.resolve(ok({ ...snap(), gestureLanded: landed }));
@@ -976,10 +978,11 @@ export function createFakeCore(): Core {
         }
         base.bytes = audio + (creating ? FAKE_DUMP_BASE : 0);
         const newLen = dumpLen + base.bytes;
-        const splitCapable = !creating || shapes.length > 1;
+        // Every import path re-splits as its size dictates, the lone
+        // first voice included, matching the core.
         if (newLen <= FAKE_DUMP_MAX) {
           base.verdict = "fits";
-        } else if (splitCapable && newLen <= 2 * FAKE_DUMP_MAX && newLen <= 2 * 1024 * 1024) {
+        } else if (newLen <= 2 * FAKE_DUMP_MAX && newLen <= 2 * 1024 * 1024) {
           base.verdict = "splits";
         } else {
           base.verdict = "wont-fit";

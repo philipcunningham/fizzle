@@ -186,8 +186,8 @@ func TestEstimateImportReportsSplit(t *testing.T) {
 	}
 }
 
-// A single first import has no split path: a dump too big for one
-// disk is refused for room, and the rates that would fit are named.
+// A single first import splits like every other path now, and the
+// estimate says so.
 func TestEstimateImportSingleOverOneDisk(t *testing.T) {
 	s := NewSession()
 	if _, cerr := s.NewDisk("EST"); cerr != nil {
@@ -197,11 +197,8 @@ func TestEstimateImportSingleOverOneDisk(t *testing.T) {
 	if cerr != nil {
 		t.Fatalf("EstimateImport: %v", cerr)
 	}
-	if est.Verdict != VerdictWontFit || est.Reason != ReasonDiskRoom {
-		t.Errorf("verdict %q reason %q, want %q %q", est.Verdict, est.Reason, VerdictWontFit, ReasonDiskRoom)
-	}
-	if len(est.FitsAtRates) != 1 || est.FitsAtRates[0] != 9000 {
-		t.Errorf("fits at %v, want [9000]", est.FitsAtRates)
+	if est.Verdict != VerdictSplits {
+		t.Errorf("verdict %q, want %q: the first import routes through the split path", est.Verdict, VerdictSplits)
 	}
 }
 
@@ -475,5 +472,34 @@ func TestEstimateImportTwoDiskRoom(t *testing.T) {
 	// about 8.2 s at 18 kHz; the disk arithmetic alone would say 11.
 	if est.RoomSeconds < 7.5 || est.RoomSeconds > 9 {
 		t.Errorf("room = %f s, want the memory bound of about 8.2", est.RoomSeconds)
+	}
+}
+
+// A lone half of a split pair refuses mutations, so the estimate must
+// refuse too rather than promise an import the next call rejects.
+func TestEstimateImportRefusesLoneHalf(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("EST"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	for _, name := range []string{"first.wav", "second half.wav"} {
+		if _, cerr := s.ImportWAVToInstrument(name, monoRateWAV(t, 450000, 18000), 18000, ChannelMix); cerr != nil {
+			t.Fatalf("import %s: %v", name, cerr)
+		}
+	}
+	disk1, cerr := s.ExportImageAt(0)
+	if cerr != nil {
+		t.Fatalf("ExportImageAt: %v", cerr)
+	}
+	lone := NewSession()
+	snap, cerr := lone.OpenImage(disk1)
+	if cerr != nil {
+		t.Fatalf("OpenImage: %v", cerr)
+	}
+	if snap.Disk == nil || snap.Disk.MissingDisk != 2 {
+		t.Fatalf("lone half did not report its missing twin")
+	}
+	if _, cerr := lone.EstimateImport(map[string][]byte{"more.wav": monoRateWAV(t, 100, 18000)}, 18000, ChannelMix); cerr == nil || cerr.Code != "missing-disk" {
+		t.Errorf("estimate on a lone half = %v, want missing-disk", cerr)
 	}
 }

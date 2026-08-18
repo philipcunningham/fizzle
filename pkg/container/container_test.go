@@ -129,12 +129,16 @@ func TestSwapAreaPatches(t *testing.T) {
 		copy(data[p.Offset:p.Offset+len(p.New)], p.New)
 	}
 	for _, off := range swapPerAreaFields {
+		// The channel carries its own distinct fixture and assertion.
+		if off == disk.BankMIDIRecvChanOffset {
+			continue
+		}
 		if data[off+0] != 0x20 || data[off+1] != 0x10 {
 			t.Errorf("field %#x not swapped", off)
 		}
 	}
-	if data[disk.BankMIDIRecvChanOffset+0] != 0x05 || data[disk.BankMIDIRecvChanOffset+1] != 0x06 {
-		t.Errorf("MIDI recv chan must not swap (REMAIN-008)")
+	if data[disk.BankMIDIRecvChanOffset+0] != 0x06 || data[disk.BankMIDIRecvChanOffset+1] != 0x05 {
+		t.Errorf("MIDI recv chan travels with the swapped area (REMAIN-008 settled)")
 	}
 	if binary.LittleEndian.Uint16(data[disk.BankVoiceNumOffset:]) != 200 {
 		t.Errorf("vp[0] not swapped")
