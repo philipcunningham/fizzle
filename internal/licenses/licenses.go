@@ -26,10 +26,3 @@ var Project = stubMessage
 // the fizzle binary links against. In stub builds it points callers
 // at the regeneration command.
 var ThirdParty = stubMessage
-
-// SBOM is the CycloneDX software bill of materials for the binary,
-// as JSON. Useful for supply-chain tooling; not a substitute for the
-// full licence text in ThirdParty since the SBOM only carries
-// licence identifiers, not the verbatim notice text most permissive
-// licences require for redistribution.
-var SBOM = "{\"comment\": \"" + stubMessage + "\"}"
