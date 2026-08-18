@@ -24,12 +24,12 @@ describe("shell frame", () => {
     pickFiles([new File([new Uint8Array(16)], "bad.img")]);
     await waitFor(() => {
       const alerts = screen.getAllByRole("alert").map((a) => a.textContent);
-      expect(alerts.join(" ")).toContain("invalid-image");
+      expect(alerts.join(" ")).toContain("an FZ image is");
     });
     fireEvent.click(screen.getByRole("button", { name: "dismiss error" }));
     await waitFor(() => {
       const alerts = screen.queryAllByRole("alert").map((a) => a.textContent);
-      expect(alerts.join(" ")).not.toContain("invalid-image");
+      expect(alerts.join(" ")).not.toContain("an FZ image is");
     });
   });
 

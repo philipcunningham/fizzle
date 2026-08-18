@@ -31,6 +31,9 @@ type Error struct {
 	// Item names the offending file, voice, or field where one
 	// exists, the way the spec's contract section promises.
 	Item string `json:"item,omitempty"`
+	// Detail carries the technical reason for a bug report; the
+	// message above stays the one a musician reads.
+	Detail string `json:"detail,omitempty"`
 }
 
 func (e *Error) Error() string { return e.Code + ": " + e.Message }

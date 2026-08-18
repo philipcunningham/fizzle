@@ -147,14 +147,14 @@ func profileWAVs(files map[string][]byte) ([]wavProfile, *Error) {
 	for _, name := range names {
 		f, err := wav.Read(bytes.NewReader(files[name]))
 		if err != nil {
-			return nil, errItemf("invalid-wav", name, "%s: %v", name, err)
+			return nil, wavRefusal(name, err)
 		}
 		channels := int(f.Channels)
 		if channels < 1 {
 			channels = 1
 		}
 		if f.SampleRate < fzutil.MinSampleRate {
-			return nil, errItemf("invalid-wav", name, "%s: sample rate %d Hz is below minimum %d Hz", name, f.SampleRate, fzutil.MinSampleRate)
+			return nil, errItemf("invalid-wav", name, "%s declares a sample rate fizzle cannot read", name)
 		}
 		profiles = append(profiles, wavProfile{
 			name:    name,

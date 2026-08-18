@@ -381,7 +381,7 @@ export function Dialogs({
               </Dialog.Title>
               <p className="desc">
                 &quot;{d.name}&quot; lists samples fizzle cannot see yet. Pick the instrument&apos;s
-                folder, or its samples folder.
+                samples folder.
               </p>
               <div className="buttons">
                 <button className="btn" onClick={close}>

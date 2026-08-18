@@ -50,7 +50,7 @@ describe("a fatal envelope (E5)", () => {
     await openInstrumentDisk();
     pickFiles([new File([new Uint8Array(16)], "bad.img")]);
 
-    await screen.findByText(/invalid-image/);
+    await screen.findByText(/an FZ image is/);
     expect(screen.queryByRole("alert", { name: "core failure" })).toBeNull();
   });
 });

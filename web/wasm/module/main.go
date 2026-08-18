@@ -207,6 +207,9 @@ func errEnvelope(cerr *webcore.Error) map[string]any {
 	if cerr.Item != "" {
 		e["item"] = cerr.Item
 	}
+	if cerr.Detail != "" {
+		e["detail"] = cerr.Detail
+	}
 	return map[string]any{"ok": false, "error": e}
 }
 
