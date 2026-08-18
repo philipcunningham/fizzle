@@ -3,7 +3,7 @@ type: topic
 title: Front-panel display scales
 description: How the FZ front panel maps raw header bytes to its 0 to 99 and -15 to +15 displays; calibrated on hardware, absent from the spec.
 tags: [fzv, display, hardware]
-updated: 2026-07-11
+updated: 2026-08-18
 sources:
   - FZ-10M hardware (calibration disk images; BRASS1 D3 1)
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
@@ -42,8 +42,8 @@ Confirmed against BRASS1 D3 1: rate byte 127 displays 99, stop byte
 
 Validated on FZ-10M with calibration images at bytes 0, 1, 4, 8, 15,
 64, 127, 128. Implemented as `disk.KFByteToDisplay` and
-`disk.KFDisplayToByte` in `pkg/disk/voice.go`; the studio and
-`pkg/fzvinfo` render through them.
+`disk.KFDisplayToByte` in `pkg/disk/voice.go`; `pkg/fzvinfo`,
+`pkg/webcore`, and `pkg/sfzexport` render through them.
 
 ## Open questions
 

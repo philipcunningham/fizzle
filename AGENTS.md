@@ -49,7 +49,8 @@ needs running by hand before a UI change ships.
 - `pkg/wav/` is the WAV file reader/writer
 - `pkg/voice*/` contains voice file operations (import, extract, build, unpack, edit)
 - `pkg/disk*/` contains disk operations (format, list, add, get, copy)
-- `pkg/studio/` contains the interactive Bubble Tea TUI (`fizzle studio`), a workspace-oriented editor for FZ-1 / FZ-10M / FZ-20M sound material. Sub-packages: `app/` (root tea.Model + Update / View, modal stack, save / autosave / recovery, journey tests), `audio/` (audition path via oto with single-in-flight playback and an owner-identity guard), `clock/` (tea.Tick seam for tests), `container/` (pure FZF/disk container byte surgery: compaction, bank grow, area swap/delete/duplicate patches, unit-testable without the TUI), `fznote/` (note-name formatting shared by the layout and area editors), `loader/` (.img / .fzf loader returning a model.Model + ContainerInfo summary), `model/` (in-memory container bytes plus undo/redo and dirty flag), `nav/` (Action enum + keymap), `spaces/{workspace,pool,layout,sound}/` (one sub-package per space), `theme/` (lipgloss palette), and `widgets/` (minimap, status, toast, hint, help, confirm, areaeditor, effectseditor, envelopevisual, lfovisual, samplevisual, topbar). studio's own README is at `pkg/studio/README.md`; it carries the feature spec, key bindings, user workflows, and testing strategy.
+- `pkg/container/` contains pure FZF/disk container byte surgery: compaction, bank grow, and area swap/delete/duplicate patches. Functions take raw container bytes and return new bytes or `model.Patch` lists, unit-testable without any UI.
+- `pkg/model/` contains the in-memory representation of an open container (.img or .fzf): the container bytes plus the undo/redo stacks, the dirty flag, and the current file path.
 - `pkg/webcore/` is the session facade the browser talks to. It owns the open document, validation, capacity, undo history, and the parameter schema the voice editor renders its controls from. A document is one disk image, or the pair a split instrument spans. Every mutating call is atomic: it returns either a fresh snapshot or a structured error envelope carrying a stable machine code. Canonical state lives here, never in the layers above.
 - `web/wasm/` is the `js/wasm` entry point that exposes the facade to JavaScript. `module/` registers `fizzleCore` on the JS global and wraps each result in an `{ok, value}` or `{ok, error}` envelope. A Go panic is recovered into an envelope rather than crossing the boundary raw. `surface_js.go` pins the import surface the browser build needs, so `make wasm-check` catches a broken `js/wasm` build.
 - `web/app/` is the React and TypeScript front end. `src/boundary/contract.ts` is the typed boundary both sides agree on. `src/core/worker.ts` runs the core in a Web Worker and serialises calls onto it. `src/core/fake.ts` is the hermetic fake the unit tests drive, and `src/shell/` holds the shell and its view state. Screens, controls, and dialogs live in `src/screens/`, `src/ui/`, and `src/dialogs/`. The front end owns view state only; no FZ format logic lives outside the core.
@@ -59,11 +60,10 @@ needs running by hand before a UI change ships.
 - `pkg/audioplayer/` provides cross-platform audio playback: native audio on macOS and Windows via oto/v3, system audio players (`aplay`, `paplay`, `ffplay`) on Linux. Exports a `Player` interface and `TestPlayer` for testing.
 - `pkg/fzutil/` contains shared utilities (bounded file reads, resampling, voice-name normalisation, FZF header parsing)
 - `pkg/fileutil/` contains atomic file writing and a cross-process file lock
-- `pkg/logger/` contains zerolog initialisation and `Silence()` (used by the studio TUI to suppress library log output without redirecting stderr)
+- `pkg/logger/` contains zerolog initialisation and `Silence()` (discards library log output without redirecting stderr)
 - `pkg/render/` contains shared output formatting (tables, note names, byte sizes)
 - `pkg/version/` contains version string
 - `pkg/integration/` contains three test layers: package-level integration tests (`integration_test.go`) that exercise multi-package pipelines against real-hardware fixture images with golden SHA-256 checksums; corpus snapshot tests (`corpus_snapshot_test.go`) that assert byte-equal `fzf info` / `fzv info` / `disk ls` / `sfz` parse JSON output against the ~254 fixtures under `testdata/corpus/` and `testdata/synthetic/` via `go-snaps`; and CLI binary-executing tests (`cli_test.go`) gated behind the `integration` build tag and run by `make integration-test`. Refresh snapshots with `UPDATE_SNAPS=true go test ./pkg/integration/ -run TestCorpus`.
-- `pkg/feature/` contains studio's feature specs: end-to-end tests that drive the compiled TUI through a real PTY and a virtual-terminal emulator, behind the `feature` build tag (`make feature-test`, UNIX only)
 - `pkg/internal/bitconv/` contains PCM sample bit-pattern conversions (centralises gosec G115 suppressions)
 - `pkg/internal/limits/` contains shared upper bounds for untrusted-input reads (`MaxRead = 256 MiB`) to bound memory use on malformed input
 - `internal/licenses/` exposes the project license and third-party attribution to the CLI's `licenses` subcommand (`fizzle licenses` prints the full text). Stub strings ship without the `release` build tag so plain `go build`/`go test` work without running `make licenses` first; `make build` adds `-tags release` and the embedded text replaces the stubs.
@@ -95,13 +95,13 @@ test access; use white-box tests instead.
 output to a `bytes.Buffer` instead of mutating the global logger. Production
 code uses `logger.Init(debug)` which writes to stderr. The shared test helper
 `testutil.CaptureLog` uses `InitWithWriter` internally. `logger.Silence()`
-discards all log output and returns a restore function; the studio TUI uses
-this to suppress library log noise during interactive sessions.
+discards all log output and returns a restore function; the sfzconvert
+and webcore benchmarks use this to suppress library log noise.
 
 **Audio playback:** The `audioplayer` package exports a `Player` interface with
 platform-specific backends selected by build tags. `NewPlayer()` returns the
-real backend; `NewTestPlayer(available)` returns a recording test double. The `studio`
-package accepts `audioplayer.Player` and tests inject `NewTestPlayer` to verify
+real backend; `NewTestPlayer(available)` returns a recording test double. The
+CLI's `fzv play` uses `NewPlayer()`; tests inject `NewTestPlayer` to verify
 playback behaviour without audio hardware.
 
 **Environment variables:** Parse environment variables at the CLI boundary and

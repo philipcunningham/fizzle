@@ -1,8 +1,10 @@
 # fizzle
 
-`fizzle` is a command-line tool for loading samples onto **Casio FZ series samplers** (FZ-1, FZ-10M, FZ-20M) via floppy disk images.
+`fizzle` loads samples onto **Casio FZ series samplers** (FZ-1, FZ-10M, FZ-20M) via floppy disk images.
 
 The FZ series are 16-bit samplers from the late 1980s, still used in jungle and experimental music for their distinctive sound. `fizzle` lets you convert modern sample libraries (WAV files, SFZ instruments) into the format the sampler reads from floppy disk, without needing a physical floppy drive.
+
+fizzle has two front ends over the same core: a command-line tool and a [browser editor](#browser-editor). The releases carry the CLI; the browser editor runs from source.
 
 The full reference, including the meaning of every flag and where each parameter lives on the sampler, is in [docs/fizzle-manual.md](docs/fizzle-manual.md). This README is the quickstart.
 
@@ -59,7 +61,7 @@ fizzle completion fish > ~/.config/fish/completions/fizzle.fish  # fish
 
 ---
 
-## 5-minute quickstart
+## CLI quickstart
 
 Convert a folder of WAVs (or an SFZ instrument) into a disk image the sampler can load.
 
@@ -91,23 +93,6 @@ You can pass a directory of WAVs instead of an SFZ file; each WAV gets assigned 
 For other workflows, see the [Quickstart walkthroughs](docs/fizzle-manual.md#quickstart-walkthroughs) chapter of the manual. It covers importing a single WAV, editing a voice in place, splitting a large instrument across two floppies, and round-tripping a hardware FZF.
 
 Long conversions respect Ctrl+C: cancel a running `sfz convert` and the command exits cleanly without leaving a half-written file.
-
----
-
-## Studio: the interactive TUI
-
-![fizzle studio](studio.png)
-
-```sh
-fizzle studio                    # use the current directory as workspace
-fizzle studio ~/fz-library       # use a directory as workspace
-```
-
-`fizzle studio` is a workspace-oriented terminal editor for FZ-1 / FZ-10M / FZ-20M sound material. It takes a directory of `.img` / `.fzf` / `.fzv` / `.wav` files and opens them from the in-TUI Workspace browser. Omitting the argument uses the current working directory.
-
-studio organises around four spaces: Workspace (file browser) and Pool (a session-level basket of voices). The other two spaces are Layout (the in-focus container's banks and Areas) and Sound (the selected voice, edited per-cell). `SHIFT+up` / `SHIFT+down` move between spaces. `Ctrl+S` saves, `Ctrl+Z` / `Ctrl+Y` undo and redo, `Ctrl+D` duplicates an Area for velocity multi-switching, `Ctrl+C` / `Ctrl+V` copy / paste between compatible cells, `Space` auditions, `?` opens contextual help, `Ctrl+Q` quits. studio includes autosave with crash recovery: dirty containers get a `.bak` snapshot next to the source file every 30 seconds. The snapshot is deleted on a successful save and offered for recovery if a crash occurs.
-
-For the full feature set, key bindings, user workflows, and testing approach see [pkg/studio/README.md](pkg/studio/README.md).
 
 ---
 

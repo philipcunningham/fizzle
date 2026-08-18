@@ -20,6 +20,9 @@ The file is split into two sections:
 - **Hardware QA** (`HW-01` to `HW-13`) requires a real Casio FZ-1,
   FZ-10M, or FZ-20M and can't be automated.
 
+Numbering keeps gaps where scenarios retire: `CLI-07` and `HW-07`
+covered the studio TUI, which fizzle no longer ships.
+
 Run with `--debug` for verbose output when investigating failures.
 
 Test assets in `testdata/synthetic/`: `HOOVER.img`, `STAB.img`, `TECHNO.img`,
@@ -126,7 +129,7 @@ fish -c 'source completion.fish; complete -C "fizzle "' | head
 - Each shell produces non-empty output and exit 0.
 - `bash -n` and `zsh -n` parse the output without errors.
 - The fish completion lists the top-level subcommands (`disk`, `fzv`,
-  `fzf`, `fzb`, `sfz`, `studio`).
+  `fzf`, `fzb`, `sfz`).
 
 ---
 
@@ -178,7 +181,7 @@ silently when flags or args change. No automated test runs them.
 ```sh
 # Print --help for every command and subcommand
 fizzle --help
-for cmd in disk fzv fzf fzb sfz studio; do
+for cmd in disk fzv fzf fzb sfz; do
   fizzle "$cmd" --help
 done
 for sub in "disk new" "disk ls" "disk add" "disk get" "disk copy" \
@@ -272,28 +275,6 @@ fizzle fzv info --json "out/METAL-BELL.fzv" | jq '.dcf.cutoff,.dcf.resonance'
 - No other voice's parameters change between before and after.
 - After unpack, the extracted voice carries the new cutoff and
   resonance values.
-
----
-
-## CLI-07: Studio non-TTY failure
-
-**Why CLI-level QA:** Running an interactive TUI under a pipe or in
-CI should fail with a clear message rather than hang or crash.
-
-**Steps:**
-
-```sh
-fizzle studio testdata/synthetic < /dev/null 2>&1 | head -5
-echo "exit=$?"
-fizzle studio testdata/synthetic < /dev/null > /tmp/out 2>&1
-echo "exit=$?"
-```
-
-**Pass criteria:**
-
-- The process exits within a few seconds.
-- The error message names the cause (no TTY).
-- No stack trace.
 
 ---
 
@@ -827,85 +808,6 @@ Copy `env-test.img` to the sampler.
 - No filter sweep is audible on note release
 - Velocity affects amplitude (soft keys quieter, hard keys louder)
 - `fzv info` shows no "Filter:" line (default is hidden)
-
----
-
-## HW-07: Studio edit round-trip
-
-**Automated counterparts:** the journey + round-trip tests under
-`pkg/studio/app/journey_test.go` and `pkg/studio/spaces/sound/roundtrip_test.go`,
-plus the property tests under `pkg/studio/{model,spaces,widgets}/*property_test.go`.
-Together they cover field commit, undo/redo, focus navigation,
-byte-level edit persistence, and patch validity at the model layer.
-Hardware QA
-verifies the edits are audible on a real FZ-1 / FZ-10M.
-
-**Scenario:** Open a workspace in studio and edit one voice across
-DCA / DCF / LFO / per-bank effects. Rename a bank, save, and reload.
-Verify the edits persist and play correctly on hardware.
-
-**Setup:**
-```sh
-mkdir -p /tmp/qa-studio && cp testdata/synthetic/HOOVER.img /tmp/qa-studio/
-fizzle studio /tmp/qa-studio
-```
-
-**Edits to perform inside the studio:**
-
-1. Navigation: in the Workspace browser, select `HOOVER.img` and press
-   `Enter` to open it (studio transitions into Layout). Press `Enter`
-   on Bank 1 to drill into the area list. Press `Enter` on an Area
-   (or `SHIFT+down`) to drill into Sound. Inside Sound, arrows move
-   between cells of the DCA / DCF / LFO / Sample / Loops grid;
-   `SHIFT+up` returns to Layout.
-2. Sound, DCF row: change Cutoff, Resonance, and Vel res to distinct
-   non-default values. Sound, DCA row: change Level KF (cell `[lvlKF/VF]`)
-   to a non-default value. Sound, LFO row: change Rate (cell
-   `[shape]`) to a non-default value.
-3. Layout, bank list: press `r` (or `F2`) on Bank 1 to rename. Type
-   a name (for example `Test Edit`) and commit. Bank names use the FZ-1's
-   name set and auto-uppercase, so it commits as `TEST EDIT` (the same
-   rule voice renames use).
-4. Layout, area list: press `a` on the Area you edited in step 2 to
-   open the per-Area editor; change Volume and MIDI Channel.
-5. Sound, Loops row: select that voice's loop cell. Walk Sustain
-   loop to a different stage via the `[ptrs]` cell.
-6. Layout, bank list: press `f` on Bank 1 to open the per-bank
-   effects editor; change Bend Depth to a distinct value.
-7. Optional: press `Ctrl+Z` once and `Ctrl+Y` once to confirm
-   undo/redo round-trips.
-8. Press `Ctrl+S`. The status line should report the save; the
-   modified indicator should clear.
-9. Quit with `Ctrl+Q`. Re-launch with `fizzle studio /tmp/qa-studio`
-   and re-open `HOOVER.img` from the Workspace browser.
-
-**Pass criteria (on-screen, after reload):**
-
-- Every edit from steps 2 to 6 is visible and unchanged in the studio
-  after the relaunch.
-- Bank name persists (uppercased, for example `TEST EDIT`).
-- The modified indicator is absent on relaunch.
-
-**Pass criteria (on hardware):**
-
-- Copy `/tmp/qa-studio/HOOVER.img` to the floppy / Gotek and load on the
-  FZ-1. The edited voice plays with the new filter, envelope, LFO,
-  and effects characteristics. The bank shows the renamed
-  name on the front panel.
-- F14 sanity: the voice's key range as reported by the FZ-1 matches
-  what was edited (this is the bank-site fan-out for key-range edits;
-  without it, hardware ignores the edit even though the file looks
-  correct).
-
-**Failure modes to record:**
-
-- Field appears edited in the studio after save but doesn't affect
-  hardware playback: indicates a missing bank-site sync or wrong
-  storage offset.
-- Field reverts after save then relaunch: indicates the model's
-  Apply path isn't committing through to the saved bytes.
-- Studio hangs on Ctrl+S: file lock contention or modal stack
-  regression.
 
 ---
 
