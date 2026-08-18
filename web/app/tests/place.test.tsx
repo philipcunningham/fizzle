@@ -326,6 +326,7 @@ describe("split pairs in the shell (R5)", () => {
 
     const banner = await screen.findByRole("alert", { name: "missing disk" });
     expect(banner.textContent).toContain("disk 2");
+    expect(screen.getByRole("button", { name: "Open disk 2" }).textContent).not.toMatch(/…$/);
     fireEvent.change(screen.getByLabelText("second disk file"), {
       target: { files: [half(2, "b.img")] },
     });

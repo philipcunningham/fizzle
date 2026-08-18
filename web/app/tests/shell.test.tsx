@@ -1,5 +1,5 @@
 // The shell frame over the fake core: start screen, the new disk
-// dialog, the workspace frame, errors in the status bar, the close
+// dialog, the workspace frame, errors in the status bar, the eject
 // guard, and the disk rename.
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -33,14 +33,14 @@ describe("shell frame", () => {
     });
   });
 
-  it("close disk returns to the start screen when clean", async () => {
+  it("eject disk returns to the start screen when clean", async () => {
     await openDisk();
     fireEvent.click(screen.getByRole("button", { name: "Eject disk" }));
     await screen.findByRole("button", { name: "New disk" });
     expect(screen.queryByRole("tab", { name: "Voices" })).toBeNull();
   });
 
-  it("close disk guards unexported changes", async () => {
+  it("eject disk guards unexported changes", async () => {
     await openInstrumentDisk();
     const field = screen.getByLabelText("loop 1 start");
     fireEvent.change(field, { target: { value: "5" } });
@@ -48,6 +48,7 @@ describe("shell frame", () => {
     await screen.findByText("●");
     fireEvent.click(screen.getByRole("button", { name: "Eject disk" }));
     await screen.findByText("Unexported changes");
+    await screen.findByText(/Ejecting this disk set discards/);
     fireEvent.click(screen.getByRole("button", { name: "Keep working" }));
     expect(screen.getByRole("tab", { name: "Voices" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Eject disk" }));

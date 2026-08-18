@@ -280,7 +280,7 @@ export function Dialogs({
                     );
                   }}
                 >
-                  {busy ? "Converting…" : "Convert"}
+                  {busy ? "Converting" : "Convert"}
                 </button>
               </div>
             </>
@@ -535,7 +535,7 @@ function SfzBody({
             convert("fit");
           }}
         >
-          {busy ? "Converting…" : "Fit to disk (downsample)"}
+          {busy ? "Converting" : "Fit to disk (downsample)"}
         </button>
         <button
           className="btn primary"

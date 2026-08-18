@@ -182,7 +182,13 @@ describe("QA fixes in the shell", () => {
 // Menu and button labels state the action plainly; the trailing
 // ellipsis affordance is not this UI's idiom.
 describe("labels carry no trailing ellipsis", () => {
-  it("the import menu items and browse button state the action plainly", async () => {
+  it("the browse button states the action plainly", async () => {
+    render(<App core={createFakeCore()} />);
+    const browse = await screen.findByRole("button", { name: "Browse" });
+    expect(browse.textContent).not.toMatch(/…$/);
+  });
+
+  it("the import menu items state the action plainly", async () => {
     await openDisk();
     // Radix opens its menu on pointerdown.
     fireEvent.pointerDown(screen.getByRole("button", { name: "Import ▾" }), {

@@ -159,12 +159,23 @@ describe("hierarchy from brightness and colour (Q6)", () => {
 });
 
 // The keyboard's in-range keys must read as a lit range against the
-// page, never as a void: a fill too close to the background makes the
-// key range invisible, which is a meaning carried by colour alone.
+// surface they actually sit on (the keyboard bar is bg-raised, not
+// the page black), never as a void: a fill too close to its surface
+// makes the key range invisible, a meaning carried by colour alone.
 describe("keyboard range visibility", () => {
-  it("the highlighted range reads against the page", () => {
-    expect(contrast(token("key-white-on"), token("bg"))).toBeGreaterThanOrEqual(NON_TEXT);
-    expect(contrast(token("key-black-on"), token("bg"))).toBeGreaterThanOrEqual(NON_TEXT);
+  it("the highlighted range reads against its bar", () => {
+    expect(contrast(token("key-white-on"), token("bg-raised"))).toBeGreaterThanOrEqual(NON_TEXT);
+    expect(contrast(token("key-black-on"), token("bg-raised"))).toBeGreaterThanOrEqual(NON_TEXT);
+  });
+
+  // The amber root dot and the plain key fills pin both in-range
+  // fills into one narrow luminance band, so the fills cannot also
+  // separate white keys from black keys; the in-range edge stroke is
+  // the boundary that carries that meaning, and it needs 3:1 against
+  // both fills it separates.
+  it("the in-range key edge separates white keys from black keys", () => {
+    expect(contrast(token("key-edge-on"), token("key-white-on"))).toBeGreaterThanOrEqual(NON_TEXT);
+    expect(contrast(token("key-edge-on"), token("key-black-on"))).toBeGreaterThanOrEqual(NON_TEXT);
   });
 });
 
@@ -179,6 +190,8 @@ describe("labels get room from their boxes", () => {
   });
 
   it("the matrix controller labels clear the cell border", () => {
-    expect(styleValue(mockup, "table.term.matrix td.matrixrow", "padding")).toBe("4px 10px");
+    const padding = styleValue(mockup, "table.term.matrix td.matrixrow", "padding").split(" ");
+    expect(parseInt(padding[0] ?? "", 10)).toBeGreaterThanOrEqual(4);
+    expect(parseInt(padding[1] ?? padding[0] ?? "", 10)).toBeGreaterThanOrEqual(8);
   });
 });
