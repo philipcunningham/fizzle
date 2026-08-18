@@ -131,6 +131,30 @@ describe("a dropped folder walks like the picker (R6)", () => {
     expect(dropped.map((d) => d.path)).toEqual(["kick.wav"]);
   });
 
+  // A drop holding several entries is rooted at the drop point, so a
+  // folder dropped beside a file keeps its name: an .sfz dragged in
+  // with its samples folder references "samples/kick.wav", and that
+  // path has to survive the walk.
+  it("keeps a folder's name when it is dropped beside a file", async () => {
+    const dropped = await walkEntries([
+      fileEntry("kit.sfz"),
+      dirEntry("samples", [fileEntry("kick.wav"), fileEntry("snare.wav")]),
+    ]);
+    expect(dropped.map((d) => d.path)).toEqual([
+      "kit.sfz",
+      "samples/kick.wav",
+      "samples/snare.wav",
+    ]);
+  });
+
+  it("keeps every folder's name when several are dropped together", async () => {
+    const dropped = await walkEntries([
+      dirEntry("kicks", [fileEntry("01.wav")]),
+      dirEntry("snares", [fileEntry("02.wav")]),
+    ]);
+    expect(dropped.map((d) => d.path)).toEqual(["kicks/01.wav", "snares/02.wav"]);
+  });
+
   it("survives a transfer whose items carry no entry API", () => {
     const transfer = { items: [{ kind: "file" }] } as unknown as DataTransfer;
     expect(dropEntries(transfer)).toEqual([]);

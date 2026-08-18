@@ -28,6 +28,7 @@ export type PendingDialog =
       /** Acting on a file already on the disk rather than a drop. */
       fromDisk: boolean;
     }
+  | { kind: "sfzFolder"; name: string }
   | { kind: "extract"; slot: number; name: string }
   | { kind: "switchDisk"; intent: "close" | { file: NamedBytes; second?: NamedBytes } }
   | { kind: "confirmDelete"; name: string; isInstrument: boolean; voiceCount: number };
@@ -57,6 +58,8 @@ export interface DialogActions {
    */
   onExport: (then?: () => void) => void;
   onCloseDisk: () => void;
+  /** The lone .sfz flow: open the folder picker for its samples. */
+  onPickSfzFolder: () => void;
   /** second is set when a two image pair replaces the document. */
   onSwitchTo: (file: NamedBytes, second?: NamedBytes) => void;
 }
@@ -297,6 +300,26 @@ export function Dialogs({
               stereo={stereo}
               setStereo={onStereoChange}
             />
+          )}
+
+          {d.kind === "sfzFolder" && (
+            <>
+              <Dialog.Title asChild>
+                <h3>This SFZ needs its samples</h3>
+              </Dialog.Title>
+              <p className="desc">
+                &quot;{d.name}&quot; lists samples fizzle cannot see yet. Pick the
+                instrument&apos;s folder, or its samples folder.
+              </p>
+              <div className="buttons">
+                <button className="btn" onClick={close}>
+                  Cancel
+                </button>
+                <button className="btn solid" onClick={actions.onPickSfzFolder}>
+                  Pick folder
+                </button>
+              </div>
+            </>
           )}
 
           {d.kind === "placement" && <PlacementBody dialog={d} dirty={dirty} actions={actions} />}
