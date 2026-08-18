@@ -341,6 +341,27 @@ export function createFakeCore(): Core {
     return snap();
   };
 
+  // Mirrors Session.checkWholeDocument: every mutation on a lone half
+  // of a split pair refuses without touching the document. Opens,
+  // undo, redo, and the gesture brackets stay allowed, as the real
+  // session allows them.
+  const missingGuard = (): CoreResult<never> | null =>
+    state.missingDisk
+      ? err(
+          "missing-disk",
+          `disk ${String(state.missingDisk)} of this split instrument is missing; open it alongside this one to edit the instrument`,
+        )
+      : null;
+
+  // Mirrors Session.endGesture: an undo or redo inside a drag first
+  // lands the pre-gesture document, or the timeline inverts.
+  const endGesture = () => {
+    if (inGesture && gestureBase !== null) {
+      past = [...past, gestureBase].slice(-HISTORY_CAP);
+      gestureBase = null;
+    }
+  };
+
   return {
     snapshot(): Promise<CoreResult<Snapshot>> {
       return Promise.resolve(ok(snap()));
@@ -382,6 +403,8 @@ export function createFakeCore(): Core {
       _rate: SampleRate,
       _channel: Channel,
     ): Promise<CoreResult<Snapshot>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (state.label === null) {
         return Promise.resolve(err("no-disk", "no disk is open"));
       }
@@ -405,6 +428,8 @@ export function createFakeCore(): Core {
     },
 
     setParamNumber(file: string, field: string, value: number): Promise<CoreResult<Snapshot>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const spec = FAKE_SCHEMA.find((f) => f.id === field);
       if (!spec || spec.kind === "select") {
         return Promise.resolve(err("invalid-field", `${field} is not a numeric schema field`));
@@ -419,6 +444,8 @@ export function createFakeCore(): Core {
     },
 
     setParamOption(file: string, field: string, option: string): Promise<CoreResult<Snapshot>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const spec = FAKE_SCHEMA.find((f) => f.id === field);
       if (!spec || spec.kind !== "select") {
         return Promise.resolve(err("invalid-field", `${field} is not a select schema field`));
@@ -436,6 +463,7 @@ export function createFakeCore(): Core {
     },
 
     undo(): Promise<CoreResult<Snapshot>> {
+      endGesture();
       const prev = past[past.length - 1];
       if (!prev) {
         return Promise.resolve(err("nothing-to-undo", "nothing to undo"));
@@ -448,6 +476,7 @@ export function createFakeCore(): Core {
     },
 
     redo(): Promise<CoreResult<Snapshot>> {
+      endGesture();
       const next = future[future.length - 1];
       if (!next) {
         return Promise.resolve(err("nothing-to-redo", "nothing to redo"));
@@ -513,6 +542,8 @@ export function createFakeCore(): Core {
       start: number,
       end: number,
     ): Promise<CoreResult<Snapshot>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const target = next.files.find((f) => f.name === file && f.type === "voice");
       if (!target?.voice) {
@@ -528,6 +559,8 @@ export function createFakeCore(): Core {
     },
 
     setGeneration(file: string, start: number, end: number): Promise<CoreResult<Snapshot>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const target = next.files.find((f) => f.name === file && f.type === "voice");
       if (!target?.voice) {
@@ -540,6 +573,8 @@ export function createFakeCore(): Core {
     },
 
     setLoopSelect(file: string, sustain: number, release: number): Promise<CoreResult<Snapshot>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const target = next.files.find((f) => f.name === file && f.type === "voice");
       if (!target?.voice) {
@@ -558,6 +593,8 @@ export function createFakeCore(): Core {
       rates: number[],
       stops: number[],
     ): Promise<CoreResult<Snapshot>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (rates.length !== 8 || stops.length !== 8) {
         return Promise.resolve(err("invalid-value", "envelopes carry 8 stages"));
       }
@@ -576,6 +613,8 @@ export function createFakeCore(): Core {
     },
 
     setAreaField(bank: number, area: number, field: string, value: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const target = next.instrument?.banks[bank]?.areas[area];
       if (!next.instrument || !target) {
@@ -623,6 +662,8 @@ export function createFakeCore(): Core {
     },
 
     renameBank(bank: number, name: string) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (name.length === 0 || name.length > 12) {
         return Promise.resolve(err("invalid-value", "bank name must be 1 to 12 characters"));
       }
@@ -634,6 +675,8 @@ export function createFakeCore(): Core {
     },
 
     swapAreas(bank: number, a: number, b: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const areas = next.instrument?.banks[bank]?.areas;
       const left = areas?.[a];
@@ -647,17 +690,35 @@ export function createFakeCore(): Core {
     },
 
     deleteArea(bank: number, area: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const bankSnap = next.instrument?.banks[bank];
       if (!next.instrument || !bankSnap?.areas[area]) {
         return Promise.resolve(err("invalid-value", "no such area"));
       }
+      // The real core refuses a bank's last area and removes a voice
+      // no remaining area plays.
+      if (bankSnap.areas.length === 1) {
+        return Promise.resolve(
+          err("last-area", "a bank keeps at least one area; delete the bank instead"),
+        );
+      }
+      const freedSlot = bankSnap.areas[area]?.voiceSlot;
       bankSnap.areas.splice(area, 1);
+      const stillPlayed = next.instrument.banks.some((b) =>
+        b.areas.some((a) => a.voiceSlot === freedSlot),
+      );
+      if (!stillPlayed) {
+        next.instrument.voices = next.instrument.voices.filter((v) => v.slot !== freedSlot);
+      }
       refreshReferenced(next.instrument);
       return Promise.resolve(ok(mutate(next)));
     },
 
     addArea(bank: number, voiceSlot: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const bankSnap = next.instrument?.banks[bank];
       const voice = next.instrument?.voices.find((v) => v.slot === voiceSlot);
@@ -670,6 +731,8 @@ export function createFakeCore(): Core {
     },
 
     duplicateArea(bank: number, area: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const bankSnap = next.instrument?.banks[bank];
       const src = bankSnap?.areas[area];
@@ -687,6 +750,8 @@ export function createFakeCore(): Core {
     },
 
     setEffectCell(controller: number, target: number, value: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const row = next.instrument?.effects?.matrix[controller];
       if (!next.instrument?.effects || !row || target < 0 || target > 6) {
@@ -697,6 +762,8 @@ export function createFakeCore(): Core {
     },
 
     setBendRange(value: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       if (!next.instrument?.effects) {
         return Promise.resolve(err("invalid-value", "no effects block"));
@@ -706,6 +773,8 @@ export function createFakeCore(): Core {
     },
 
     mapVoice(voiceSlot: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const voice = next.instrument?.voices.find((v) => v.slot === voiceSlot);
       const bankSnap = next.instrument?.banks[0];
@@ -753,6 +822,8 @@ export function createFakeCore(): Core {
     },
 
     loadFzf(bytes: Uint8Array): Promise<CoreResult<Snapshot>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (bytes.length === 0) {
         return Promise.resolve(err("invalid-fzf", "empty dump"));
       }
@@ -771,6 +842,8 @@ export function createFakeCore(): Core {
     },
 
     addVoice(bytes: Uint8Array): Promise<CoreResult<Snapshot>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (bytes.length === 0) {
         return Promise.resolve(err("not-a-voice", "empty voice file"));
       }
@@ -780,6 +853,8 @@ export function createFakeCore(): Core {
     },
 
     addBank(bytes: Uint8Array, slot: number): Promise<CoreResult<Snapshot>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (bytes.length === 0) {
         return Promise.resolve(err("invalid-fzb", "empty bank file"));
       }
@@ -812,6 +887,8 @@ export function createFakeCore(): Core {
       rate: SampleRate,
       _channel: Channel,
     ): Promise<CoreResult<Snapshot>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (wav.length === 0) {
         return Promise.resolve(err("invalid-wav", "empty WAV"));
       }
@@ -957,6 +1034,8 @@ export function createFakeCore(): Core {
       split: boolean,
       channel: Channel,
     ): Promise<CoreResult<SFZImportResult>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       fakeCalls.sfzChannel = channel;
       if (fitToDisk && split) {
         return Promise.resolve(
@@ -1017,6 +1096,8 @@ export function createFakeCore(): Core {
       fitToDisk: boolean,
       channel: Channel,
     ): Promise<CoreResult<SFZImportResult>> {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       fakeCalls.wavFolderChannel = channel;
       const names = Object.keys(files)
         .filter((n) => n.toLowerCase().endsWith(".wav"))
@@ -1051,6 +1132,8 @@ export function createFakeCore(): Core {
     },
 
     setSlotParamNumber(slot: number, field: string, value: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const spec = FAKE_SCHEMA.find((f) => f.id === field);
       if (!spec || spec.kind === "select") {
         return Promise.resolve(err("invalid-field", `${field} is not a numeric schema field`));
@@ -1065,6 +1148,8 @@ export function createFakeCore(): Core {
     },
 
     setSlotParamOption(slot: number, field: string, option: string) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const spec = FAKE_SCHEMA.find((f) => f.id === field);
       if (!spec || spec.kind !== "select") {
         return Promise.resolve(err("invalid-field", `${field} is not a select schema field`));
@@ -1082,6 +1167,8 @@ export function createFakeCore(): Core {
     },
 
     setSlotLoop(slot: number, index: number, start: number, end: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const detail = next.instrument?.voices.find((v) => v.slot === slot)?.voice;
       const loop = detail?.loops[index];
@@ -1094,6 +1181,8 @@ export function createFakeCore(): Core {
     },
 
     setSlotGeneration(slot: number, start: number, end: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const detail = next.instrument?.voices.find((v) => v.slot === slot)?.voice;
       if (!detail) {
@@ -1106,6 +1195,8 @@ export function createFakeCore(): Core {
     },
 
     setSlotLoopAttr(slot: number, index: number, xf: number, tm: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const loop = next.instrument?.voices.find((v) => v.slot === slot)?.voice?.loops[index];
       if (!loop) {
@@ -1117,6 +1208,8 @@ export function createFakeCore(): Core {
     },
 
     setSlotLoopSelect(slot: number, sustain: number, release: number) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       const next = clone(state);
       const detail = next.instrument?.voices.find((v) => v.slot === slot)?.voice;
       if (!detail) {
@@ -1135,6 +1228,8 @@ export function createFakeCore(): Core {
       rates: number[],
       stops: number[],
     ) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (rates.length !== 8 || stops.length !== 8) {
         return Promise.resolve(err("invalid-value", "envelopes carry 8 stages"));
       }
@@ -1153,6 +1248,8 @@ export function createFakeCore(): Core {
     },
 
     renameVoiceSlot(slot: number, name: string) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (name.length === 0 || name.length > 12) {
         return Promise.resolve(err("invalid-value", "voice name must be 1 to 12 characters"));
       }
@@ -1205,6 +1302,8 @@ export function createFakeCore(): Core {
     },
 
     renameDisk(label: string) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (state.label === null) {
         return Promise.resolve(err("no-disk", "no disk is open"));
       }
@@ -1219,6 +1318,8 @@ export function createFakeCore(): Core {
     },
 
     deleteFile(name: string) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (state.label === null) {
         return Promise.resolve(err("no-disk", "no disk is open"));
       }
@@ -1237,6 +1338,8 @@ export function createFakeCore(): Core {
     },
 
     newInstrument(name: string) {
+      const guard = missingGuard();
+      if (guard) return Promise.resolve(guard);
       if (state.instrument) {
         return Promise.resolve(err("instrument-exists", "the disk already has an instrument"));
       }

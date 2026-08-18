@@ -655,3 +655,62 @@ describe("fake core import estimate", () => {
     expect(after.value.revision).toBe(before.value.revision);
   });
 });
+
+// Parity with the real session where tests used to be able to pin
+// behaviour the product refuses: the missing-disk mutation guard, the
+// gesture bracket around undo and redo, and deleteArea's semantics.
+describe("fake core parity guards", () => {
+  it("refuses every mutation on a lone half of a split pair", async () => {
+    const core = createFakeCore();
+    const half = new Uint8Array(IMAGE_SIZE);
+    half[0] = 1;
+    const opened = await core.openImage(half);
+    if (!opened.ok) throw new Error(opened.error.message);
+    expect(opened.value.disk?.missingDisk).toBe(2);
+
+    const refused = await core.renameBank(0, "NOPE");
+    expect(refused.ok).toBe(false);
+    if (refused.ok) return;
+    expect(refused.error.code).toBe("missing-disk");
+
+    const also = await core.setBendRange(4);
+    expect(also.ok).toBe(false);
+    if (also.ok) return;
+    expect(also.error.code).toBe("missing-disk");
+
+    const after = await core.snapshot();
+    if (!after.ok) throw new Error("snapshot failed");
+    expect(after.value.revision).toBe(opened.value.revision);
+  });
+
+  it("undo inside a gesture lands the pre-gesture state, not the one before it", async () => {
+    const core = createFakeCore();
+    await core.newDisk("ONE");
+    await core.renameDisk("TWO");
+    await core.beginGesture();
+    await core.renameDisk("THREE");
+
+    // The real session closes the open bracket before undoing, so the
+    // undo returns to TWO; skipping the bracket would jump to ONE.
+    const undone = await core.undo();
+    if (!undone.ok) throw new Error(undone.error.message);
+    expect(undone.value.disk?.label).toBe("TWO");
+    expect(undone.value.canRedo).toBe(true);
+  });
+
+  it("deleteArea refuses a bank's last area and removes the freed voice", async () => {
+    const core = createFakeCore();
+    await core.openImage(new Uint8Array(IMAGE_SIZE));
+
+    // The stock instrument: KICK and SNARE areas, SPARE unreferenced.
+    const freed = await core.deleteArea(0, 1);
+    if (!freed.ok) throw new Error(freed.error.message);
+    const voices = freed.value.disk?.instrument?.voices.map((v) => v.name);
+    expect(voices).not.toContain("SNARE");
+
+    const last = await core.deleteArea(0, 0);
+    expect(last.ok).toBe(false);
+    if (last.ok) return;
+    expect(last.error.code).toBe("last-area");
+  });
+});
