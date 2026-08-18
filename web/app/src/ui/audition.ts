@@ -44,9 +44,10 @@ export interface AudioContextLike {
   createBufferSource(): {
     buffer: unknown;
     playbackRate: { value: number };
+    onended: ((ev: Event) => void) | null;
     connect(node: unknown): void;
     start(): void;
-    stop(): void;
+    stop(at?: number): void;
   };
 }
 
@@ -129,8 +130,13 @@ export function createAudition(
           gain.gain.cancelScheduledValues(at);
           gain.gain.setValueAtTime(gain.gain.value, at);
           gain.gain.linearRampToValueAtTime(0, at + 0.05);
-          source.stop();
-          gain.disconnect();
+          // Stop after the fade lands, and detach only once the
+          // source ends: an immediate stop cuts at the current gain
+          // and clicks on every release.
+          source.onended = () => {
+            gain.disconnect();
+          };
+          source.stop(at + 0.06);
         } catch {
           // A source that already ended throws on stop; harmless.
         }

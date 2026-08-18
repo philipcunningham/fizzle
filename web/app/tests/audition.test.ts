@@ -135,3 +135,56 @@ describe("audition engine", () => {
     release();
   });
 });
+
+// The release schedules a fade and stops after it: an immediate stop
+// would cut the audio at the current gain and click on every release.
+describe("release fades before stopping", () => {
+  it("stops the source after the fade window, not now", () => {
+    const stopArgs: (number | undefined)[] = [];
+    let disconnected = 0;
+    const context = {
+      currentTime: 1,
+      state: "running" as const,
+      resume: () => Promise.resolve(),
+      destination: {},
+      createBuffer: (_ch: number, length: number) => ({
+        getChannelData: () => new Float32Array(length),
+      }),
+      createGain: () => ({
+        gain: {
+          value: 1,
+          setValueAtTime: () => undefined,
+          linearRampToValueAtTime: () => undefined,
+          cancelScheduledValues: () => undefined,
+        },
+        connect: () => undefined,
+        disconnect: () => {
+          disconnected += 1;
+        },
+      }),
+      createBufferSource: () => ({
+        buffer: null as unknown,
+        playbackRate: { value: 1 },
+        connect: () => undefined,
+        start: () => undefined,
+        stop: (at?: number) => {
+          stopArgs.push(at);
+        },
+      }),
+    };
+    const engine = createAudition(() => context as never);
+    const release = engine.play({
+      pcm: new Int16Array(64),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+    });
+    release();
+    expect(stopArgs).toHaveLength(1);
+    expect(stopArgs[0]).toBeGreaterThanOrEqual(1.05);
+    // The gain detaches when the source ends, never synchronously:
+    // an immediate disconnect silences the fade it just scheduled.
+    expect(disconnected).toBe(0);
+  });
+});

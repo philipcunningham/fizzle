@@ -273,7 +273,7 @@ export function Dialogs({
                 </button>
                 <button
                   className="btn solid"
-                  disabled={busy || estimate?.verdict === "wont-fit"}
+                  disabled={busy || estimate?.verdict === "wont-fit" || estimateError !== null}
                   aria-busy={busy || undefined}
                   onClick={() => {
                     actions.onConvertWavs(
