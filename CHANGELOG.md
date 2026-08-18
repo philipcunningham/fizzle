@@ -2,6 +2,8 @@
 
 ## Unreleased (last updated 2026-08-18)
 
+- Remove `fizzle studio`, the interactive terminal UI, as a clean cut: the subcommand, its packages, and its PTY feature specs are gone. The browser editor and the CLI are the two remaining front ends; the pure container and model packages the browser editor shares live on at `pkg/container` and `pkg/model`.
+
 - Remove the CycloneDX SBOM: `fizzle licenses --json`, `make sbom`, the `fizzle.cdx.json` release asset, and the `cyclonedx-gomod` tool are gone. `fizzle licenses` still prints the project license and the full third-party attribution text, which the binary still embeds.
 
 - `fizzle sfz convert` and `fizzle fzv import` refuse stereo WAV input, naming the file and asking for a mono source. Both used to accept it and write a voice of double length at half the pitch, with the two channels alternating sample by sample. Convert the file to mono first. The web UI instead asks which side to keep: left, right, or the mix of the two.

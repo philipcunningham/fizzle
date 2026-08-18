@@ -3,7 +3,7 @@ type: map
 title: Truth map
 description: Per topic, where truth lives across the Casio spec, fizzle code, firmware findings, and the corpus.
 tags: [routing]
-updated: 2026-07-11
+updated: 2026-08-18
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md
 ---
@@ -27,7 +27,7 @@ authorities.
 | Audio area, sample rates | 1-5 | `pkg/disk/rates.go`, `pkg/wav`, `pkg/voiceimport` | [audio-block-padding](findings/audio-block-padding.md) |
 | Voice header (`voicedata`) | 2-1 List A | `pkg/disk/voice.go`, `pkg/fzvinfo`, `pkg/voiceedit` | [dcq-full-byte](findings/dcq-full-byte.md) |
 | Loops, playback modes | 2-1 | `pkg/voiceimport`, `pkg/sfzconvert` | [voice-authoring-defaults](topics/voice-authoring-defaults.md) |
-| DCA / DCF envelopes | 2-1 | `pkg/studio/widgets/envelopevisual`, `pkg/voiceedit` | [envelope-timing](topics/envelope-timing.md) |
+| DCA / DCF envelopes | 2-1 | `pkg/voiceedit`, `pkg/disk/voice.go` | [envelope-timing](topics/envelope-timing.md) |
 | Velocity response | 2-1 | `pkg/voiceimport`, `pkg/sfzconvert` | [vel-dca-kf](findings/vel-dca-kf.md) |
 | Outputs, polyphony, mute groups | 2-2 (`gchn`) | `pkg/sfzconvert`, `pkg/sfzexport` | [gchn-polyphony](findings/gchn-polyphony.md) |
 | Effect data (`effectdata`) | 2-3 List C | `pkg/fzfeffects` | [voice-authoring-defaults](topics/voice-authoring-defaults.md) |

@@ -13,9 +13,9 @@ the on-disk layout itself is part of what's under test.
 
 | File          | Contains          | Used by                                                                   |
 |---------------|-------------------|---------------------------------------------------------------------------|
-| `HOOVER.img`  | One FZV voice     | Disk listing, get/copy, voice-extract, studio browser, integration CLI    |
+| `HOOVER.img`  | One FZV voice     | Disk listing, get/copy, voice-extract, integration CLI                    |
 | `STAB.img`    | One FZV voice     | Disk listing, voice extract, integration CLI                              |
-| `BRASS.img`   | Full data dump    | FZF parse and unpack, voice-edit, studio scenarios                        |
+| `BRASS.img`   | Full data dump    | FZF parse and unpack, voice-edit, QA scenarios                            |
 | `TECHNO.img`  | Full data dump    | FZF parse, voice-edit fixtures, fzfinfo real-hardware regression          |
 | `PAD-LFO.img` | Full data dump    | LFO-specific voice-edit checks, SHA-256 pinned for byte-exact round-trip  |
 

@@ -26,7 +26,6 @@ Front-panel menu paths in this document are written as `MENU/SUBMENU/PAGE`.
 - [Outputs and polyphony](#outputs-and-polyphony)
 - [MIDI and Area Mode](#midi-and-area-mode)
 - [Converting from SFZ](#converting-from-sfz)
-- [The interactive studio](#the-interactive-studio)
 - [Quickstart walkthroughs](#quickstart-walkthroughs)
 - [Glossary](#glossary)
 - [Command index](#command-index)
@@ -574,60 +573,6 @@ Long conversions respect Ctrl+C. The command exits cleanly without leaving a hal
 
 ---
 
-## The interactive studio
-
-```
-fizzle studio [DIRECTORY]
-```
-
-A workspace-oriented terminal editor for FZ-1 / FZ-10M / FZ-20M sound material. DIRECTORY points at the workspace folder containing `.img` / `.fzf` / `.fzv` / `.wav` files. Omitting DIRECTORY uses the current working directory. Individual files are opened from the Workspace browser inside the TUI.
-
-```sh
-fizzle studio                  # workspace = cwd
-fizzle studio ~/fz-library     # workspace = a directory
-```
-
-### The four spaces
-
-studio organises around the user's task, not the FZ's data hierarchy. Four spaces are stacked vertically, navigated with `SHIFT+up` / `SHIFT+down` (or Emacs `Ctrl-P` / `Ctrl-N`):
-
-- **Workspace.** File browser over a directory of `.img` / `.fzf` / `.fzv` / `.wav` files. Each file is dispatched by extension: `.img` and `.fzf` open as the in-focus container, `.fzv` adds to the Pool, `.wav` adds to the Pool (with a stereo channel prompt when needed).
-- **Pool.** A session-level basket of voices accumulated from the Workspace, the in-focus container's banks, or external samples. Voices persist across container switches.
-- **Layout.** The in-focus container's banks and Areas. Up to 8 banks × 64 Areas each. `Ctrl+D` duplicates an Area for velocity multi-switching; `a` opens the per-Area editor (key range, velocity range, root note, audio output, volume, MIDI channel); `f` opens the per-bank effects editor (bend depth + 3×7 controller modulation matrix).
-- **Sound.** Voice-scoped editing of the selected Area. A 2D grid of subsystems by cells: DCA, DCF, LFO, Sample, Loops. The leftmost cell of each row is a braille-rendered visualisation (envelope curve, LFO waveform, sample waveform); subsequent cells are field editors.
-
-### Key bindings
-
-| Key | Action |
-|-----|--------|
-| `SHIFT+up` / `SHIFT+down` | Move between spaces |
-| Arrow keys | Cursor navigation within a space |
-| `Enter` | Drill into the focused item |
-| `Space` | Audition the focused voice (second press stops) |
-| `Tab` / `Shift+Tab` | Move focus between fields in the current cell |
-| `Ctrl+S` | Save changes to disk |
-| `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
-| `Ctrl+C` / `Ctrl+V` | Copy / paste between compatible cells |
-| `Ctrl+D` | Duplicate the focused Area in Layout |
-| `Ctrl+E` / `c` | Extract the focused Area's voice into the Pool |
-| `i` | Import a Pool voice into the selected Area |
-| `m` | Move (two-press swap) Areas within a bank |
-| `a` | Edit the focused Area (key range, velocity, root, output, volume, MIDI channel) |
-| `f` | Edit the focused bank's effects (bend + modulation matrix) |
-| `r` / `F2` | Rename the focused name field |
-| `Delete` | Destructive action on the focused item (always confirms) |
-| `?` | Contextual help |
-| `Ctrl+Q` | Quit (prompts if there are unsaved changes) |
-| `Esc` | Dismiss the topmost modal |
-
-### Autosave and crash recovery
-
-While a container is dirty, studio writes a `{name}.bak` snapshot next to the source file every 30 seconds. A successful save deletes the snapshot. On open, if a `.bak` exists that's newer than its named container, studio offers Recover (load the snapshot, mark dirty) or Discard (delete the `.bak`).
-
-For the full specification, including the per-cell field layout, the snapshot-test discipline, and the user-journey contracts, see [`pkg/studio/README.md`](../pkg/studio/README.md).
-
----
-
 ## Quickstart walkthroughs
 
 End-to-end examples. Use them as a guided introduction or as templates.
@@ -806,10 +751,6 @@ Every fizzle subcommand and flag, alphabetical.
 ### `sfz`
 
 - [`sfz convert`](#converting-from-sfz): `--rate`, `--fit-to-disk`, `--split-disks`.
-
-### `studio`
-
-- [`studio`](#the-interactive-studio).
 
 ### Voice parameter flags (used by `fzv edit` and `fzf edit`)
 

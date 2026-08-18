@@ -3,7 +3,7 @@ type: source
 title: FZ-1 firmware reverse engineering
 description: What the ROM actually does, established by reverse engineering; cited by ROM address and routine name.
 tags: [firmware, primary-source]
-updated: 2026-07-11
+updated: 2026-08-18
 sources:
   - FZ-1 system ROM (64 KiB, disassembled and annotated)
 status: confirmed-firmware
@@ -27,5 +27,5 @@ filename and section. Anchors used by this wiki so far:
 - MIDI note-on handler `midi_note_on` at `F000:0FFD`; file I/O
   routines `load` at `F000:B30E` and `save` at `F000:B13F`.
 
-The verified rate table is embedded in
-`pkg/studio/widgets/envelopevisual`.
+A verified Go copy of the rate table shipped in the studio TUI,
+removed in 2026-08; the ROM at F000:0490 remains the reference.

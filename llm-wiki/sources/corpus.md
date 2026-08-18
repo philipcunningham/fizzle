@@ -3,7 +3,7 @@ type: source
 title: Fixture corpus
 description: 235 real-hardware full dumps plus voice files under testdata/corpus; the evidence base for every statistical claim.
 tags: [corpus, primary-source, testdata]
-updated: 2026-07-11
+updated: 2026-08-18
 sources:
   - testdata/corpus/README.md
 status: confirmed-hardware
@@ -27,4 +27,4 @@ output for every fixture, so corpus-derived claims are re-verified on
 every test run.
 
 `testdata/synthetic/` holds fizzle-generated images (round-trip and
-studio fixtures); `testdata/assembly/` holds the Type 5 program demo.
+QA fixtures); `testdata/assembly/` holds the Type 5 program demo.
