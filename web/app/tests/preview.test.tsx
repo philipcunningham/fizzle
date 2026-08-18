@@ -15,11 +15,13 @@ interface Recorded {
   rates: number[];
   /** The sample rate each buffer was built at. */
   bufferRates: number[];
+  /** One entry per source stopped: the release path ran. */
+  stops: number[];
 }
 
 /** A recording stand-in for the Web Audio context jsdom lacks. */
 function stubAudioContext(): Recorded {
-  const recorded: Recorded = { rates: [], bufferRates: [] };
+  const recorded: Recorded = { rates: [], bufferRates: [], stops: [] };
   vi.stubGlobal(
     "AudioContext",
     vi.fn(() => ({
@@ -53,7 +55,9 @@ function stubAudioContext(): Recorded {
         },
         connect: () => undefined,
         start: () => undefined,
-        stop: () => undefined,
+        stop: () => {
+          recorded.stops.push(1);
+        },
       }),
     })),
   );
@@ -145,10 +149,89 @@ describe("the banks tab keyboard plays the key mapping", () => {
     });
     expect(slots).not.toContain(2);
 
-    // A#4 at jsdom's full-height velocity (127) clears SNARE's
-    // velocity floor and sits ten semitones over its area root.
+    // Move SNARE's area root down an octave first: the voice header
+    // stays at 60, so the rate proves the area mapping played, not
+    // the voices tab's focus-voice fallback.
+    fireEvent.click(within(screen.getByRole("table", { name: "areas" })).getByText("SNARE"));
+    await screen.findByText(/Edit area · SNARE/);
+    const root = screen.getByLabelText("Root");
+    fireEvent.change(root, { target: { value: "48" } });
+    fireEvent.blur(root);
+    await waitFor(() => {
+      expect(screen.getByLabelText<HTMLInputElement>("Root").value).toBe("C3");
+    });
+
     await holdKey(70, recorded);
-    expect(recorded.rates.at(-1)).toBeCloseTo(Math.pow(2, 10 / 12), 10);
+    expect(recorded.rates.at(-1)).toBeCloseTo(Math.pow(2, 22 / 12), 10);
+    // The release stopped what the press started.
+    expect(recorded.stops.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("a tap released before the sound arrives stays silent", async () => {
+    const recorded = stubAudioContext();
+    const inner = createFakeCore();
+    const gate: { open?: () => void } = {};
+    const gated: Core = {
+      ...inner,
+      auditionSlot: (slot) =>
+        new Promise((resolve) => {
+          const prior = gate.open;
+          gate.open = () => {
+            prior?.();
+            void inner.auditionSlot(slot).then(resolve);
+          };
+        }),
+    };
+    await openBanksTab(gated);
+
+    const key = screen.getByTestId("key-70");
+    fireEvent.pointerDown(key, { pointerId: 1, clientY: 0 });
+    fireEvent.pointerUp(key, { pointerId: 1 });
+    gate.open?.();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(recorded.rates.length).toBe(0);
+  });
+
+  it("a key no area covers stays silent and never lights the bar", async () => {
+    const recorded = stubAudioContext();
+    const { core } = slotRecordingCore();
+    await openBanksTab(core);
+
+    fireEvent.click(screen.getByRole("button", { name: "delete area 2" }));
+    await waitFor(() => {
+      const table = screen.getByRole("table", { name: "areas" });
+      expect(within(table).getAllByRole("row")).toHaveLength(2);
+    });
+
+    const key = screen.getByTestId("key-70");
+    fireEvent.pointerDown(key, { pointerId: 1, clientY: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(recorded.rates.length).toBe(0);
+    expect(document.querySelector("[data-auditioning]")).toBeNull();
+    fireEvent.pointerUp(key, { pointerId: 1 });
+  });
+
+  it("layers every area that covers the key, and releases them all", async () => {
+    const recorded = stubAudioContext();
+    const { core, slots } = slotRecordingCore();
+    await openBanksTab(core);
+
+    fireEvent.click(screen.getByRole("button", { name: "duplicate area 1" }));
+    await waitFor(() => {
+      const table = screen.getByRole("table", { name: "areas" });
+      expect(within(table).getAllByRole("row")).toHaveLength(4);
+    });
+    await waitFor(() => {
+      expect(slots).toContain(0);
+    });
+
+    const key = screen.getByTestId("key-40");
+    fireEvent.pointerDown(key, { pointerId: 1, clientY: 0 });
+    await waitFor(() => {
+      expect(recorded.rates.length).toBeGreaterThanOrEqual(2);
+    });
+    fireEvent.pointerUp(key, { pointerId: 1 });
+    expect(recorded.stops.length).toBeGreaterThanOrEqual(2);
   });
 
   it("pitches from the area's root, not the voice's", async () => {

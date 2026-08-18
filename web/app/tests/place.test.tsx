@@ -2,7 +2,7 @@
 // the Radix dialogs, and the routing into core calls, driven against
 // the fake core.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Channel, Core, SampleRate } from "../src/boundary/contract";
 import { IMAGE_SIZE } from "../src/boundary/contract";
 import { createFakeCore, fakeCalls } from "../src/core/fake";
@@ -397,33 +397,45 @@ describe("sidebar file actions", () => {
 // read the samples it references unasked, so the shell asks for the
 // folder instead of offering a conversion that must fail.
 describe("a lone .sfz asks for its samples", () => {
+  const PENDING_SFZ_TEXT = "<region> sample=JUNGLISM Samples/amen 01.wav\n";
+  const FOLDER_SFZ_TEXT = "<region> sample=JUNGLISM Samples/amen 01.wav folder copy\n";
+
   function sfzFile(name = "JUNGLISM.sfz"): File {
-    return new File(["<region> sample=JUNGLISM Samples/amen 01.wav\n"], name);
+    return new File([PENDING_SFZ_TEXT], name);
   }
 
   function folderFile(relativePath: string): File {
     const name = relativePath.split("/").pop() ?? relativePath;
-    const file = new File([wavFixture(1, 18000, 100)], name);
+    const content = name.toLowerCase().endsWith(".sfz")
+      ? new TextEncoder().encode(FOLDER_SFZ_TEXT)
+      : wavFixture(1, 18000, 100);
+    const file = new File([content], name);
     Object.defineProperty(file, "webkitRelativePath", { value: relativePath });
     return file;
   }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   function pickFolder(files: File[]) {
     fireEvent.change(screen.getByLabelText("folder"), { target: { files } });
   }
 
-  /** A core that records the paths each SFZ conversion was handed. */
+  /** A core that records the paths and sizes each conversion got. */
   function recordingCore() {
     const inner = createFakeCore();
     const sfzCallKeys: string[][] = [];
+    const sfzCallSizes: Record<string, number>[] = [];
     const core: Core = {
       ...inner,
       importSfz: (files, sfzPath, rate, fit, split, channel) => {
         sfzCallKeys.push(Object.keys(files).sort());
+        sfzCallSizes.push(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, v.length])));
         return inner.importSfz(files, sfzPath, rate, fit, split, channel);
       },
     };
-    return { core, sfzCallKeys };
+    return { core, sfzCallKeys, sfzCallSizes };
   }
 
   it("prompts for the folder instead of opening the conversion", async () => {
@@ -456,7 +468,7 @@ describe("a lone .sfz asks for its samples", () => {
   });
 
   it("routes a picked instrument folder the normal stripped way", async () => {
-    const { core, sfzCallKeys } = recordingCore();
+    const { core, sfzCallKeys, sfzCallSizes } = recordingCore();
     await openDisk(core);
     pickFiles([sfzFile()]);
     fireEvent.click(await screen.findByRole("button", { name: "Pick folder" }));
@@ -471,6 +483,77 @@ describe("a lone .sfz asks for its samples", () => {
       expect(sfzCallKeys).toHaveLength(1);
     });
     expect(sfzCallKeys[0]).toEqual(["JUNGLISM Samples/amen 01.wav", "JUNGLISM.sfz"]);
+    // The folder's own .sfz converts, not the remembered one: the two
+    // share a name, so the byte length is what tells them apart.
+    expect(sfzCallSizes[0]?.["JUNGLISM.sfz"]).toBe(FOLDER_SFZ_TEXT.length);
+  });
+
+  it("forgets the .sfz when the OS picker is dismissed", async () => {
+    const { core, sfzCallKeys } = recordingCore();
+    await openDisk(core);
+    pickFiles([sfzFile()]);
+    fireEvent.click(await screen.findByRole("button", { name: "Pick folder" }));
+    // A dismissed native picker fires cancel on the input, not change.
+    fireEvent(screen.getByLabelText("folder"), new Event("cancel"));
+
+    pickFolder([folderFile("drums/kick.wav")]);
+    await screen.findByText("Import 1 WAV");
+    expect(sfzCallKeys).toHaveLength(0);
+  });
+
+  it("refuses several bare .sfz files and names the way out", async () => {
+    await openDisk();
+    pickFiles([sfzFile("LEAD.sfz"), sfzFile("PAD.sfz")]);
+    await waitFor(() => {
+      const alerts = screen.getAllByRole("alert").map((a) => a.textContent);
+      expect(alerts.join(" ")).toContain("import the instrument's folder");
+    });
+    expect(screen.queryByText("This SFZ needs its samples")).toBeNull();
+  });
+
+  it("prompts for a lone .sfz that arrives by drop", async () => {
+    await openDisk();
+    const entry = {
+      name: "JUNGLISM.sfz",
+      isFile: true,
+      isDirectory: false,
+      file: (cb: (f: File) => void) => {
+        cb(new File([PENDING_SFZ_TEXT], "JUNGLISM.sfz"));
+      },
+    } as unknown as FileSystemEntry;
+    const transfer = {
+      items: [{ kind: "file", webkitGetAsEntry: () => entry }],
+      files: [],
+    } as unknown as DataTransfer;
+    const app = document.querySelector(".app");
+    if (!app) throw new Error("no app surface to drop on");
+    fireEvent.drop(app, { dataTransfer: transfer });
+    await screen.findByText("This SFZ needs its samples");
+  });
+
+  it("reports a folder whose files cannot be read instead of dropping it", async () => {
+    const { core, sfzCallKeys } = recordingCore();
+    await openDisk(core);
+    pickFiles([sfzFile()]);
+    fireEvent.click(await screen.findByRole("button", { name: "Pick folder" }));
+
+    vi.stubGlobal(
+      "FileReader",
+      class {
+        onerror: ((e: unknown) => void) | null = null;
+        onload: (() => void) | null = null;
+        error = new Error("unreadable");
+        readAsArrayBuffer() {
+          setTimeout(() => this.onerror?.(new Event("error")), 0);
+        }
+      },
+    );
+    pickFolder([folderFile("JUNGLISM Samples/amen 01.wav")]);
+    await waitFor(() => {
+      const alerts = screen.getAllByRole("alert").map((a) => a.textContent);
+      expect(alerts.join(" ")).toContain("could not read the files");
+    });
+    expect(sfzCallKeys).toHaveLength(0);
   });
 
   it("forgets the .sfz on cancel, so a later folder import stays a WAV import", async () => {
