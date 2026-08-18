@@ -80,11 +80,10 @@ func slotWaveBounds(hdr []byte) (start, end uint32) {
 // SetSlotParamNumber sets a numeric schema field on an instrument
 // voice slot, clamping to the field's declared range (R14).
 func (s *Session) SetSlotParamNumber(slot int, fieldID string, value int) (Snapshot, *Error) {
-	field, ok := schemaField(fieldID)
-	if !ok || field.Kind == kindSelect {
-		return s.Snapshot(), errf("invalid-field", "%q is not a numeric schema field", fieldID)
+	value, cerr := clampNumberField(fieldID, value)
+	if cerr != nil {
+		return s.Snapshot(), cerr
 	}
-	value = clampInt(value, field.Min, field.Max)
 	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Patch, error) {
 		return numberPatches(fieldID, value, hdr)
 	})
@@ -93,9 +92,8 @@ func (s *Session) SetSlotParamNumber(slot int, fieldID string, value int) (Snaps
 // SetSlotParamOption sets a select schema field on an instrument
 // voice slot.
 func (s *Session) SetSlotParamOption(slot int, fieldID, option string) (Snapshot, *Error) {
-	field, ok := schemaField(fieldID)
-	if !ok || field.Kind != kindSelect {
-		return s.Snapshot(), errf("invalid-field", "%q is not a select schema field", fieldID)
+	if cerr := checkSelectField(fieldID); cerr != nil {
+		return s.Snapshot(), cerr
 	}
 	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Patch, error) {
 		return optionPatches(fieldID, option, hdr)
@@ -125,18 +123,7 @@ func (s *Session) SetSlotLoop(slot, index, startFrame, endFrame int) (Snapshot, 
 	}
 	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Patch, error) {
 		base, waveEnd := slotWaveBounds(hdr)
-		frames := int(waveEnd - base)
-		if frames < 2 {
-			return nil, errf(codeInvalidValue, "voice slot holds no loopable audio")
-		}
-		start := clampInt(startFrame, 0, frames-1)
-		end := clampInt(endFrame, start+1, frames)
-		stOff := disk.VoiceLoopSt0Offset + index*4
-		edOff := disk.VoiceLoopEd0Offset + index*4
-		origSt := binary.LittleEndian.Uint32(hdr[stOff : stOff+4])
-		origEd := binary.LittleEndian.Uint32(hdr[edOff : edOff+4])
-		// #nosec G115 -- start and end are clamped non-negative above.
-		return voiceedit.BuildLoopPatch(index, base+uint32(start), base+uint32(end), origSt, origEd)
+		return buildLoopPatch(hdr, index, startFrame, endFrame, int(waveEnd-base), base)
 	})
 }
 
@@ -153,40 +140,22 @@ func (s *Session) SetSlotLoopAttr(slot, index, xf, tm int) (Snapshot, *Error) {
 // SetSlotLoopSelect sets the sustain and release loop designations on
 // an instrument voice slot, clamped to 0..8 where 8 means none.
 func (s *Session) SetSlotLoopSelect(slot, sustain, release int) (Snapshot, *Error) {
-	sustain = clampInt(sustain, 0, disk.NoSustainLoop)
-	release = clampInt(release, 0, disk.NoSustainLoop)
-	return s.patchSlotVoice(slot, func([]byte) ([]voiceedit.Patch, error) {
-		return voiceedit.BuildLoopSelectPatch(sustain, release)
-	})
+	return s.patchSlotVoice(slot, loopSelectBuilder(sustain, release))
 }
 
 // SetSlotEnvelope sets a whole envelope on an instrument voice slot:
 // the same display-scale contract as the loose-file setter (R16).
 func (s *Session) SetSlotEnvelope(slot int, which string, sustain, end int, rates, stops []int) (Snapshot, *Error) {
-	if which != envDCA && which != envDCF {
-		return s.Snapshot(), errf("invalid-field", "envelope must be dca or dcf, got %q", which)
-	}
-	if len(rates) != disk.EnvelopeStages || len(stops) != disk.EnvelopeStages {
-		return s.Snapshot(), errf(codeInvalidValue, "envelopes carry %d stages", disk.EnvelopeStages)
-	}
-	sustain = clampInt(sustain, 0, disk.EnvelopeStages-1)
-	end = clampInt(end, 0, disk.EnvelopeStages-1)
-	var r, st [disk.EnvelopeStages]int
-	for i, v := range rates {
-		r[i] = clampInt(v, 0, 99)
-	}
-	for i, v := range stops {
-		st[i] = clampInt(v, 0, 99)
+	build, cerr := buildEnvelopePatches(which, sustain, end, rates, stops)
+	if cerr != nil {
+		return s.Snapshot(), cerr
 	}
 	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Patch, error) {
 		vp, err := slotParams(hdr)
 		if err != nil {
 			return nil, err
 		}
-		if which == envDCA {
-			return voiceedit.BuildDCAPatches(sustain, end, r, st, vp.DCARates)
-		}
-		return voiceedit.BuildDCFPatches(sustain, end, r, st, vp.DCFRates)
+		return build(vp)
 	})
 }
 

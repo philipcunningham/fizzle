@@ -1,9 +1,6 @@
 package webcore
 
 import (
-	"bytes"
-
-	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskget"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/voiceextract"
@@ -35,12 +32,9 @@ func auditionFromFZV(fzv []byte) (*Audition, *Error) {
 // AuditionPCM decodes a voice file's audio for preview, the same code
 // path as the CLI's fzv extract.
 func (s *Session) AuditionPCM(fileName string) (*Audition, *Error) {
-	if s.image == nil {
-		return nil, errf(codeNoDisk, "no disk is open")
-	}
-	img, rerr := disk.ReadImage(bytes.NewReader(s.image))
-	if rerr != nil {
-		return nil, errf("invalid-image", "not a readable FZ image: %v", rerr)
+	img, cerr := s.openedImage()
+	if cerr != nil {
+		return nil, cerr
 	}
 	fzv, gerr := diskget.FromImage(img, fileName)
 	if gerr != nil {
@@ -70,9 +64,9 @@ func (s *Session) slotFZV(slot int) ([]byte, *Error) {
 	if s.instrument == nil {
 		return nil, errf("no-instrument", "the disk has no full dump")
 	}
-	img, rerr := disk.ReadImage(bytes.NewReader(s.image))
-	if rerr != nil {
-		return nil, errf("invalid-image", "not a readable FZ image: %v", rerr)
+	img, ierr := s.openedImage()
+	if ierr != nil {
+		return nil, ierr
 	}
 	fzf, cerr := s.stitchedDump(img)
 	if cerr != nil {

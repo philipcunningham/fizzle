@@ -273,18 +273,42 @@ func voiceParams(vp *fzvinfo.VoiceParams, voiceBytes []byte) map[string]any {
 	}
 }
 
+// clampNumberField resolves a numeric schema edit and clamps the
+// value to the field's declared range; every numeric setter shares
+// it (R14).
+func clampNumberField(fieldID string, value int) (int, *Error) {
+	field, ok := schemaField(fieldID)
+	if !ok || field.Kind == kindSelect {
+		return 0, errItemf("invalid-field", fieldID, "%q is not a numeric schema field", fieldID)
+	}
+	return clampInt(value, field.Min, field.Max), nil
+}
+
+// checkSelectField resolves a select schema edit.
+func checkSelectField(fieldID string) *Error {
+	field, ok := schemaField(fieldID)
+	if !ok || field.Kind != kindSelect {
+		return errItemf("invalid-field", fieldID, "%q is not a select schema field", fieldID)
+	}
+	return nil
+}
+
+// loopSelectBuilder clamps the sustain and release designations both
+// loop-select setters share; 8 means none.
+func loopSelectBuilder(sustain, release int) func([]byte) ([]voiceedit.Patch, error) {
+	sustain = clampInt(sustain, 0, disk.NoSustainLoop)
+	release = clampInt(release, 0, disk.NoSustainLoop)
+	return func([]byte) ([]voiceedit.Patch, error) {
+		return voiceedit.BuildLoopSelectPatch(sustain, release)
+	}
+}
+
 // SetParamNumber sets a numeric schema field on a voice file, clamping
 // the value to the field's declared range (R14).
 func (s *Session) SetParamNumber(fileName, fieldID string, value int) (Snapshot, *Error) {
-	field, ok := schemaField(fieldID)
-	if !ok || field.Kind == kindSelect {
-		return s.Snapshot(), errItemf("invalid-field", fieldID, "%q is not a numeric schema field", fieldID)
-	}
-	if value < field.Min {
-		value = field.Min
-	}
-	if value > field.Max {
-		value = field.Max
+	value, cerr := clampNumberField(fieldID, value)
+	if cerr != nil {
+		return s.Snapshot(), cerr
 	}
 	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Patch, error) {
 		return numberPatches(fieldID, value, voiceBytes)
@@ -293,24 +317,33 @@ func (s *Session) SetParamNumber(fileName, fieldID string, value int) (Snapshot,
 
 // SetParamOption sets a select schema field on a voice file.
 func (s *Session) SetParamOption(fileName, fieldID, option string) (Snapshot, *Error) {
-	field, ok := schemaField(fieldID)
-	if !ok || field.Kind != kindSelect {
-		return s.Snapshot(), errItemf("invalid-field", fieldID, "%q is not a select schema field", fieldID)
+	if cerr := checkSelectField(fieldID); cerr != nil {
+		return s.Snapshot(), cerr
 	}
 	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Patch, error) {
 		return optionPatches(fieldID, option, voiceBytes)
 	})
 }
 
+// openedImage parses the open disk, or answers the standard
+// envelope: the guard and parse every image reader shares.
+func (s *Session) openedImage() (*disk.Image, *Error) {
+	if s.image == nil {
+		return nil, errf(codeNoDisk, "no disk is open")
+	}
+	img, err := disk.ReadImage(bytes.NewReader(s.image))
+	if err != nil {
+		return nil, errf("invalid-image", "not a readable FZ image: %v", err)
+	}
+	return img, nil
+}
+
 // patchVoice extracts a voice file, applies the built patches, and
 // replaces the file on the image, adopting the result.
 func (s *Session) patchVoice(fileName string, build func([]byte) ([]voiceedit.Patch, error)) (Snapshot, *Error) {
-	if s.image == nil {
-		return s.Snapshot(), errf(codeNoDisk, "no disk is open")
-	}
-	img, rerr := disk.ReadImage(bytes.NewReader(s.image))
-	if rerr != nil {
-		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: %v", rerr)
+	img, cerr := s.openedImage()
+	if cerr != nil {
+		return s.Snapshot(), cerr
 	}
 	voiceBytes, gerr := diskget.FromImage(img, fileName)
 	if gerr != nil {

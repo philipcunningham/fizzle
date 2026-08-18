@@ -147,26 +147,14 @@ func (s *Session) SetLoop(fileName string, index, startFrame, endFrame int) (Sna
 		if err != nil {
 			return nil, err
 		}
-		frames := int(vp.Samples)
-		start := clampInt(startFrame, 0, frames-1)
-		end := clampInt(endFrame, start+1, frames)
-		stOff := disk.VoiceLoopSt0Offset + index*4
-		edOff := disk.VoiceLoopEd0Offset + index*4
-		origSt := leU32(voiceBytes[stOff : stOff+4])
-		origEd := leU32(voiceBytes[edOff : edOff+4])
-		// #nosec G115 -- start and end are clamped non-negative above.
-		return voiceedit.BuildLoopPatch(index, uint32(start), uint32(end), origSt, origEd)
+		return buildLoopPatch(voiceBytes, index, startFrame, endFrame, int(vp.Samples), 0)
 	})
 }
 
 // SetLoopSelect sets the sustain and release loop designations,
 // clamped to 0..8 where 8 means none.
 func (s *Session) SetLoopSelect(fileName string, sustain, release int) (Snapshot, *Error) {
-	sustain = clampInt(sustain, 0, disk.NoSustainLoop)
-	release = clampInt(release, 0, disk.NoSustainLoop)
-	return s.patchVoice(fileName, func([]byte) ([]voiceedit.Patch, error) {
-		return voiceedit.BuildLoopSelectPatch(sustain, release)
-	})
+	return s.patchVoice(fileName, loopSelectBuilder(sustain, release))
 }
 
 // Envelope names the boundary accepts.
@@ -175,15 +163,15 @@ const (
 	envDCF = "dcf"
 )
 
-// SetEnvelope sets a whole envelope (which is "dca" or "dcf"): the
-// sustain and end stage designations plus all eight rates and stops in
-// the hardware display scale, clamped (R16).
-func (s *Session) SetEnvelope(fileName, which string, sustain, end int, rates, stops []int) (Snapshot, *Error) {
+// buildEnvelopePatches carries the validation and display-scale
+// clamps SetEnvelope and SetSlotEnvelope share; the returned builder
+// takes whichever header parse the caller owns (R16).
+func buildEnvelopePatches(which string, sustain, end int, rates, stops []int) (func(vp *fzvinfo.VoiceParams) ([]voiceedit.Patch, error), *Error) {
 	if which != envDCA && which != envDCF {
-		return s.Snapshot(), errf("invalid-field", "envelope must be dca or dcf, got %q", which)
+		return nil, errf("invalid-field", "envelope must be dca or dcf, got %q", which)
 	}
 	if len(rates) != disk.EnvelopeStages || len(stops) != disk.EnvelopeStages {
-		return s.Snapshot(), errf(codeInvalidValue, "envelopes carry %d stages", disk.EnvelopeStages)
+		return nil, errf(codeInvalidValue, "envelopes carry %d stages", disk.EnvelopeStages)
 	}
 	sustain = clampInt(sustain, 0, disk.EnvelopeStages-1)
 	end = clampInt(end, 0, disk.EnvelopeStages-1)
@@ -194,18 +182,44 @@ func (s *Session) SetEnvelope(fileName, which string, sustain, end int, rates, s
 	for i, v := range stops {
 		st[i] = clampInt(v, 0, 99)
 	}
+	return func(vp *fzvinfo.VoiceParams) ([]voiceedit.Patch, error) {
+		if which == envDCA {
+			return voiceedit.BuildDCAPatches(sustain, end, r, st, vp.DCARates)
+		}
+		return voiceedit.BuildDCFPatches(sustain, end, r, st, vp.DCFRates)
+	}, nil
+}
+
+// buildLoopPatch carries the frame clamps SetLoop and SetSlotLoop
+// share: voice-relative frames against the header's current cells,
+// rebased by base into the shared audio area (R17).
+func buildLoopPatch(hdr []byte, index, startFrame, endFrame, frames int, base uint32) ([]voiceedit.Patch, error) {
+	if frames < 2 {
+		return nil, errf(codeInvalidValue, "voice holds no loopable audio")
+	}
+	start := clampInt(startFrame, 0, frames-1)
+	end := clampInt(endFrame, start+1, frames)
+	stOff := disk.VoiceLoopSt0Offset + index*4
+	edOff := disk.VoiceLoopEd0Offset + index*4
+	origSt := binary.LittleEndian.Uint32(hdr[stOff : stOff+4])
+	origEd := binary.LittleEndian.Uint32(hdr[edOff : edOff+4])
+	// #nosec G115 -- start and end are clamped non-negative above.
+	return voiceedit.BuildLoopPatch(index, base+uint32(start), base+uint32(end), origSt, origEd)
+}
+
+// SetEnvelope sets a whole envelope (which is "dca" or "dcf"): the
+// sustain and end stage designations plus all eight rates and stops in
+// the hardware display scale, clamped (R16).
+func (s *Session) SetEnvelope(fileName, which string, sustain, end int, rates, stops []int) (Snapshot, *Error) {
+	build, cerr := buildEnvelopePatches(which, sustain, end, rates, stops)
+	if cerr != nil {
+		return s.Snapshot(), cerr
+	}
 	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Patch, error) {
 		vp, err := fzvinfo.ParseBytes(voiceBytes)
 		if err != nil {
 			return nil, err
 		}
-		if which == envDCA {
-			return voiceedit.BuildDCAPatches(sustain, end, r, st, vp.DCARates)
-		}
-		return voiceedit.BuildDCFPatches(sustain, end, r, st, vp.DCFRates)
+		return build(vp)
 	})
-}
-
-func leU32(b []byte) uint32 {
-	return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
 }

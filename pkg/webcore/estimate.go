@@ -178,9 +178,9 @@ func (s *Session) profileDocument() (*docProfile, *Error) {
 	if s.image2 != nil {
 		doc.disks = 2
 	}
-	img, rerr := disk.ReadImage(bytes.NewReader(s.image))
-	if rerr != nil {
-		return nil, errf("invalid-image", "not a readable FZ image: %v", rerr)
+	img, ierr := s.openedImage()
+	if ierr != nil {
+		return nil, ierr
 	}
 	doc.freeSectors = img.FreeSectors()
 	doc.looseFiles = looseFileCount(img)

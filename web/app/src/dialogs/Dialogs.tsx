@@ -107,6 +107,52 @@ function StereoRow({
 }
 
 /**
+ * The rate answer both conversion dialogs ask the same way: the three
+ * hardware rates as one radio row.
+ */
+function RateRow({
+  value,
+  onValueChange,
+  label,
+  name,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  label: string;
+  name: string;
+}) {
+  return (
+    <div className="row">
+      <span className="radiolabel">sample rate</span>
+      <RadioGroup.Root
+        className="row"
+        value={value}
+        onValueChange={onValueChange}
+        aria-label={label}
+        name={name}
+      >
+        {["36", "18", "9"].map((r) => (
+          <label key={r} className="radio-item">
+            <RadioGroup.Item className="radio-dot" value={r} />
+            {r} kHz
+          </label>
+        ))}
+      </RadioGroup.Root>
+    </div>
+  );
+}
+
+/**
+ * The unexported-changes warning three destructive dialogs carry with
+ * the same words.
+ */
+function GuardLine() {
+  return (
+    <p className="desc dangertext">Unexported changes will be lost. Export first to keep them.</p>
+  );
+}
+
+/**
  * The refusal's way out: the rates the whole batch would land at,
  * phrased for the sentence's tail.
  */
@@ -238,23 +284,7 @@ export function Dialogs({
               <p className="desc">
                 One answer covers the whole batch. Nothing is silently truncated.
               </p>
-              <div className="row">
-                <span className="radiolabel">sample rate</span>
-                <RadioGroup.Root
-                  className="row"
-                  value={rate}
-                  onValueChange={onRateChange}
-                  aria-label="sample rate"
-                  name="sample-rate"
-                >
-                  {["36", "18", "9"].map((r) => (
-                    <label key={r} className="radio-item">
-                      <RadioGroup.Item className="radio-dot" value={r} />
-                      {r} kHz
-                    </label>
-                  ))}
-                </RadioGroup.Root>
-              </div>
+              <RateRow value={rate} onValueChange={onRateChange} label="sample rate" name="sample-rate" />
               <StereoRow
                 channels={estimate?.anyStereo ? 2 : 1}
                 value={stereo}
@@ -443,11 +473,7 @@ export function Dialogs({
                   ? `This removes the instrument and all ${String(d.voiceCount)} of its voices from the disk (the ${d.name} file).`
                   : `Delete "${d.name}" from the disk? Destructive actions confirm first.`}
               </p>
-              {d.isInstrument && dirty && (
-                <p className="desc dangertext">
-                  Unexported changes will be lost. Export first to keep them.
-                </p>
-              )}
+              {d.isInstrument && dirty && <GuardLine />}
               <div className="buttons">
                 <button className="btn" onClick={close}>
                   Cancel
@@ -545,9 +571,7 @@ function SfzBody({
         {dialog.hasInstrument && " This replaces the current instrument."}
       </p>
       {dialog.hasInstrument && dirty && (
-        <p className="desc dangertext">
-          Unexported changes will be lost. Export first to keep them.
-        </p>
+        <GuardLine />
       )}
       {choices.length > 1 && (
         <>
@@ -573,23 +597,7 @@ function SfzBody({
           </div>
         </>
       )}
-      <div className="row">
-        <span className="radiolabel">sample rate</span>
-        <RadioGroup.Root
-          className="row"
-          value={rate}
-          onValueChange={setRate}
-          aria-label="target rate"
-          name="target-rate"
-        >
-          {["36", "18", "9"].map((r) => (
-            <label key={r} className="radio-item">
-              <RadioGroup.Item className="radio-dot" value={r} />
-              {r} kHz
-            </label>
-          ))}
-        </RadioGroup.Root>
-      </div>
+      <RateRow value={rate} onValueChange={setRate} label="target rate" name="target-rate" />
       <StereoRow channels={dialog.channels} value={stereo} onValueChange={setStereo} />
       <div className="buttons" style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
         <button
@@ -652,9 +660,7 @@ function PlacementBody({
             : "Choose where this file should land."}
       </p>
       {isReplace && dirty && (
-        <p className="desc dangertext">
-          Unexported changes will be lost. Export first to keep them.
-        </p>
+        <GuardLine />
       )}
       <div
         className="buttons"
