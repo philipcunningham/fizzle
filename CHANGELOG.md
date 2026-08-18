@@ -1,8 +1,6 @@
 # Changelog
 
-## Unreleased
-
-## v0.5.0 (2026-08-18)
+## Unreleased (last updated 2026-08-18)
 
 - The browser editor is live at [philipcunningham.github.io/fizzle](https://philipcunningham.github.io/fizzle/), with nothing to install. It runs the same Go core compiled to WebAssembly, so it writes the bytes the CLI writes. Create a disk or open an `.img`, import WAVs or an SFZ instrument, edit voices, banks, and areas, preview through Web Audio, then export the image for a floppy emulator. The page makes no network requests once loaded: samples and disk images never leave the machine. Desktop Chrome is the supported browser.
 
