@@ -52,11 +52,6 @@ test:
 integration-test:
 	go test -race -tags integration -count=1 -v ./pkg/integration/
 
-feature-test:
-	# Feature specs: drive the studio TUI through a real PTY + VT emulator.
-	# Process-spawning, timing-sensitive, UNIX-only (creack/pty); out of `check`.
-	go test -race -tags feature -count=1 -timeout 120s -v ./pkg/feature/
-
 fmt:
 	go fmt ./...
 
@@ -173,4 +168,4 @@ asm-tools:
 	  (echo "Homebrew required (see https://brew.sh)" >&2; exit 1)
 	brew install nasm
 
-.PHONY: build tools licenses test integration-test feature-test fuzz-seed fmt vet lint lint-go lint-docs check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools
+.PHONY: build tools licenses test integration-test fuzz-seed fmt vet lint lint-go lint-docs check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools

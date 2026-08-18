@@ -613,9 +613,9 @@ func TestImportRejectsStereoNamingTheFile(t *testing.T) {
 	if !strings.Contains(err.Error(), "mono") {
 		t.Errorf("error should say the import writes mono only; got: %v", err)
 	}
-	// The remedy has to be one the user can actually take. studio takes
-	// no channel choice on import, so the message must not send them
-	// there.
+	// The remedy has to be one the user can actually take. This import
+	// path offers no channel choice, so the message must not point at
+	// an option that does not exist.
 	if !strings.Contains(err.Error(), "convert it to mono first") {
 		t.Errorf("error should give a remedy the user can take; got: %v", err)
 	}

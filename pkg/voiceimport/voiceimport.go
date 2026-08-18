@@ -29,7 +29,7 @@ const (
 )
 
 // Channel selects how a stereo WAV becomes the mono signal the FZ
-// stores. Semantics match the studio TUI's import prompt.
+// stores.
 type Channel int
 
 const (

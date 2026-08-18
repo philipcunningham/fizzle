@@ -5,13 +5,13 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/philipcunningham/fizzle/pkg/container"
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
-	"github.com/philipcunningham/fizzle/pkg/container"
 	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
-// applyModelPatches applies studio container patches to raw dump
+// applyModelPatches applies container patches to raw dump
 // bytes, verifying each pre-image the way model.ApplyBatch does. A
 // mismatch means the caller's read of the container went stale, which
 // must fail loudly rather than corrupt a bank sector.
@@ -645,8 +645,8 @@ func mapVoicePatches(d *dumpState, voiceSlot int) ([]model.Patch, *Error) {
 // workflow (R11). The clone's voice header is copied into a fresh slot
 // at the end of the voice area (growing it by a sector when full), so
 // the two areas share audio and the PCM footprint is unchanged. This
-// mirrors the studio TUI's duplicate exactly; the TUI is the
-// behavioural oracle here.
+// mirrors the duplicate behaviour the retired studio TUI established;
+// that implementation was the behavioural oracle.
 func (s *Session) DuplicateArea(bank, area int) (Snapshot, *Error) {
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
 		return duplicateAreaPatches(d, bank, area)

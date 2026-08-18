@@ -1062,9 +1062,8 @@ func TestAddDuplicateNameRejected(t *testing.T) {
 // TestReplaceInMemoryRollsBackOnFailure verifies ReplaceInMemory is
 // transactional on the *disk.Image value itself: when addToImage fails
 // (here, the replacement is too large to fit), the image bytes must be
-// byte-identical to their pre-call state. Callers like studio.editsave
-// rely on this so they can safely abort a save without writing a
-// half-modified image.
+// byte-identical to their pre-call state. Callers rely on this so they
+// can safely abort a save without writing a half-modified image.
 func TestReplaceInMemoryRollsBackOnFailure(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -1115,7 +1114,7 @@ func TestReplaceInMemoryRollsBackOnFailure(t *testing.T) {
 }
 
 // TestReplaceInMemoryRollsBackOnMissingFile verifies the early failure path
-// (file not found) leaves the image untouched. This is the path studio.editsave
+// (file not found) leaves the image untouched. This is the path a caller
 // could hit if the in-progress file is renamed/deleted between selection and
 // save, and a partial mutation would corrupt the on-disk image when the caller
 // proceeds to write a sibling image.

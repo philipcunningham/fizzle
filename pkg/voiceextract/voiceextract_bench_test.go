@@ -32,7 +32,7 @@ func BenchmarkDecode(b *testing.B) {
 }
 
 // BenchmarkDecodePlaybackRange measures the trimmed-playback decode used by
-// `fzv play` and the studio TUI.
+// `fzv play`.
 func BenchmarkDecodePlaybackRange(b *testing.B) {
 	data := voiceimport.Encode(benchSamples(36000), 0, "BENCH", 0, voiceimport.NoLoop())
 	b.SetBytes(int64(36000 * 2))
