@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 // buildOneVoice returns a container with one bank (bstep=1, vp[0]=0), a

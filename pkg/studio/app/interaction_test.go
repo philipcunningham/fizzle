@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 	"github.com/philipcunningham/fizzle/pkg/studio/widgets/status"
 	"github.com/philipcunningham/fizzle/pkg/studio/widgets/toast"
 )

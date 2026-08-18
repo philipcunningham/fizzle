@@ -7,7 +7,7 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/studio/loader"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 	"github.com/philipcunningham/fizzle/pkg/studio/spaces/pool"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )

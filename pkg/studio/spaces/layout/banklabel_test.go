@@ -7,7 +7,7 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/studio/loader"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 // TestBankList_LabelsPerBankCountAsAreas pins N-08: the per-bank count

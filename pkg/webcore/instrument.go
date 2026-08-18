@@ -8,7 +8,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/fzfeffects"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 // rebaseLoops converts a slot detail's absolute loop addresses to

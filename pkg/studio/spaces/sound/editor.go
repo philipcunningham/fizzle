@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 // fieldKind classifies an editable field's input behaviour.

@@ -1,9 +1,9 @@
-// Package container holds the pure FZF/disk container byte-surgery the
-// studio TUI uses to reshape an in-memory container (compaction, area
+// Package container holds the pure FZF/disk container byte-surgery that
+// editors use to reshape an in-memory container (compaction, area
 // edits, etc.). Functions operate on the raw container bytes and return
-// new bytes with no dependency on the TUI App, so this format logic (the
-// riskiest code in studio, since a wrong offset corrupts a disk image)
-// is unit-testable in isolation.
+// new bytes with no dependency on any user interface, so this format
+// logic (risky because a wrong offset corrupts a disk image) is
+// unit-testable in isolation.
 //
 // Two mutation paradigms, split by whether the operation changes the
 // container's length:
@@ -20,12 +20,12 @@ import (
 	"encoding/binary"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 // swapPerAreaFields are the per-area byte fields SwapAreaPatches swaps.
 // NOTE: BankMIDIRecvChanOffset is intentionally absent: area swap does
-// not move the per-area MIDI receive channel (see the studio report's
+// not move the per-area MIDI receive channel (a recorded open question,
 // REMAIN-008). Do not "complete" this list without a behaviour decision.
 var swapPerAreaFields = []int{
 	disk.BankKeyHighOffset,

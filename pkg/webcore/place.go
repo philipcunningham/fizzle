@@ -11,8 +11,8 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/internal/bitconv"
-	"github.com/philipcunningham/fizzle/pkg/studio/container"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/container"
+	"github.com/philipcunningham/fizzle/pkg/model"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )

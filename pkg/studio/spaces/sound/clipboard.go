@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 // Status / label strings shared across Copy and Paste status paths.

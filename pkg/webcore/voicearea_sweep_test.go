@@ -13,7 +13,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskget"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 // The two sweeps below close the gap that let the voice-area

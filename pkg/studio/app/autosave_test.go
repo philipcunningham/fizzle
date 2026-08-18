@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 // TestRunAutoSave_WritesSingleBakInBackupDir pins the new autosave
