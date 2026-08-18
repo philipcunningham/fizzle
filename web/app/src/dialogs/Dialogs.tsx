@@ -284,7 +284,12 @@ export function Dialogs({
               <p className="desc">
                 One answer covers the whole batch. Nothing is silently truncated.
               </p>
-              <RateRow value={rate} onValueChange={onRateChange} label="sample rate" name="sample-rate" />
+              <RateRow
+                value={rate}
+                onValueChange={onRateChange}
+                label="sample rate"
+                name="sample-rate"
+              />
               <StereoRow
                 channels={estimate?.anyStereo ? 2 : 1}
                 value={stereo}
@@ -570,9 +575,7 @@ function SfzBody({
         Choose the rate and how it should fit the disk set.
         {dialog.hasInstrument && " This replaces the current instrument."}
       </p>
-      {dialog.hasInstrument && dirty && (
-        <GuardLine />
-      )}
+      {dialog.hasInstrument && dirty && <GuardLine />}
       {choices.length > 1 && (
         <>
           <p className="desc">
@@ -659,9 +662,7 @@ function PlacementBody({
             ? "This file already lives on the disk. Choose what to do with it."
             : "Choose where this file should land."}
       </p>
-      {isReplace && dirty && (
-        <GuardLine />
-      )}
+      {isReplace && dirty && <GuardLine />}
       <div
         className="buttons"
         style={isReplace ? undefined : { justifyContent: "flex-start", flexWrap: "wrap" }}

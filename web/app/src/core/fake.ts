@@ -397,12 +397,9 @@ export function createFakeCore(): Core {
       );
     },
 
-
     schema(): Promise<CoreResult<SchemaField[]>> {
       return Promise.resolve(ok(FAKE_SCHEMA.map((f) => ({ ...f }))));
     },
-
-
 
     undo(): Promise<CoreResult<Snapshot>> {
       endGesture();
@@ -452,11 +449,6 @@ export function createFakeCore(): Core {
       }
       return Promise.resolve(ok({ ...snap(), gestureLanded: landed }));
     },
-
-
-
-
-
 
     setAreaField(bank: number, area: number, field: string, value: number) {
       const guard = missingGuard();
@@ -631,7 +623,6 @@ export function createFakeCore(): Core {
       refreshReferenced(next.instrument);
       return Promise.resolve(ok(mutate(next)));
     },
-
 
     auditionSlot(slot: number): Promise<CoreResult<AuditionData>> {
       const voice = state.instrument?.voices.find((v) => v.slot === slot);
