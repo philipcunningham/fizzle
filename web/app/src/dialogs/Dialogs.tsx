@@ -402,18 +402,21 @@ export function Dialogs({
                   : "Opening a different disk set discards edits that haven't been exported."}
               </p>
               <div className="buttons">
+                <button className="btn" onClick={close}>
+                  Keep working
+                </button>
                 <button
                   className="btn danger"
-                  style={{ marginRight: "auto" }}
+                  // First visually, last in focus order: initial focus
+                  // must land on the safe action, or one habitual Enter
+                  // discards the very edits this dialog guards.
+                  style={{ marginRight: "auto", order: -1 }}
                   onClick={() => {
                     if (d.intent === "close") actions.onCloseDisk();
                     else actions.onSwitchTo(d.intent.file, d.intent.second);
                   }}
                 >
                   Discard
-                </button>
-                <button className="btn" onClick={close}>
-                  Keep working
                 </button>
                 <button
                   className="btn solid"
@@ -446,17 +449,19 @@ export function Dialogs({
                 </p>
               )}
               <div className="buttons">
+                <button className="btn" onClick={close}>
+                  Cancel
+                </button>
                 <button
                   className="btn danger"
-                  style={{ marginRight: "auto" }}
+                  // First visually, last in focus order: initial focus
+                  // must land on the safe action, not the deletion.
+                  style={{ marginRight: "auto", order: -1 }}
                   onClick={() => {
                     actions.onDeleteFile(d.name);
                   }}
                 >
                   Delete
-                </button>
-                <button className="btn" onClick={close}>
-                  Cancel
                 </button>
                 {d.isInstrument && dirty && (
                   <button

@@ -20,7 +20,7 @@ const errors = [];
 let failed = false;
 
 const browser = await chromium.launch({ channel: "chrome" });
-const page = await browser.newPage();
+const page = await browser.newPage({ reducedMotion: "reduce" });
 page.on("console", (msg) => {
   if (msg.type() === "error") errors.push(msg.text());
 });
@@ -487,6 +487,191 @@ await step("two images open in either order as one instrument (R5)", async () =>
     undefined,
     { timeout: 10000 },
   );
+});
+
+// R17's central gesture: dragging a loop handle commits a frame the
+// numeric field reads back. The pair document's first voice is open.
+await step("dragging a loop handle commits frames (R17)", async () => {
+  const start = page.getByLabel("loop 1 start");
+  await start.fill("100");
+  await start.press("Enter");
+  // This voice's loop arrives collapsed at its end, so the start
+  // commit must land before the end moves below the old start.
+  await page.waitForFunction(
+    () => Number(document.querySelector('[aria-label="loop 1 start"]')?.value) < 1000,
+    undefined,
+    { timeout: 5000 },
+  );
+  const end = page.getByLabel("loop 1 end");
+  await end.fill("8000");
+  await end.press("Enter");
+  // The commit snaps to the nearest zero crossing, so wait for a
+  // confirmed value near the fill rather than the literal.
+  try {
+    await page.waitForFunction(
+      () => {
+        const v = document.querySelector('[aria-label="loop 1 end"]')?.value;
+        return Number(v) > 7000 && Number(v) < 9000;
+      },
+      undefined,
+      { timeout: 5000 },
+    );
+  } catch {
+    const seen = await page.evaluate(
+      () => document.querySelector('[aria-label="loop 1 end"]')?.value,
+    );
+    throw new Error(`loop end did not commit near 8000; field shows ${String(seen)}`);
+  }
+  const committed = await page.evaluate(
+    () => document.querySelector('[aria-label="loop 1 end"]')?.value,
+  );
+
+  // The waveform sits below the fold in the headless viewport, and a
+  // drag off screen grabs nothing.
+  await page.evaluate(() => {
+    document.querySelector('[data-testid="waveform"]')?.scrollIntoView({ block: "center" });
+  });
+  const handle = await page.evaluateHandle(() => {
+    const host = document.querySelector('[data-testid="waveform"] div');
+    const el = [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])].find((n) =>
+      /^region region-/.test(n.getAttribute("part")),
+    );
+    return el?.querySelector('[part*="region-handle-right"]') ?? null;
+  });
+  const box = await handle.asElement()?.boundingBox();
+  if (!box) throw new Error("no right loop handle to drag");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForFunction(
+    (before) => {
+      const v = document.querySelector('[aria-label="loop 1 end"]')?.value;
+      return v !== before && Number(v) > 0;
+    },
+    committed,
+    { timeout: 10000 },
+  );
+});
+
+// J1 over the real core: a folder of WAVs becomes a kit laid up the
+// keyboard, through the real folder picker input.
+await step("a WAV folder converts to a kit (J1, WASM core)", async () => {
+  await page.getByRole("button", { name: "Eject", exact: true }).click();
+  const discard = page.getByRole("button", { name: "Discard" });
+  try {
+    await discard.waitFor({ timeout: 1500 });
+    await discard.click();
+  } catch {
+    /* clean */
+  }
+  await page.getByRole("button", { name: "New disk" }).click();
+  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByText("[FZ DISK 1]").waitFor({ timeout: 5000 });
+
+  const dir = join(tmpdir(), `fizzle-smoke-kit-${Date.now()}`);
+  execSync(`mkdir -p ${JSON.stringify(dir)}`);
+  for (let i = 0; i < 3; i++) {
+    writeFileSync(join(dir, `hit0${i}.wav`), monoWav(4000, 18000));
+  }
+  await page.getByLabel("folder").setInputFiles(dir);
+  await page.getByText("Import 3 WAVs").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Convert" }).click();
+  await page.getByText("3 WAVs mapped up the keyboard").waitFor({ timeout: 15000 });
+  await page.waitForFunction(
+    () => document.querySelectorAll('table[aria-label="instrument voices"] tbody tr').length === 3,
+    undefined,
+    { timeout: 10000 },
+  );
+});
+
+// A band of the editing surface over the real module: bank rename,
+// area duplicate, swap, and delete, undo and redo, a voice export,
+// the instrument delete, a fresh empty instrument, and the eject.
+await step("the editing surface commits over the real core", async () => {
+  await page.getByRole("tab", { name: "Banks and Areas" }).click();
+  await page.getByRole("table", { name: "areas" }).waitFor({ timeout: 5000 });
+  // The rename field appears on a double click of the bank strip.
+  await page.getByRole("button", { name: /\(3\)/ }).dblclick();
+  const bankName = page.getByLabel("bank name");
+  await bankName.fill("SMOKE BANK");
+  await bankName.press("Enter");
+  await page.getByRole("button", { name: /SMOKE BANK \(3\)/ }).waitFor({ timeout: 5000 });
+
+  await page.getByRole("button", { name: "duplicate area 1" }).click();
+  await page.waitForFunction(
+    () => document.querySelectorAll('table[aria-label="areas"] tbody tr').length === 4,
+    undefined,
+    { timeout: 5000 },
+  );
+  await page.getByRole("button", { name: "move area 1 down" }).click();
+  await page.getByRole("button", { name: "delete area 2" }).click();
+  await page.waitForFunction(
+    () => document.querySelectorAll('table[aria-label="areas"] tbody tr').length === 3,
+    undefined,
+    { timeout: 5000 },
+  );
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelectorAll('table[aria-label="areas"] tbody tr').length === 4,
+    undefined,
+    { timeout: 5000 },
+  );
+  await page.getByRole("button", { name: "Redo", exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelectorAll('table[aria-label="areas"] tbody tr').length === 3,
+    undefined,
+    { timeout: 5000 },
+  );
+
+  await page.getByRole("tab", { name: "Voices" }).click();
+  const exportDl = [];
+  const listener = (d) => exportDl.push(d);
+  page.on("download", listener);
+  await page.getByRole("button", { name: /export HIT00/ }).click();
+  await page.getByRole("button", { name: "As .fzv" }).click();
+  const fzvDeadline = Date.now() + 10000;
+  while (exportDl.length < 1 && Date.now() < fzvDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  page.off("download", listener);
+  if (exportDl.length < 1) throw new Error("no .fzv download arrived");
+
+  await page.getByRole("button", { name: /full/ }).click({ button: "right" });
+  // Right click opens the delete confirmation for the instrument row;
+  // its layout settles late in headless, so the click is forced.
+  await page.getByText("Delete the instrument?").waitFor({ timeout: 5000 });
+  // The dialog overlay swallows synthetic pointer clicks in headless,
+  // so the confirm goes through the DOM.
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Delete",
+    );
+    button?.click();
+  });
+  try {
+    await page.getByRole("button", { name: "New empty instrument" }).first().waitFor({
+      timeout: 5000,
+    });
+  } catch {
+    await page.screenshot({ path: "/tmp/smoke-editing.png" });
+    const seen = await page.evaluate(() =>
+      [...document.querySelectorAll("button")].map((b) => b.textContent?.trim()).slice(0, 20),
+    );
+    throw new Error(`no empty-instrument button; buttons: ${seen.join(" | ")}`);
+  }
+  await page.getByRole("button", { name: "New empty instrument" }).first().click();
+  await page.getByText("FULL-DATA-FZ").waitFor({ timeout: 5000 });
+
+  await page.getByRole("button", { name: "Eject", exact: true }).click();
+  const discard = page.getByRole("button", { name: "Discard" });
+  try {
+    await discard.waitFor({ timeout: 1500 });
+    await discard.click();
+  } catch {
+    /* clean */
+  }
+  await page.getByRole("button", { name: "New disk" }).waitFor({ timeout: 5000 });
 });
 
 await browser.close();
