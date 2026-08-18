@@ -77,10 +77,10 @@ func (s *Session) AddVoice(fzvData []byte) (Snapshot, *Error) {
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	if err := diskadd.AddToImage(img, fzf, 0); err != nil {
-		return s.Snapshot(), addError(err)
-	}
-	return s.adopt(img)
+	// Through replaceDump rather than diskadd directly: a first voice
+	// too large for one disk then splits across a pair, the same way
+	// a join or an SFZ conversion does.
+	return s.replaceDump(img, fzf)
 }
 
 // ImportWAVToInstrument converts a WAV through the CLI's importer and

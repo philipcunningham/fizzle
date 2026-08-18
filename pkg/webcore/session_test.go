@@ -396,3 +396,32 @@ func TestNewDiskResetsHistory(t *testing.T) {
 		t.Error("a new disk starts with no history")
 	}
 }
+
+// A drag commit that lands a history entry is a state change: the
+// snapshot's revision has to move so revision-keyed caches refresh.
+func TestCommitGestureBumpsRevision(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("REV"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	s.BeginGesture()
+	if _, cerr := s.RenameDisk("REV TWO"); cerr != nil {
+		t.Fatalf("RenameDisk: %v", cerr)
+	}
+	before := s.Snapshot().Revision
+	if !s.CommitGesture() {
+		t.Fatal("gesture with an edit did not land")
+	}
+	if got := s.Snapshot().Revision; got <= before {
+		t.Errorf("revision = %d after landing commit, want above %d", got, before)
+	}
+
+	s.BeginGesture()
+	still := s.Snapshot().Revision
+	if s.CommitGesture() {
+		t.Fatal("empty gesture landed an entry")
+	}
+	if got := s.Snapshot().Revision; got != still {
+		t.Errorf("empty commit moved the revision from %d to %d", still, got)
+	}
+}

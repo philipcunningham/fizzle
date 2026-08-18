@@ -351,6 +351,10 @@ func (s *Session) CommitGesture() bool {
 	if s.gestureBase != nil {
 		s.pushHistory(*s.gestureBase)
 		s.gestureBase = nil
+		// The landed entry changes what undo does, so the snapshot
+		// after the commit is new state: revision-keyed caches must
+		// refetch.
+		s.revision++
 		return true
 	}
 	return false

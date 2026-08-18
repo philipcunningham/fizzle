@@ -140,6 +140,11 @@ func (s *Session) NewInstrument(name string) (Snapshot, *Error) {
 	if len(name) > disk.LabelSize {
 		name = name[:disk.LabelSize]
 	}
+	for _, r := range name {
+		if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
+			return s.Snapshot(), errf(codeInvalidValue, "instrument name contains non-ASCII character %q", string(r))
+		}
+	}
 	img, cerr := s.imageOrNew()
 	if cerr != nil {
 		return s.Snapshot(), cerr

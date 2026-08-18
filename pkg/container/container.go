@@ -24,9 +24,10 @@ import (
 )
 
 // swapPerAreaFields are the per-area byte fields SwapAreaPatches swaps.
-// NOTE: BankMIDIRecvChanOffset is intentionally absent: area swap does
-// not move the per-area MIDI receive channel (a recorded open question,
-// REMAIN-008). Do not "complete" this list without a behaviour decision.
+// BankMIDIRecvChanOffset is included: the channel belongs to the key
+// split the user is reordering, so it travels with the area. That
+// settles the REMAIN-008 question, which the browser editor forced by
+// making the channel editable per area.
 var swapPerAreaFields = []int{
 	disk.BankKeyHighOffset,
 	disk.BankKeyLowOffset,
@@ -35,6 +36,7 @@ var swapPerAreaFields = []int{
 	disk.BankKeyCentOffset,
 	disk.BankAudioOutOffset,
 	disk.BankVolumeOffset,
+	disk.BankMIDIRecvChanOffset,
 }
 
 // SwapAreaParams identifies the two areas to swap within the bank sector
@@ -200,8 +202,8 @@ func CompactEmptyBanks(data []byte, bankCount, audioAreaStart int) (newData []by
 
 // perAreaMetadataOffsets enumerates the one-byte-per-Area arrays inside
 // a bank sector, shifted/copied in sync with vp[] by DeleteAreaPatches
-// and DuplicateAreaPatches. Unlike swap (REMAIN-008) this list includes
-// BankMIDIRecvChanOffset.
+// and DuplicateAreaPatches. It holds the same fields swap moves, the
+// MIDI receive channel included.
 var perAreaMetadataOffsets = []int{
 	disk.BankKeyHighOffset,
 	disk.BankKeyLowOffset,

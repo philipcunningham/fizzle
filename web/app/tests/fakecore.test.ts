@@ -600,13 +600,11 @@ describe("fake core import estimate", () => {
     expect(r.error.message).toContain("slow.wav");
   });
 
-  it("refuses a lone first voice too big for one disk, for room", async () => {
+  it("splits a lone first voice too big for one disk, as the core does", async () => {
     const core = await withDisk();
     const r = await core.estimateImport({ "big.wav": wavFixture(1, 18000, 720000) }, 18000, "mix");
     if (!r.ok) throw new Error(r.error.message);
-    expect(r.value.verdict).toBe("wont-fit");
-    expect(r.value.reason).toBe("disk-room");
-    expect(r.value.fitsAtRates).toEqual([9000]);
+    expect(r.value.verdict).toBe("splits");
   });
 
   it("reports the two disk split for a join past one disk", async () => {
