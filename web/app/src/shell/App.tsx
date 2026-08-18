@@ -4,7 +4,12 @@
 // renders from the snapshot. The document lives in the core; this
 // file owns only view state (tab, selections, dialogs, status line).
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { QueryClientProvider, keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  QueryClientProvider,
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -32,6 +37,7 @@ import { subscribeMIDI } from "../ui/midi";
 import { noteName } from "../ui/notes";
 import type { NamedBytes, Placement } from "../viewstate/place";
 import { classifyInput, toFileMap } from "../viewstate/place";
+import { matchAreas } from "../viewstate/mapping";
 import { CrashPanel, ErrorBoundary } from "./ErrorBoundary";
 import { dropEntries, walkEntries } from "./drop";
 import { wavChannels } from "./wavinfo";
@@ -243,6 +249,7 @@ function Shell({ core }: { core: Core }) {
   // The audition path (R20 to R22): the focus voice's PCM prefetched
   // per revision, the engine created lazily on the first gesture.
   const audition = useMemo(() => createAudition(), []);
+  const queryClient = useQueryClient();
   const heldNotes = useRef(new Map<number, () => void>());
   const [auditioning, setAuditioning] = useState(false);
   const auditionQuery = useQuery({
@@ -252,6 +259,21 @@ function Shell({ core }: { core: Core }) {
     placeholderData: keepPreviousData,
   });
   const auditionData = auditionQuery.data?.ok ? auditionQuery.data.value : null;
+
+  // The banks tab plays whatever the pressed key maps to, so every
+  // slot the bank references prefetches into the same audition cache:
+  // the first press then plays without waiting on a decode.
+  useEffect(() => {
+    if (tab !== "banks" || !bank) return;
+    const slots = new Set(bank.areas.map((a) => a.voiceSlot));
+    for (const slot of slots) {
+      const slotVoice = instrument.voices.find((v) => v.slot === slot);
+      void queryClient.prefetchQuery({
+        queryKey: ["audition", slot, slotVoice?.audioKey ?? ""],
+        queryFn: () => core.auditionSlot(slot),
+      });
+    }
+  }, [tab, bank, instrument, queryClient, core]);
 
   // The import dialog's pre-flight (R6): the core's estimate for the
   // pending files at the chosen rate and stereo answer. Keyed by the
@@ -285,7 +307,50 @@ function Shell({ core }: { core: Core }) {
   const estimateError =
     estimateResult !== null && !estimateResult.ok ? estimateResult.error.message : null;
 
+  /**
+   * One instrument slot's PCM through the same cache the audition
+   * query fills, so a banks tab press shares payloads with the voice
+   * preview instead of re-decoding.
+   */
+  const slotPCM = (slot: number, audioKey: string) =>
+    queryClient.fetchQuery({
+      queryKey: ["audition", slot, audioKey],
+      queryFn: () => core.auditionSlot(slot),
+    });
+
   const noteOn = (note: number, velocity: number) => {
+    // The banks tab plays the mapping (R12): the pressed key resolves
+    // through the bank's areas by key and velocity range, every match
+    // sounds (the hardware layers overlaps), and each sounds at its
+    // area's root, the cent byte the sampler itself pitches by. A key
+    // no area covers stays silent.
+    if (tab === "banks" && bank) {
+      heldNotes.current.get(note)?.();
+      const releases: (() => void)[] = [];
+      let released = false;
+      for (const matched of matchAreas(bank.areas, note, velocity)) {
+        const slotVoice = instrument.voices.find((v) => v.slot === matched.voiceSlot);
+        void slotPCM(matched.voiceSlot, slotVoice?.audioKey ?? "").then((r) => {
+          if (!r.ok || released) return;
+          releases.push(
+            audition.play({
+              pcm: r.value.pcm,
+              sampleRate: slotVoice?.voice?.sampleRate ?? r.value.sampleRate,
+              root: matched.root,
+              note,
+              velocity,
+              ...(slotVoice?.voice ? { dca: slotVoice.voice.dca } : {}),
+            }),
+          );
+        });
+      }
+      heldNotes.current.set(note, () => {
+        released = true;
+        for (const release of releases) release();
+      });
+      setAuditioning(true);
+      return;
+    }
     if (!auditionData) return;
     heldNotes.current.get(note)?.();
     // Pitch comes from the snapshot, not from the cached payload. The

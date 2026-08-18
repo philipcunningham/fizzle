@@ -4,8 +4,10 @@
 // key edit never refetches the payload. Pitch therefore has to come
 // from the snapshot at play time. R21's approximation licence covers
 // the filter and the velocity response, not the pitch.
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Core } from "../src/boundary/contract";
+import { createFakeCore } from "../src/core/fake";
 import { openInstrumentDisk } from "./helpers";
 
 interface Recorded {
@@ -94,5 +96,80 @@ describe("preview pitch (R20)", () => {
     playMiddleC();
     expect(recorded.rates.length).toBe(2);
     expect(recorded.rates[1]).toBeCloseTo(0.5, 10);
+  });
+});
+
+// The banks tab keyboard plays the mapping (the key's area resolves
+// the slot, the area's root sets the pitch), where the voices tab
+// plays the one selected voice across the whole keyboard.
+describe("the banks tab keyboard plays the key mapping", () => {
+  function slotRecordingCore() {
+    const inner = createFakeCore();
+    const slots: number[] = [];
+    const core: Core = {
+      ...inner,
+      auditionSlot: (slot) => {
+        slots.push(slot);
+        return inner.auditionSlot(slot);
+      },
+    };
+    return { core, slots };
+  }
+
+  /** Presses and holds: the release follows once playback lands. */
+  async function holdKey(note: number, recorded: Recorded) {
+    const key = screen.getByTestId(`key-${String(note)}`);
+    fireEvent.pointerDown(key, { pointerId: 1, clientY: 0 });
+    await waitFor(() => {
+      expect(recorded.rates.length).toBeGreaterThanOrEqual(1);
+    });
+    fireEvent.pointerUp(key, { pointerId: 1 });
+  }
+
+  async function openBanksTab(core: Core) {
+    await openInstrumentDisk(core);
+    fireEvent.click(screen.getByRole("tab", { name: "Banks and Areas" }));
+    await screen.findByRole("table", { name: "areas" });
+  }
+
+  it("prefetches and plays the slot the key maps to", async () => {
+    const recorded = stubAudioContext();
+    const { core, slots } = slotRecordingCore();
+    await openBanksTab(core);
+
+    // The bank's mapped slots prefetch on the tab, so a press plays
+    // without waiting on a fetch. SNARE is slot 1; nothing maps the
+    // unreferenced SPARE voice, so its slot is never fetched.
+    await waitFor(() => {
+      expect(slots).toContain(1);
+    });
+    expect(slots).not.toContain(2);
+
+    // A#4 at jsdom's full-height velocity (127) clears SNARE's
+    // velocity floor and sits ten semitones over its area root.
+    await holdKey(70, recorded);
+    expect(recorded.rates.at(-1)).toBeCloseTo(Math.pow(2, 10 / 12), 10);
+  });
+
+  it("pitches from the area's root, not the voice's", async () => {
+    const recorded = stubAudioContext();
+    const { core } = slotRecordingCore();
+    await openBanksTab(core);
+
+    // Raise KICK's area root an octave; the voice header stays at 60.
+    fireEvent.click(within(screen.getByRole("table", { name: "areas" })).getByText("KICK"));
+    await screen.findByText(/Edit area · KICK/);
+    const root = screen.getByLabelText("Root");
+    fireEvent.change(root, { target: { value: "72" } });
+    fireEvent.blur(root);
+    await waitFor(() => {
+      expect(screen.getByLabelText<HTMLInputElement>("Root").value).toBe("C5");
+    });
+
+    // C3 sits inside KICK's key range, two octaves below the area's
+    // new root, so it plays at quarter speed; the voice header's own
+    // root is still C4 and would have given half.
+    await holdKey(48, recorded);
+    expect(recorded.rates.at(-1)).toBeCloseTo(0.25, 10);
   });
 });
