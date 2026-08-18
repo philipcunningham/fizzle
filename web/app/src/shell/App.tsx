@@ -505,11 +505,31 @@ function Shell({ core }: { core: Core }) {
     void core.redo().then(applyEdit);
   };
 
+  // Bumped whenever the dialog closes: a conversion chain captures
+  // the value at launch and stops the moment it changes, so Cancel
+  // really cancels and a late failure cannot resurrect the dialog.
+  const convertEpoch = useRef(0);
+  // Prompts from one drop, shown one at a time: routing them all at
+  // once would overwrite each dialog with the next.
+  const placementQueue = useRef<Placement[]>([]);
+  const promptOpened = useRef(false);
+
   const closeDialog = () => {
+    convertEpoch.current += 1;
     setDialog(null);
     setBusy(false);
     setConvertError(null);
     setPendingSfz(null);
+    drainPlacements();
+  };
+
+  // After any import the app says what arrived and selects it (the
+  // spec's section 8): back to the voices tab, newest voice selected.
+  const revealImport = (snap: Snapshot) => {
+    setTab("voices");
+    const voices = snap.disk?.instrument?.voices;
+    const newest = voices?.[voices.length - 1];
+    if (newest) setSelectedSlot(newest.slot);
   };
 
   // Focus must not fall to the body when a dialog closes (Q5). On the
@@ -525,6 +545,7 @@ function Shell({ core }: { core: Core }) {
    * hand back to, so it counts as nothing to restore.
    */
   const openDialog = (next: PendingDialog) => {
+    promptOpened.current = true;
     const active = document.activeElement;
     focusReturn.current = active instanceof HTMLElement && active !== document.body ? active : null;
     setConvertError(null);
@@ -839,6 +860,17 @@ function Shell({ core }: { core: Core }) {
     }
   };
 
+  // Routes queued placements until one opens a dialog; the rest wait
+  // for that dialog to close.
+  const drainPlacements = () => {
+    while (placementQueue.current.length > 0) {
+      promptOpened.current = false;
+      const next = placementQueue.current.shift();
+      if (next) routeOne(next);
+      if (promptOpened.current) return;
+    }
+  };
+
   // hasDisk overrides the snapshot when a continuation runs before
   // the next snapshot lands (the new-disk-then-import chain).
   const routeNamed = (named: NamedBytes[], hasDisk = disk !== null) => {
@@ -848,7 +880,8 @@ function Shell({ core }: { core: Core }) {
       openDialog({ kind: "newDisk", then: named });
       return;
     }
-    for (const placement of placements) routeOne(placement);
+    placementQueue.current.push(...placements);
+    drainPlacements();
   };
 
   const placeFiles = (files: FileList | File[], paths?: string[]) => {
@@ -917,16 +950,19 @@ function Shell({ core }: { core: Core }) {
     onConvertWavs: (files, sampleRate, channel) => {
       setConvertError(null);
       setBusy(true);
+      const epoch = convertEpoch.current;
       if (files.length > 1 && !instrument) {
         // A batch with no instrument: the core's sequential kit (R8).
         void core
           .importWavFolder(toFileMap(files), sampleRate, false, channel as Channel)
           .then((result) => {
+            if (convertEpoch.current !== epoch) return;
             setBusy(false);
             if (result.ok) {
               applyEdit({ ok: true, value: result.value.snapshot });
               closeDialog();
               say(`${String(files.length)} WAVs mapped up the keyboard`);
+              revealImport(result.value.snapshot);
             } else {
               // The failure shows where the user acted (E1): in the
               // dialog, which stays open for another try. The status
@@ -937,7 +973,9 @@ function Shell({ core }: { core: Core }) {
           });
         return;
       }
-      const joinNext = (index: number) => {
+      const joinNext = (index: number, last: Snapshot | null) => {
+        // The dialog closed underneath the chain: stop converting.
+        if (convertEpoch.current !== epoch) return;
         const file = files[index];
         if (!file) {
           setBusy(false);
@@ -947,14 +985,16 @@ function Shell({ core }: { core: Core }) {
               ? "converted; the voice joined the instrument"
               : `${String(files.length)} WAVs joined the instrument`,
           );
+          if (last) revealImport(last);
           return;
         }
         void core
           .importWavToInstrument(file.name, file.bytes, sampleRate, channel as Channel)
           .then((result) => {
+            if (convertEpoch.current !== epoch) return;
             if (result.ok) {
               applyEdit(result);
-              joinNext(index + 1);
+              joinNext(index + 1, result.value);
               return;
             }
             // The failure shows in the open dialog (E1), and the files
@@ -970,7 +1010,7 @@ function Shell({ core }: { core: Core }) {
             setDialog({ kind: "wavImport", files: files.slice(index) });
           });
       };
-      joinNext(0);
+      joinNext(0, null);
     },
     onConvertSfz: (files, sfzPath, requested, mode, channel) => {
       setBusy(true);
@@ -997,6 +1037,7 @@ function Shell({ core }: { core: Core }) {
               ? `converted at ${String(result.value.rate)} Hz to fit the disk`
               : "SFZ converted",
           );
+          revealImport(result.value.snapshot);
         });
     },
     onPlacementChoice: (d, choice) => {

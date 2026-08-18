@@ -70,9 +70,9 @@ describe("the stereo question", () => {
     await screen.findByText("Import 1 WAV");
     await screen.findByText(/not a readable WAV/);
     expect(screen.queryByRole("radio", { name: "Mix" })).toBeNull();
-    // The estimate is advisory; the core stays the authority on
-    // whether the bytes convert.
-    expect(convertButton().disabled).toBe(false);
+    // A batch the estimate cannot even read is doomed at any rate, so
+    // the button says so instead of inviting a refusal loop.
+    expect(convertButton().disabled).toBe(true);
   });
 });
 
@@ -269,5 +269,90 @@ describe("a conversion that fails", () => {
     // The batch resumes from the failure: the two unimported files
     // stay in the dialog.
     await screen.findByText("Import 2 WAVs");
+  });
+});
+
+// Cancelling a running batch stops it: the chain must not keep
+// mutating the document after the dialog closes, and a failure
+// arriving after the cancel must not resurrect the dialog.
+describe("cancelling a running conversion", () => {
+  it("stops the chain and stays closed on a late failure", async () => {
+    const inner = createFakeCore();
+    const gates: (() => void)[] = [];
+    let calls = 0;
+    const core: Core = {
+      ...inner,
+      importWavToInstrument: (filename, bytes, rate, channel) => {
+        calls += 1;
+        return new Promise((resolve) => {
+          gates.push(() => {
+            void inner.importWavToInstrument(filename, bytes, rate, channel).then(resolve);
+          });
+        });
+      },
+    };
+    await openInstrumentDisk(core);
+    pickFiles([
+      wavFile("one.wav", 1, 18000, 500),
+      wavFile("two.wav", 1, 18000, 500),
+      wavFile("three.wav", 1, 18000, 500),
+    ]);
+    await screen.findByText("Import 3 WAVs");
+    fireEvent.click(convertButton());
+    expect(calls).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    // The first conversion lands after the cancel: no second call,
+    // and no dialog comes back.
+    gates[0]?.();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls).toBe(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+// A mixed selection prompts one placement at a time instead of
+// overwriting earlier prompts with later ones.
+describe("mixed selections queue their prompts", () => {
+  it("shows the replace prompt first, then the WAV dialog", async () => {
+    await openInstrumentDisk();
+    pickFiles([
+      new File([new Uint8Array(4096)], "other.fzf"),
+      wavFile("kick.wav", 1, 18000, 500),
+    ]);
+
+    await screen.findByText("Replace the instrument?");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await screen.findByText("Import 1 WAV");
+  });
+});
+
+// After an import the app reveals what arrived: the voices tab shows
+// and the newcomer is the selection (spec section 8).
+describe("imports reveal what arrived", () => {
+  it("selects the imported voice and returns to the voices tab", async () => {
+    await openInstrumentDisk();
+    fireEvent.click(screen.getByRole("tab", { name: "Effects" }));
+
+    pickFiles([wavFile("Fresh Hit.wav", 1, 18000, 500)]);
+    await screen.findByText("Import 1 WAV");
+    fireEvent.click(convertButton());
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Voices" }).getAttribute("aria-selected")).toBe(
+        "true",
+      );
+    });
+    // The snapshot refetch lands a beat after the reveal, so the row
+    // assertion waits for it.
+    await waitFor(() => {
+      const selected = screen
+        .getAllByRole("row")
+        .find((r) => r.getAttribute("aria-selected") === "true" && r.textContent?.includes("HIT"));
+      expect(selected?.textContent).toContain("FRESH HIT");
+    });
   });
 });
