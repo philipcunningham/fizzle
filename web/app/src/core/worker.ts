@@ -15,31 +15,11 @@ interface FizzleCore {
   snapshot(): CoreResult<Snapshot>;
   newDisk(label: string): CoreResult<Snapshot>;
   openImage(bytes: Uint8Array): CoreResult<Snapshot>;
-  importWav(
-    filename: string,
-    bytes: Uint8Array,
-    rate: number,
-    channel: string,
-  ): CoreResult<Snapshot>;
   schema(): CoreResult<SchemaField[]>;
-  setParamNumber(file: string, field: string, value: number): CoreResult<Snapshot>;
-  setParamOption(file: string, field: string, option: string): CoreResult<Snapshot>;
   undo(): CoreResult<Snapshot>;
   redo(): CoreResult<Snapshot>;
   beginGesture(): CoreResult<Snapshot>;
   commitGesture(): CoreResult<Snapshot>;
-  peaks(file: string, start: number, end: number, buckets: number): CoreResult<Uint8Array>;
-  setLoop(file: string, index: number, start: number, end: number): CoreResult<Snapshot>;
-  setGeneration(file: string, start: number, end: number): CoreResult<Snapshot>;
-  setLoopSelect(file: string, sustain: number, release: number): CoreResult<Snapshot>;
-  setEnvelope(
-    file: string,
-    which: string,
-    sustain: number,
-    end: number,
-    rates: number[],
-    stops: number[],
-  ): CoreResult<Snapshot>;
   setAreaField(bank: number, area: number, field: string, value: number): CoreResult<Snapshot>;
   renameBank(bank: number, name: string): CoreResult<Snapshot>;
   swapAreas(bank: number, a: number, b: number): CoreResult<Snapshot>;
@@ -49,7 +29,6 @@ interface FizzleCore {
   mapVoice(voiceSlot: number): CoreResult<Snapshot>;
   setEffectCell(controller: number, target: number, value: number): CoreResult<Snapshot>;
   setBendRange(value: number): CoreResult<Snapshot>;
-  auditionPCM(file: string): CoreResult<{ sampleRate: number; root: number; pcm: Uint8Array }>;
   auditionSlot(slot: number): CoreResult<{ sampleRate: number; root: number; pcm: Uint8Array }>;
   exportImage(): CoreResult<Uint8Array>;
   exportImageAt(index: number): CoreResult<Uint8Array>;
@@ -109,52 +88,12 @@ interface FizzleCore {
 
 export type AreaArgs = number[];
 
-export interface PeaksPayload {
-  file: string;
-  start: number;
-  end: number;
-  buckets: number;
-}
 
-export interface SetLoopPayload {
-  file: string;
-  index: number;
-  start: number;
-  end: number;
-}
 
-export interface SetGenerationPayload {
-  file: string;
-  start: number;
-  end: number;
-}
 
-export interface SetLoopSelectPayload {
-  file: string;
-  sustain: number;
-  release: number;
-}
 
-export interface SetEnvelopePayload {
-  file: string;
-  which: string;
-  sustain: number;
-  end: number;
-  rates: number[];
-  stops: number[];
-}
 
-export interface SetParamNumberPayload {
-  file: string;
-  field: string;
-  value: number;
-}
 
-export interface SetParamOptionPayload {
-  file: string;
-  field: string;
-  option: string;
-}
 
 export interface ImportWavPayload {
   filename: string;
@@ -212,19 +151,11 @@ export interface WorkerRequest {
     | "snapshot"
     | "newDisk"
     | "openImage"
-    | "importWav"
     | "schema"
-    | "setParamNumber"
-    | "setParamOption"
     | "undo"
     | "redo"
     | "beginGesture"
     | "commitGesture"
-    | "peaks"
-    | "setLoop"
-    | "setGeneration"
-    | "setLoopSelect"
-    | "setEnvelope"
     | "setAreaField"
     | "renameBank"
     | "swapAreas"
@@ -234,7 +165,6 @@ export interface WorkerRequest {
     | "mapVoice"
     | "setEffectCell"
     | "setBendRange"
-    | "auditionPCM"
     | "auditionSlot"
     | "exportImage"
     | "exportImageAt"
@@ -374,20 +304,8 @@ function dispatch(request: WorkerRequest): CoreResult<unknown> | undefined {
       return core().newDisk(request.payload as string);
     case "openImage":
       return core().openImage(new Uint8Array(request.payload as ArrayBuffer));
-    case "importWav": {
-      const p = request.payload as ImportWavPayload;
-      return core().importWav(p.filename, new Uint8Array(p.buffer), p.rate, p.channel);
-    }
     case "schema":
       return core().schema();
-    case "setParamNumber": {
-      const p = request.payload as SetParamNumberPayload;
-      return core().setParamNumber(p.file, p.field, p.value);
-    }
-    case "setParamOption": {
-      const p = request.payload as SetParamOptionPayload;
-      return core().setParamOption(p.file, p.field, p.option);
-    }
     case "undo":
       return core().undo();
     case "redo":
@@ -396,26 +314,6 @@ function dispatch(request: WorkerRequest): CoreResult<unknown> | undefined {
       return core().beginGesture();
     case "commitGesture":
       return core().commitGesture();
-    case "peaks": {
-      const p = request.payload as PeaksPayload;
-      return core().peaks(p.file, p.start, p.end, p.buckets);
-    }
-    case "setLoop": {
-      const p = request.payload as SetLoopPayload;
-      return core().setLoop(p.file, p.index, p.start, p.end);
-    }
-    case "setGeneration": {
-      const p = request.payload as SetGenerationPayload;
-      return core().setGeneration(p.file, p.start, p.end);
-    }
-    case "setLoopSelect": {
-      const p = request.payload as SetLoopSelectPayload;
-      return core().setLoopSelect(p.file, p.sustain, p.release);
-    }
-    case "setEnvelope": {
-      const p = request.payload as SetEnvelopePayload;
-      return core().setEnvelope(p.file, p.which, p.sustain, p.end, p.rates, p.stops);
-    }
     case "setAreaField": {
       const p = request.payload as { bank: number; area: number; field: string; value: number };
       return core().setAreaField(p.bank, p.area, p.field, p.value);
@@ -451,10 +349,7 @@ function dispatch(request: WorkerRequest): CoreResult<unknown> | undefined {
     case "setBendRange": {
       const p = request.payload as AreaArgs;
       return core().setBendRange(p[0] ?? 0);
-    }
-    case "auditionPCM":
-      return core().auditionPCM(request.payload as string);
-    case "auditionSlot": {
+    }    case "auditionSlot": {
       const p = request.payload as AreaArgs;
       return core().auditionSlot(p[0] ?? 0);
     }

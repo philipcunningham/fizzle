@@ -436,11 +436,11 @@ func TestEstimateImportPlaceholderGrowthMatches(t *testing.T) {
 	}
 	before := dumpLen(t, s)
 	wavData := monoRateWAV(t, 30000, 18000)
-	est, cerr := s.EstimateImport(map[string][]byte{"first.wav": wavData}, 18000, ChannelMix)
+	est, cerr := s.EstimateImport(map[string][]byte{"opener.wav": wavData}, 18000, ChannelMix)
 	if cerr != nil {
 		t.Fatalf("EstimateImport: %v", cerr)
 	}
-	if _, cerr := s.ImportWAVToInstrument("first.wav", wavData, 18000, ChannelMix); cerr != nil {
+	if _, cerr := s.ImportWAVToInstrument("opener.wav", wavData, 18000, ChannelMix); cerr != nil {
 		t.Fatalf("ImportWAVToInstrument: %v", cerr)
 	}
 	if got := dumpLen(t, s) - before; est.Bytes != got {
@@ -501,5 +501,22 @@ func TestEstimateImportRefusesLoneHalf(t *testing.T) {
 	}
 	if _, cerr := lone.EstimateImport(map[string][]byte{"more.wav": monoRateWAV(t, 100, 18000)}, 18000, ChannelMix); cerr == nil || cerr.Code != "missing-disk" {
 		t.Errorf("estimate on a lone half = %v, want missing-disk", cerr)
+	}
+}
+
+// The envelope names the offending item where one exists (the spec's
+// contract section): an unreadable file carries its name.
+func TestErrorEnvelopeNamesTheItem(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("ITEM"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	_, cerr := s.EstimateImport(map[string][]byte{"garbled.wav": {1, 2, 3}}, 18000, ChannelMix)
+	if cerr == nil || cerr.Item != "garbled.wav" {
+		t.Errorf("estimate error item = %v, want garbled.wav", cerr)
+	}
+	_, cerr = s.ImportWAVToInstrument("noise.wav", []byte{9, 9}, 18000, ChannelMix)
+	if cerr == nil || cerr.Item != "noise.wav" {
+		t.Errorf("import error item = %v, want noise.wav", cerr)
 	}
 }

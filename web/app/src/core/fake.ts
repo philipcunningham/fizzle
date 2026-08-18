@@ -397,70 +397,12 @@ export function createFakeCore(): Core {
       );
     },
 
-    importWav(
-      filename: string,
-      wav: Uint8Array,
-      _rate: SampleRate,
-      _channel: Channel,
-    ): Promise<CoreResult<Snapshot>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
-      if (state.label === null) {
-        return Promise.resolve(err("no-disk", "no disk is open"));
-      }
-      if (state.used + wav.length > IMAGE_SIZE) {
-        return Promise.resolve(err("no-space", "not enough free sectors"));
-      }
-      const next = clone(state);
-      next.files.push({
-        name: voiceName(filename),
-        type: "voice",
-        sizeBytes: wav.length,
-        params: defaultParams(),
-        voice: defaultVoiceDetail(Math.max(64, Math.floor(wav.length / 2))),
-      });
-      next.used += wav.length;
-      return Promise.resolve(ok(mutate(next)));
-    },
 
     schema(): Promise<CoreResult<SchemaField[]>> {
       return Promise.resolve(ok(FAKE_SCHEMA.map((f) => ({ ...f }))));
     },
 
-    setParamNumber(file: string, field: string, value: number): Promise<CoreResult<Snapshot>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
-      const spec = FAKE_SCHEMA.find((f) => f.id === field);
-      if (!spec || spec.kind === "select") {
-        return Promise.resolve(err("invalid-field", `${field} is not a numeric schema field`));
-      }
-      const next = clone(state);
-      const target = next.files.find((f) => f.name === file && f.type === "voice");
-      if (!target?.params) {
-        return Promise.resolve(err("not-found", `no voice named ${file}`));
-      }
-      target.params[field] = Math.min(spec.max, Math.max(spec.min, value));
-      return Promise.resolve(ok(mutate(next)));
-    },
 
-    setParamOption(file: string, field: string, option: string): Promise<CoreResult<Snapshot>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
-      const spec = FAKE_SCHEMA.find((f) => f.id === field);
-      if (!spec || spec.kind !== "select") {
-        return Promise.resolve(err("invalid-field", `${field} is not a select schema field`));
-      }
-      if (!spec.options?.includes(option)) {
-        return Promise.resolve(err("invalid-value", `unknown option ${option}`));
-      }
-      const next = clone(state);
-      const target = next.files.find((f) => f.name === file && f.type === "voice");
-      if (!target?.params) {
-        return Promise.resolve(err("not-found", `no voice named ${file}`));
-      }
-      target.params[field] = option;
-      return Promise.resolve(ok(mutate(next)));
-    },
 
     undo(): Promise<CoreResult<Snapshot>> {
       endGesture();
@@ -511,108 +453,10 @@ export function createFakeCore(): Core {
       return Promise.resolve(ok({ ...snap(), gestureLanded: landed }));
     },
 
-    peaks(
-      file: string,
-      startFrame: number,
-      endFrame: number,
-      buckets: number,
-    ): Promise<CoreResult<Int16Array>> {
-      const target = state.files.find((f) => f.name === file && f.type === "voice");
-      if (!target?.voice) {
-        return Promise.resolve(err("not-found", `no voice named ${file}`));
-      }
-      if (buckets <= 0) {
-        return Promise.resolve(err("invalid-value", "buckets must be positive"));
-      }
-      // A deterministic shape: a decaying tone keyed by frame index.
-      const out = new Int16Array(buckets * 2);
-      const span = Math.max(1, endFrame - startFrame);
-      for (let b = 0; b < buckets; b++) {
-        const frame = startFrame + (b * span) / buckets;
-        const amp = Math.round(
-          20000 * Math.exp(-frame / target.voice.frames) * Math.abs(Math.sin(frame / 40)),
-        );
-        out[b * 2] = -amp;
-        out[b * 2 + 1] = amp;
-      }
-      return Promise.resolve(ok(out));
-    },
 
-    setLoop(
-      file: string,
-      index: number,
-      start: number,
-      end: number,
-    ): Promise<CoreResult<Snapshot>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
-      const next = clone(state);
-      const target = next.files.find((f) => f.name === file && f.type === "voice");
-      if (!target?.voice) {
-        return Promise.resolve(err("not-found", `no voice named ${file}`));
-      }
-      const loop = target.voice.loops[index];
-      if (!loop) {
-        return Promise.resolve(err("invalid-value", `loop index ${index} out of range`));
-      }
-      loop.start = clampNum(start, 0, target.voice.frames - 1);
-      loop.end = clampNum(end, loop.start + 1, target.voice.frames);
-      return Promise.resolve(ok(mutate(next)));
-    },
 
-    setGeneration(file: string, start: number, end: number): Promise<CoreResult<Snapshot>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
-      const next = clone(state);
-      const target = next.files.find((f) => f.name === file && f.type === "voice");
-      if (!target?.voice) {
-        return Promise.resolve(err("not-found", `no voice named ${file}`));
-      }
-      const [lo, hi] = clampGeneration(target.voice.frames, start, end);
-      target.voice.genStart = lo;
-      target.voice.genEnd = hi;
-      return Promise.resolve(ok(mutate(next)));
-    },
 
-    setLoopSelect(file: string, sustain: number, release: number): Promise<CoreResult<Snapshot>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
-      const next = clone(state);
-      const target = next.files.find((f) => f.name === file && f.type === "voice");
-      if (!target?.voice) {
-        return Promise.resolve(err("not-found", `no voice named ${file}`));
-      }
-      target.voice.loopSustain = clampNum(sustain, 0, 8);
-      target.voice.loopRelease = clampNum(release, 0, 8);
-      return Promise.resolve(ok(mutate(next)));
-    },
 
-    setEnvelope(
-      file: string,
-      which: "dca" | "dcf",
-      sustain: number,
-      end: number,
-      rates: number[],
-      stops: number[],
-    ): Promise<CoreResult<Snapshot>> {
-      const guard = missingGuard();
-      if (guard) return Promise.resolve(guard);
-      if (rates.length !== 8 || stops.length !== 8) {
-        return Promise.resolve(err("invalid-value", "envelopes carry 8 stages"));
-      }
-      const next = clone(state);
-      const target = next.files.find((f) => f.name === file && f.type === "voice");
-      if (!target?.voice) {
-        return Promise.resolve(err("not-found", `no voice named ${file}`));
-      }
-      target.voice[which] = {
-        sustain: clampNum(sustain, 0, 7),
-        end: clampNum(end, 0, 7),
-        rates: rates.map((v) => clampNum(v, 0, 99)),
-        stops: stops.map((v) => clampNum(v, 0, 99)),
-      };
-      return Promise.resolve(ok(mutate(next)));
-    },
 
     setAreaField(bank: number, area: number, field: string, value: number) {
       const guard = missingGuard();
@@ -706,7 +550,7 @@ export function createFakeCore(): Core {
           err("last-area", "a bank keeps at least one area; delete the bank instead"),
         );
       }
-      const freedSlot = bankSnap.areas[area]?.voiceSlot;
+      const freedSlot = bankSnap.areas[area].voiceSlot;
       bankSnap.areas.splice(area, 1);
       const stillPlayed = next.instrument.banks.some((b) =>
         b.areas.some((a) => a.voiceSlot === freedSlot),
@@ -788,11 +632,6 @@ export function createFakeCore(): Core {
       return Promise.resolve(ok(mutate(next)));
     },
 
-    auditionPCM(file: string): Promise<CoreResult<AuditionData>> {
-      const target = state.files.find((v) => v.name === file && v.type === "voice");
-      if (!target) return Promise.resolve(err("not-found", `no voice named ${file}`));
-      return Promise.resolve(ok(fakeAudition()));
-    },
 
     auditionSlot(slot: number): Promise<CoreResult<AuditionData>> {
       const voice = state.instrument?.voices.find((v) => v.slot === slot);

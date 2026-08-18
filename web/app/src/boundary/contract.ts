@@ -12,6 +12,8 @@ export interface CoreError {
    * user reads the message above, so that one can stay plain.
    */
   detail?: string;
+  /** The offending file, voice, or field, where one exists. */
+  item?: string;
   /**
    * Set when the core can no longer answer. Nothing the user does in
    * the page recovers it, so the only way on is a reload (E5).
@@ -245,38 +247,11 @@ export interface Core {
   snapshot(): Promise<CoreResult<Snapshot>>;
   newDisk(label: string): Promise<CoreResult<Snapshot>>;
   openImage(bytes: Uint8Array): Promise<CoreResult<Snapshot>>;
-  importWav(
-    filename: string,
-    bytes: Uint8Array,
-    rate: SampleRate,
-    channel: Channel,
-  ): Promise<CoreResult<Snapshot>>;
   schema(): Promise<CoreResult<SchemaField[]>>;
-  setParamNumber(file: string, field: string, value: number): Promise<CoreResult<Snapshot>>;
-  setParamOption(file: string, field: string, option: string): Promise<CoreResult<Snapshot>>;
   undo(): Promise<CoreResult<Snapshot>>;
   redo(): Promise<CoreResult<Snapshot>>;
   beginGesture(): Promise<CoreResult<Snapshot>>;
   commitGesture(): Promise<CoreResult<Snapshot>>;
-  /** Interleaved min/max sample pairs for a frame window (R17). */
-  peaks(
-    file: string,
-    startFrame: number,
-    endFrame: number,
-    buckets: number,
-  ): Promise<CoreResult<Int16Array>>;
-  setLoop(file: string, index: number, start: number, end: number): Promise<CoreResult<Snapshot>>;
-  /** R14's generation window on a voice file, in sample frames. */
-  setGeneration(file: string, start: number, end: number): Promise<CoreResult<Snapshot>>;
-  setLoopSelect(file: string, sustain: number, release: number): Promise<CoreResult<Snapshot>>;
-  setEnvelope(
-    file: string,
-    which: "dca" | "dcf",
-    sustain: number,
-    end: number,
-    rates: number[],
-    stops: number[],
-  ): Promise<CoreResult<Snapshot>>;
   setAreaField(
     bank: number,
     area: number,
@@ -291,8 +266,6 @@ export interface Core {
   mapVoice(voiceSlot: number): Promise<CoreResult<Snapshot>>;
   setEffectCell(controller: number, target: number, value: number): Promise<CoreResult<Snapshot>>;
   setBendRange(value: number): Promise<CoreResult<Snapshot>>;
-  /** PCM for the preview path (R20 to R22); decoded by the core. */
-  auditionPCM(file: string): Promise<CoreResult<AuditionData>>;
   auditionSlot(slot: number): Promise<CoreResult<AuditionData>>;
   exportImage(): Promise<CoreResult<Uint8Array>>;
   /** One image of the document: 0 is disk 1, 1 is disk 2 of a pair (R25). */

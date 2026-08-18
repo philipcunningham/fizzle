@@ -108,57 +108,10 @@ describe("fake core contract", () => {
   });
 });
 
-describe("fake core WAV import", () => {
-  async function withDisk() {
-    const core = createFakeCore();
-    await core.newDisk("KIT");
-    return core;
-  }
-
-  function wavFile(bytes = 4000): Uint8Array {
-    return new Uint8Array(bytes).fill(7);
-  }
-
-  it("adds one voice, grows capacity, advances the revision", async () => {
-    const core = await withDisk();
-    const before = await core.snapshot();
-    const r = await core.importWav("Kick 1.wav", wavFile(), 18000, "mix");
-    expect(r.ok).toBe(true);
-    if (!r.ok || !before.ok) return;
-    const disk = r.value.disk;
-    expect(disk?.files).toHaveLength(1);
-    expect(disk?.files[0]?.name).toBe("KICK 1");
-    expect(disk?.files[0]?.type).toBe("voice");
-    expect(disk?.usedBytes ?? 0).toBeGreaterThan(before.value.disk?.usedBytes ?? 0);
-    expect(r.value.revision).toBeGreaterThan(before.value.revision);
-  });
-
-  it("rejects an import with no disk open", async () => {
-    const core = createFakeCore();
-    const r = await core.importWav("x.wav", wavFile(), 18000, "mix");
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.error.code).toBe("no-disk");
-  });
-
-  it("rejects an import the disk cannot hold, state untouched", async () => {
-    const core = await withDisk();
-    const before = await core.snapshot();
-    const r = await core.importWav("HUGE.wav", wavFile(IMAGE_SIZE * 2), 18000, "mix");
-    expect(r.ok).toBe(false);
-    if (r.ok || !before.ok) return;
-    expect(r.error.code).toBe("no-space");
-    const after = await core.snapshot();
-    if (!after.ok) return;
-    expect(after.value.revision).toBe(before.value.revision);
-  });
-});
-
 describe("fake core schema editing", () => {
   async function voiceCore() {
     const core = createFakeCore();
-    await core.newDisk("KIT");
-    await core.importWav("Kick.wav", new Uint8Array(2048), 18000, "mix");
+    await core.openImage(new Uint8Array(IMAGE_SIZE));
     return core;
   }
 
@@ -175,15 +128,15 @@ describe("fake core schema editing", () => {
 
   it("clamps numeric params to the schema range", async () => {
     const core = await voiceCore();
-    const r = await core.setParamNumber("KICK", "cutoff", 900);
+    const r = await core.setSlotParamNumber(0, "cutoff", 900);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.disk?.files[0]?.params?.["cutoff"]).toBe(127);
+    expect(r.value.disk?.instrument?.voices[0]?.params?.["cutoff"]).toBe(127);
   });
 
   it("rejects an unknown field with an envelope", async () => {
     const core = await voiceCore();
-    const r = await core.setParamNumber("KICK", "warp", 1);
+    const r = await core.setSlotParamNumber(0, "warp", 1);
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error.code).toBe("invalid-field");
@@ -191,30 +144,30 @@ describe("fake core schema editing", () => {
 
   it("undoes and redoes edits by revision", async () => {
     const core = await voiceCore();
-    await core.setParamNumber("KICK", "cutoff", 90);
+    await core.setSlotParamNumber(0, "cutoff", 90);
     const undone = await core.undo();
     expect(undone.ok).toBe(true);
     if (!undone.ok) return;
-    expect(undone.value.disk?.files[0]?.params?.["cutoff"]).not.toBe(90);
+    expect(undone.value.disk?.instrument?.voices[0]?.params?.["cutoff"]).not.toBe(90);
     expect(undone.value.canRedo).toBe(true);
     const redone = await core.redo();
     if (!redone.ok) return;
-    expect(redone.value.disk?.files[0]?.params?.["cutoff"]).toBe(90);
+    expect(redone.value.disk?.instrument?.voices[0]?.params?.["cutoff"]).toBe(90);
   });
 
   it("coalesces a gesture into one undo entry", async () => {
     const core = await voiceCore();
     const start = await core.snapshot();
     if (!start.ok) return;
-    const before = start.value.disk?.files[0]?.params?.["cutoff"];
+    const before = start.value.disk?.instrument?.voices[0]?.params?.["cutoff"];
     await core.beginGesture();
-    await core.setParamNumber("KICK", "cutoff", 30);
-    await core.setParamNumber("KICK", "cutoff", 60);
-    await core.setParamNumber("KICK", "cutoff", 90);
+    await core.setSlotParamNumber(0, "cutoff", 30);
+    await core.setSlotParamNumber(0, "cutoff", 60);
+    await core.setSlotParamNumber(0, "cutoff", 90);
     await core.commitGesture();
     const undone = await core.undo();
     if (!undone.ok) return;
-    expect(undone.value.disk?.files[0]?.params?.["cutoff"]).toBe(before);
+    expect(undone.value.disk?.instrument?.voices[0]?.params?.["cutoff"]).toBe(before);
   });
 });
 
@@ -486,28 +439,13 @@ describe("fake core generation window", () => {
     expect(detail).toMatchObject({ genStart: 0, genEnd: detail?.frames });
   });
 
-  it("takes the frames a file call was given and clamps them the same way", async () => {
+  it("refuses a slot it cannot find, leaving the document alone", async () => {
     const core = createFakeCore();
-    await core.newDisk("KIT");
-    await core.importWav("Kick.wav", new Uint8Array(2048), 18000, "mix");
-
-    const set = await core.setGeneration("KICK", 40, 200);
-    if (!set.ok) throw new Error(set.error.message);
-    expect(set.value.disk?.files[0]?.voice).toMatchObject({ genStart: 40, genEnd: 200 });
-
-    const clamped = await core.setGeneration("KICK", 40, 9_999_999);
-    if (!clamped.ok) throw new Error(clamped.error.message);
-    const detail = clamped.value.disk?.files[0]?.voice;
-    expect(detail).toMatchObject({ genStart: 40, genEnd: detail?.frames });
-  });
-
-  it("refuses a voice it cannot find, leaving the document alone", async () => {
-    const core = createFakeCore();
-    await core.newDisk("KIT");
+    await core.openImage(new Uint8Array(IMAGE_SIZE));
     const before = await core.snapshot();
     if (!before.ok) throw new Error(before.error.message);
 
-    const r = await core.setGeneration("NOWHERE", 0, 10);
+    const r = await core.setSlotGeneration(99, 0, 10);
     expect(r.ok).toBe(false);
     const after = await core.snapshot();
     if (!after.ok) throw new Error(after.error.message);

@@ -200,10 +200,14 @@ func okEnvelope(value any) map[string]any {
 }
 
 func errEnvelope(cerr *webcore.Error) map[string]any {
-	return map[string]any{"ok": false, "error": map[string]any{
+	e := map[string]any{
 		"code":    cerr.Code,
 		"message": cerr.Message,
-	}}
+	}
+	if cerr.Item != "" {
+		e["item"] = cerr.Item
+	}
+	return map[string]any{"ok": false, "error": e}
 }
 
 // method wraps a handler with panic recovery so the boundary always
@@ -246,36 +250,8 @@ func main() {
 		}
 		return okEnvelope(snapshotJS(snap))
 	})
-	core["importWav"] = method(func(args []js.Value) map[string]any {
-		filename := args[0].String()
-		data := make([]byte, args[1].Get("length").Int())
-		js.CopyBytesToGo(data, args[1])
-		rate := args[2].Int()
-		channel := args[3].String()
-		// #nosec G115 -- rate is one of the three FZ rates; webcore
-		// validates it either way.
-		snap, cerr := session.ImportWAV(filename, data, uint32(rate), channel)
-		if cerr != nil {
-			return errEnvelope(cerr)
-		}
-		return okEnvelope(snapshotJS(snap))
-	})
 	core["schema"] = method(func(_ []js.Value) map[string]any {
 		return okEnvelope(schemaJS())
-	})
-	core["setParamNumber"] = method(func(args []js.Value) map[string]any {
-		snap, cerr := session.SetParamNumber(args[0].String(), args[1].String(), args[2].Int())
-		if cerr != nil {
-			return errEnvelope(cerr)
-		}
-		return okEnvelope(snapshotJS(snap))
-	})
-	core["setParamOption"] = method(func(args []js.Value) map[string]any {
-		snap, cerr := session.SetParamOption(args[0].String(), args[1].String(), args[2].String())
-		if cerr != nil {
-			return errEnvelope(cerr)
-		}
-		return okEnvelope(snapshotJS(snap))
 	})
 	core["undo"] = method(func(_ []js.Value) map[string]any {
 		snap, cerr := session.Undo()
@@ -303,52 +279,6 @@ func main() {
 		snap := snapshotJS(session.Snapshot())
 		snap["gestureLanded"] = landed
 		return okEnvelope(snap)
-	})
-	core["peaks"] = method(func(args []js.Value) map[string]any {
-		pairs, cerr := session.Peaks(args[0].String(), args[1].Int(), args[2].Int(), args[3].Int())
-		if cerr != nil {
-			return errEnvelope(cerr)
-		}
-		// int16 pairs travel as little-endian bytes; the worker wraps
-		// the buffer in an Int16Array.
-		raw := make([]byte, len(pairs)*2)
-		for i, v := range pairs {
-			raw[i*2] = byte(uint16(v))
-			raw[i*2+1] = byte(uint16(v) >> 8)
-		}
-		out := js.Global().Get("Uint8Array").New(len(raw))
-		js.CopyBytesToJS(out, raw)
-		return okEnvelope(out)
-	})
-	core["setLoop"] = method(func(args []js.Value) map[string]any {
-		snap, cerr := session.SetLoop(args[0].String(), args[1].Int(), args[2].Int(), args[3].Int())
-		if cerr != nil {
-			return errEnvelope(cerr)
-		}
-		return okEnvelope(snapshotJS(snap))
-	})
-	core["setGeneration"] = method(func(args []js.Value) map[string]any {
-		snap, cerr := session.SetGeneration(args[0].String(), args[1].Int(), args[2].Int())
-		if cerr != nil {
-			return errEnvelope(cerr)
-		}
-		return okEnvelope(snapshotJS(snap))
-	})
-	core["setLoopSelect"] = method(func(args []js.Value) map[string]any {
-		snap, cerr := session.SetLoopSelect(args[0].String(), args[1].Int(), args[2].Int())
-		if cerr != nil {
-			return errEnvelope(cerr)
-		}
-		return okEnvelope(snapshotJS(snap))
-	})
-	core["setEnvelope"] = method(func(args []js.Value) map[string]any {
-		snap, cerr := session.SetEnvelope(
-			args[0].String(), args[1].String(), args[2].Int(), args[3].Int(),
-			intArgs(args[4]), intArgs(args[5]))
-		if cerr != nil {
-			return errEnvelope(cerr)
-		}
-		return okEnvelope(snapshotJS(snap))
 	})
 	snapOrErr := func(snap webcore.Snapshot, cerr *webcore.Error) map[string]any {
 		if cerr != nil {
@@ -400,9 +330,6 @@ func main() {
 			"pcm":        out,
 		})
 	}
-	core["auditionPCM"] = method(func(args []js.Value) map[string]any {
-		return auditionJS(session.AuditionPCM(args[0].String()))
-	})
 	core["auditionSlot"] = method(func(args []js.Value) map[string]any {
 		return auditionJS(session.AuditionSlot(args[0].Int()))
 	})
