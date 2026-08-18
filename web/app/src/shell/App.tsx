@@ -3,7 +3,6 @@
 // returned snapshot's revision keys the query cache, and the UI
 // renders from the snapshot. The document lives in the core; this
 // file owns only view state (tab, selections, dialogs, status line).
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   QueryClientProvider,
   keepPreviousData,
@@ -181,7 +180,6 @@ function Shell({ core }: { core: Core }) {
   const [browserNotice, setBrowserNotice] = useState(() => !isSupportedBrowser());
   const seqRef = useRef(0);
 
-  const wavRef = useRef<HTMLInputElement>(null);
   const anyRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const twinRef = useRef<HTMLInputElement>(null);
@@ -1148,6 +1146,19 @@ function Shell({ core }: { core: Core }) {
       });
     },
     onExport: exportImage,
+    onImportFiles: () => {
+      closeDialog();
+      anyRef.current?.click();
+    },
+    onImportFolder: () => {
+      closeDialog();
+      folderRef.current?.click();
+    },
+    onDropImport: (transfer) => {
+      // The drop routes like the workspace drop; whatever prompt it
+      // needs replaces the import dialog.
+      placeDrop(transfer);
+    },
     onPickSfzFolder: () => {
       // Not closeDialog: that would clear the pending .sfz the picked
       // folder is about to join.
@@ -1269,27 +1280,14 @@ function Shell({ core }: { core: Core }) {
         <span className="spacer" />
 
         {disk && (
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <button className="btn">Import ▾</button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content className="menu-content" align="end">
-                <DropdownMenu.Item className="menu-item" onSelect={() => wavRef.current?.click()}>
-                  WAV files
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  className="menu-item"
-                  onSelect={() => folderRef.current?.click()}
-                >
-                  Folder (WAVs or SFZ)
-                </DropdownMenu.Item>
-                <DropdownMenu.Item className="menu-item" onSelect={() => anyRef.current?.click()}>
-                  FZ files or images
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
+          <button
+            className="btn"
+            onClick={() => {
+              openDialog({ kind: "import" });
+            }}
+          >
+            Import
+          </button>
         )}
 
         <button className="btn" onClick={undo} disabled={!snap?.canUndo}>
@@ -1315,24 +1313,12 @@ function Shell({ core }: { core: Core }) {
               Export
             </button>
             <button className="btn" onClick={requestClose}>
-              Eject disk
+              Eject
             </button>
           </>
         )}
       </header>
 
-      <input
-        ref={wavRef}
-        type="file"
-        accept=".wav"
-        multiple
-        aria-label="wav file"
-        hidden
-        onChange={(e) => {
-          if (e.target.files?.length) placeFiles(e.target.files);
-          e.target.value = "";
-        }}
-      />
       <input
         ref={anyRef}
         type="file"

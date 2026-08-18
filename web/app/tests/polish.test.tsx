@@ -1,7 +1,7 @@
 // Slice 9 gates: the unsupported browser notice, dismissible errors
 // where the user acted (E1), keyboard operability of the on-screen
 // keyboard (Q5), and the rendering error boundary (E5).
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Core, CoreResult, Snapshot } from "../src/boundary/contract";
 import { IMAGE_SIZE } from "../src/boundary/contract";
@@ -141,7 +141,7 @@ describe("QA fixes in the shell", () => {
     fireEvent.blur(rate);
     await screen.findByText("●");
 
-    fireEvent.click(screen.getByRole("button", { name: "Eject disk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Eject" }));
     fireEvent.click(await screen.findByRole("button", { name: "Export first" }));
 
     // The guard is gone and the disk is closed, not left in a stale dialog.
@@ -188,18 +188,15 @@ describe("labels carry no trailing ellipsis", () => {
     expect(browse.textContent).not.toMatch(/…$/);
   });
 
-  it("the import menu items state the action plainly", async () => {
+  it("the import surface states its actions plainly", async () => {
     await openDisk();
-    // Radix opens its menu on pointerdown.
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Import ▾" }), {
-      pointerType: "mouse",
-      button: 0,
-    });
-    expect(await screen.findByRole("menuitem", { name: "WAV files" })).toBeDefined();
-    expect(screen.getByRole("menuitem", { name: "Folder (WAVs or SFZ)" })).toBeDefined();
-    expect(screen.getByRole("menuitem", { name: "FZ files or images" })).toBeDefined();
-    for (const item of screen.getAllByRole("menuitem")) {
-      expect(item.textContent).not.toMatch(/…$/);
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("Drop a disk image");
+    expect(within(dialog).getByRole("button", { name: "Choose files" })).toBeDefined();
+    expect(within(dialog).getByRole("button", { name: "Choose a folder" })).toBeDefined();
+    for (const button of within(dialog).getAllByRole("button")) {
+      expect(button.textContent).not.toMatch(/…$/);
     }
   });
 });

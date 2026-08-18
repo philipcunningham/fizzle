@@ -466,7 +466,7 @@ await step("an oversized SFZ splits across two disks (WASM core)", async () => {
   await page.getByLabel("fz files").setInputFiles(files);
   await page.getByText("SFZ conversion").waitFor({ timeout: 5000 });
   await page.getByRole("radio", { name: "18 kHz" }).click();
-  await page.getByRole("button", { name: "Two disk split" }).click();
+  await page.getByRole("button", { name: "Split across two disks" }).click();
   await page.getByText("two disk set").waitFor({ timeout: 30000 });
 
   const downloads = await exportDownloads(2);

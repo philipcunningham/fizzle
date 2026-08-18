@@ -28,6 +28,7 @@ export type PendingDialog =
       /** Acting on a file already on the disk rather than a drop. */
       fromDisk: boolean;
     }
+  | { kind: "import" }
   | { kind: "sfzFolder"; name: string }
   | { kind: "extract"; slot: number; name: string }
   | { kind: "switchDisk"; intent: "close" | { file: NamedBytes; second?: NamedBytes } }
@@ -60,6 +61,10 @@ export interface DialogActions {
   onCloseDisk: () => void;
   /** The lone .sfz flow: open the folder picker for its samples. */
   onPickSfzFolder: () => void;
+  /** The import dialog's three ways in. */
+  onImportFiles: () => void;
+  onImportFolder: () => void;
+  onDropImport: (transfer: DataTransfer) => void;
   /** second is set when a two image pair replaces the document. */
   onSwitchTo: (file: NamedBytes, second?: NamedBytes) => void;
 }
@@ -302,6 +307,38 @@ export function Dialogs({
             />
           )}
 
+          {d.kind === "import" && (
+            <>
+              <Dialog.Title asChild>
+                <h3>Import</h3>
+              </Dialog.Title>
+              <div
+                className="dropzone"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  actions.onDropImport(e.dataTransfer);
+                }}
+              >
+                Drop a disk image, WAVs, an SFZ folder, or FZ files here
+                <br />
+                <button className="btn small" onClick={actions.onImportFiles}>
+                  Choose files
+                </button>
+                <button className="btn small" onClick={actions.onImportFolder}>
+                  Choose a folder
+                </button>
+              </div>
+              <div className="buttons">
+                <button className="btn" onClick={close}>
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+
           {d.kind === "sfzFolder" && (
             <>
               <Dialog.Title asChild>
@@ -316,7 +353,7 @@ export function Dialogs({
                   Cancel
                 </button>
                 <button className="btn solid" onClick={actions.onPickSfzFolder}>
-                  Pick folder
+                  Choose a folder
                 </button>
               </div>
             </>
@@ -567,7 +604,7 @@ function SfzBody({
             convert("split");
           }}
         >
-          Two disk split
+          Split across two disks
         </button>
         <button className="btn" onClick={actions.onClose}>
           Cancel

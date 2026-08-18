@@ -115,7 +115,7 @@ describe("placement routing", () => {
     pickFiles([new File([sfz], "broken.sfz"), new File([wavHeader(1)], "other.wav")]);
 
     await screen.findByText("SFZ conversion");
-    fireEvent.click(screen.getByRole("button", { name: "Two disk split" }));
+    fireEvent.click(screen.getByRole("button", { name: "Split across two disks" }));
 
     await waitFor(() => {
       const alerts = screen.getAllByRole("alert").map((a) => a.textContent);
@@ -223,7 +223,7 @@ describe("placement routing", () => {
       "true",
     );
     fireEvent.click(screen.getByRole("radio", { name: "Kit_alt.sfz" }));
-    fireEvent.click(screen.getByRole("button", { name: "Two disk split" }));
+    fireEvent.click(screen.getByRole("button", { name: "Split across two disks" }));
 
     await waitFor(() => {
       expect(asked).toEqual(["Kit_alt.sfz"]);
@@ -258,7 +258,7 @@ describe("placement routing", () => {
 
     await screen.findByText("SFZ conversion");
     expect(screen.queryByRole("radiogroup", { name: "which .sfz" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Two disk split" }));
+    fireEvent.click(screen.getByRole("button", { name: "Split across two disks" }));
     await waitFor(() => {
       expect(asked).toEqual(["Kit.sfz"]);
     });
@@ -273,7 +273,7 @@ describe("placement routing", () => {
     expect(screen.queryByRole("radiogroup", { name: "stereo handling" })).toBeNull();
     // A mono set still sends an answer the core accepts, because
     // parseChannel refuses anything outside the three.
-    fireEvent.click(screen.getByRole("button", { name: "Two disk split" }));
+    fireEvent.click(screen.getByRole("button", { name: "Split across two disks" }));
     await waitFor(() => {
       expect(fakeCalls.sfzChannel).toBe("mix");
     });
@@ -449,7 +449,7 @@ describe("a lone .sfz asks for its samples", () => {
     const { core, sfzCallKeys } = recordingCore();
     await openDisk(core);
     pickFiles([sfzFile()]);
-    fireEvent.click(await screen.findByRole("button", { name: "Pick folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose a folder" }));
     pickFolder([
       folderFile("JUNGLISM Samples/amen 01.wav"),
       folderFile("JUNGLISM Samples/amen 02.wav"),
@@ -471,7 +471,7 @@ describe("a lone .sfz asks for its samples", () => {
     const { core, sfzCallKeys, sfzCallSizes } = recordingCore();
     await openDisk(core);
     pickFiles([sfzFile()]);
-    fireEvent.click(await screen.findByRole("button", { name: "Pick folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose a folder" }));
     pickFolder([
       folderFile("JUNGLISM/JUNGLISM.sfz"),
       folderFile("JUNGLISM/JUNGLISM Samples/amen 01.wav"),
@@ -492,7 +492,7 @@ describe("a lone .sfz asks for its samples", () => {
     const { core, sfzCallKeys } = recordingCore();
     await openDisk(core);
     pickFiles([sfzFile()]);
-    fireEvent.click(await screen.findByRole("button", { name: "Pick folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose a folder" }));
     // A dismissed native picker fires cancel on the input, not change.
     fireEvent(screen.getByLabelText("folder"), new Event("cancel"));
 
@@ -535,7 +535,7 @@ describe("a lone .sfz asks for its samples", () => {
     const { core, sfzCallKeys } = recordingCore();
     await openDisk(core);
     pickFiles([sfzFile()]);
-    fireEvent.click(await screen.findByRole("button", { name: "Pick folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose a folder" }));
 
     vi.stubGlobal(
       "FileReader",

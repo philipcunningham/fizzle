@@ -69,7 +69,7 @@ describe("a refused dialog action (E1)", () => {
     await openInstrumentDisk(core);
     await dirtyEdit();
 
-    fireEvent.click(screen.getByRole("button", { name: "Eject disk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Eject" }));
     fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
 
     await screen.findByText(/busy/);
