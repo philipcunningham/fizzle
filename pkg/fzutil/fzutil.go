@@ -56,6 +56,13 @@ func ReadWAV(path string) (*wav.File, error) {
 	return f, nil
 }
 
+// Refusals callers distinguish: a source rate too low to resample
+// from, and audio longer than the sampler's memory holds.
+var (
+	ErrSourceRateTooLow = errors.New("fzutil: source sample rate below minimum")
+	ErrTooLong          = errors.New("fzutil: resampled length exceeds the sampler's memory")
+)
+
 // MinSampleRate is the minimum source sample rate accepted by Resample. Real
 // audio never falls below 1 kHz; the WAV spec sets no hard floor, so we
 // enforce common-sense bounds to prevent a tiny SampleRate from blowing the
@@ -80,7 +87,7 @@ func ResampledLen(frames int, src, dst uint32) (int, error) {
 		return 0, errors.New("fzutil: WAV has zero sample rate")
 	}
 	if src < MinSampleRate {
-		return 0, fmt.Errorf("fzutil: source sample rate %d Hz is below minimum %d Hz", src, MinSampleRate)
+		return 0, fmt.Errorf("%w: %d Hz is below minimum %d Hz", ErrSourceRateTooLow, src, MinSampleRate)
 	}
 	if src == dst {
 		return frames, nil
@@ -89,7 +96,7 @@ func ResampledLen(frames int, src, dst uint32) (int, error) {
 	// overflow for pathological inputs, then bounds-check before allocating.
 	outLenF := math.Round(float64(frames) * float64(dst) / float64(src))
 	if outLenF > float64(MaxResampleOut) {
-		return 0, fmt.Errorf("fzutil: resampled length %.0f exceeds maximum %d samples", outLenF, MaxResampleOut)
+		return 0, fmt.Errorf("%w: %.0f exceeds maximum %d samples", ErrTooLong, outLenF, MaxResampleOut)
 	}
 	outLen := int(outLenF)
 	if outLen < 1 {

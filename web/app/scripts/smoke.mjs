@@ -298,7 +298,9 @@ await step("an invalid image is rejected with an error envelope", async () => {
   const alert = page.getByRole("alert");
   await alert.first().waitFor({ timeout: 5000 });
   const text = await alert.first().textContent();
-  if (!text?.includes("invalid-image")) throw new Error(`alert says: ${text}`);
+  // The bar carries the message a user reads, not the machine code.
+  if (!text?.includes("an FZ image is")) throw new Error(`alert says: ${text}`);
+  if (text.includes("invalid-image")) throw new Error(`alert leaks the code: ${text}`);
   await page.getByRole("button", { name: "dismiss error" }).click();
 });
 
@@ -604,7 +606,19 @@ await step("the editing surface commits over the real core", async () => {
     undefined,
     { timeout: 5000 },
   );
+  // The swap has to move the area, so read the first row's voice
+  // before and after: a no-op reorder would leave it unchanged.
+  const firstVoiceBefore = await page.evaluate(
+    () => document.querySelector('table[aria-label="areas"] tbody tr')?.textContent?.trim() ?? "",
+  );
   await page.getByRole("button", { name: "move area 1 down" }).click();
+  await page.waitForFunction(
+    (before) =>
+      (document.querySelector('table[aria-label="areas"] tbody tr')?.textContent?.trim() ?? "") !==
+      before,
+    firstVoiceBefore,
+    { timeout: 5000 },
+  );
   await page.getByRole("button", { name: "delete area 2" }).click();
   await page.waitForFunction(
     () => document.querySelectorAll('table[aria-label="areas"] tbody tr').length === 3,
@@ -638,17 +652,9 @@ await step("the editing surface commits over the real core", async () => {
   if (exportDl.length < 1) throw new Error("no .fzv download arrived");
 
   await page.getByRole("button", { name: /full/ }).click({ button: "right" });
-  // Right click opens the delete confirmation for the instrument row;
-  // its layout settles late in headless, so the click is forced.
+  // Right click opens the delete confirmation for the instrument row.
   await page.getByText("Delete the instrument?").waitFor({ timeout: 5000 });
-  // The dialog overlay swallows synthetic pointer clicks in headless,
-  // so the confirm goes through the DOM.
-  await page.evaluate(() => {
-    const button = [...document.querySelectorAll("button")].find(
-      (b) => b.textContent?.trim() === "Delete",
-    );
-    button?.click();
-  });
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
   try {
     await page.getByRole("button", { name: "New empty instrument" }).first().waitFor({
       timeout: 5000,

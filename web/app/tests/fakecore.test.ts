@@ -650,3 +650,61 @@ describe("fake core parity guards", () => {
     expect(last.error.code).toBe("last-area");
   });
 });
+
+// The parity guards the branch added, held to the real session's own
+// ordering and coverage.
+describe("fake core parity, second pass", () => {
+  it("validates arguments before the missing-disk refusal, as the session does", async () => {
+    const core = createFakeCore();
+    const half = new Uint8Array(IMAGE_SIZE);
+    half[0] = 1;
+    await core.openImage(half);
+
+    // An invalid name is invalid whether or not the twin is missing.
+    const bad = await core.renameBank(0, "");
+    expect(bad.ok).toBe(false);
+    if (bad.ok) return;
+    expect(bad.error.code).toBe("invalid-value");
+
+    // A valid argument then meets the missing-disk refusal.
+    const guarded = await core.renameBank(0, "FINE");
+    expect(guarded.ok).toBe(false);
+    if (guarded.ok) return;
+    expect(guarded.error.code).toBe("missing-disk");
+  });
+
+  it("refuses the import estimate on a lone half", async () => {
+    const core = createFakeCore();
+    const half = new Uint8Array(IMAGE_SIZE);
+    half[0] = 1;
+    await core.openImage(half);
+    const r = await core.estimateImport({ "kick.wav": wavFixture(1, 18000, 100) }, 18000, "mix");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("missing-disk");
+  });
+
+  it("refuses a non-ASCII instrument name", async () => {
+    const core = createFakeCore();
+    await core.newDisk("KIT");
+    const r = await core.newInstrument("héllo");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("invalid-value");
+  });
+
+  it("renumbers the slots above a deleted area's freed voice", async () => {
+    const core = createFakeCore();
+    await core.openImage(new Uint8Array(IMAGE_SIZE));
+    // The stock instrument: KICK slot 0, SNARE slot 1, SPARE slot 2.
+    const r = await core.deleteArea(0, 0);
+    if (!r.ok) throw new Error(r.error.message);
+    const voices = r.value.disk?.instrument?.voices ?? [];
+    expect(voices.map((v) => v.name)).toEqual(["SNARE", "SPARE"]);
+    expect(voices.map((v) => v.slot)).toEqual([0, 1]);
+    // The surviving area still plays SNARE, at its new slot.
+    const areas = r.value.disk?.instrument?.banks[0]?.areas ?? [];
+    expect(areas[0]?.voiceSlot).toBe(0);
+    expect(areas[0]?.voiceName).toBe("SNARE");
+  });
+});
