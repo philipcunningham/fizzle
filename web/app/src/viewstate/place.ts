@@ -1,7 +1,7 @@
-// The placement matrix's first half: classify whatever arrived (drop
-// or picker, one file or a folder) into the actions R7 defines. The
-// second half, context routing, lives in the shell, which knows
-// whether a disk or instrument is open.
+// The placement matrix's first half: classify whatever arrived (drop or
+// picker, one file or a folder) into the actions R7 defines. The second
+// half, context routing, lives in the shell, which knows whether a disk
+// or instrument is open.
 
 export interface NamedBytes {
   /** Slash separated path relative to the drop or folder root. */
@@ -25,9 +25,8 @@ function ext(name: string): string {
 }
 
 /**
- * sfzCandidates lists the .sfz files a selection holds, sorted by
- * path, so the classifier and the SFZ dialog agree on what counts as
- * one and offer them in a stable order.
+ * The .sfz files a selection holds, sorted by path, so the classifier
+ * and the SFZ dialog agree on what counts and in what order.
  */
 export function sfzCandidates(files: NamedBytes[]): string[] {
   return files
@@ -37,14 +36,14 @@ export function sfzCandidates(files: NamedBytes[]): string[] {
 }
 
 /**
- * classifyInput turns a selection into placements. An .sfz anywhere in
- * the selection makes the whole set one SFZ instrument (its WAVs are
- * the referenced samples). Two images are a split pair candidate.
- * WAVs group into one batch so a folder gets one rate answer (R8).
+ * Turns a selection into placements. An .sfz anywhere in the selection
+ * makes the whole set one SFZ instrument (its WAVs are the referenced
+ * samples). Two images are a split pair candidate. WAVs group into one
+ * batch so a folder gets one rate answer (R8).
  *
  * An sfz placement carries an empty sfzPath when the selection holds
- * more than one .sfz: the core won't guess which is the instrument,
- * and the dialog asks before the conversion runs (R6).
+ * more than one .sfz: the core won't guess which is the instrument, so
+ * the dialog asks before the conversion runs (R6).
  */
 export function classifyInput(files: NamedBytes[]): Placement[] {
   const sfzs = sfzCandidates(files);

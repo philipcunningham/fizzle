@@ -275,9 +275,8 @@ func main() {
 		return okEnvelope(snapshotJS(session.Snapshot()))
 	})
 	core["commitGesture"] = method(func(_ []js.Value) map[string]any {
-		// The envelope carries whether the gesture landed an entry, so
-		// a press and release with no movement does not mark the
-		// document dirty.
+		// The envelope carries whether the gesture landed an entry, so a
+		// press and release with no movement doesn't dirty the document.
 		landed := session.CommitGesture()
 		snap := snapshotJS(session.Snapshot())
 		snap["gestureLanded"] = landed

@@ -36,9 +36,8 @@ export function createWasmCore(): Core {
     resolve(event.data.result);
   };
 
-  // Set once the worker can no longer answer. Without it, a worker that
-  // dies takes the calls in flight with it and then parks every later
-  // call for the life of the page.
+  // Set once the worker can no longer answer. Without it, a dead worker
+  // takes the calls in flight with it and parks every later one.
   let dead: CoreError | null = null;
 
   function settleAll(result: CoreResult<never>) {
@@ -57,8 +56,8 @@ export function createWasmCore(): Core {
 
   worker.onmessageerror = () => {
     // A reply that fails structured clone arrives with no data, so no
-    // id matches it. Its call would wait for ever, so answer everything
-    // in flight. The worker still lives, so nothing latches.
+    // id matches it: answer everything in flight rather than park it.
+    // The worker still lives, so nothing latches.
     settleAll(err<never>(CALL_FAILED, "The core's reply couldn't be read. Try that action again."));
   };
 
@@ -70,16 +69,15 @@ export function createWasmCore(): Core {
     if (dead) return Promise.resolve<CoreResult<T>>({ ok: false, error: dead });
     return new Promise((resolve) => {
       const id = nextId++;
-      // One entry per id; the response narrows back to T at this call
-      // site only.
+      // One entry per id; the response narrows back to T here only.
       pending.set(id, resolve as (result: CoreResult<unknown>) => void);
       const request: WorkerRequest = { id, method, payload };
       try {
         worker.postMessage(request, transfer);
       } catch (reason) {
         // Re-sending an already transferred buffer throws DataCloneError
-        // right here. Section 9 says every method resolves, so answer
-        // the call and drop the entry it would otherwise leave behind.
+        // here. Section 9 says every method resolves, so answer the call
+        // and drop the entry it would otherwise leave behind.
         pending.delete(id);
         resolve(
           err<T>(
@@ -165,9 +163,8 @@ export function createWasmCore(): Core {
       return call<Snapshot>("addBank", payload, [payload.buffer]);
     },
     importWavToInstrument: (filename, bytes, rate, channel) => {
-      // A copy is what crosses: the dialog keeps its bytes for the
-      // estimate and for a retry after a mid-batch failure, so the
-      // transfer must never detach the caller's buffer.
+      // A copy crosses: the dialog keeps its bytes for the estimate and
+      // for a retry, so the transfer must not detach the caller's.
       const payload: ImportWavPayload = {
         filename,
         buffer: bytes.slice().buffer,
@@ -190,9 +187,8 @@ export function createWasmCore(): Core {
     },
     estimateImport: (files, rate, channel) => {
       const payload = folderPayload(files, "", rate, false, false, channel);
-      // No transfer list: the buffers are cloned, staying usable for
-      // the re-estimate on the next radio change and the conversion
-      // itself.
+      // No transfer list: the buffers clone, staying usable for the
+      // next radio change's re-estimate and the conversion itself.
       return call<ImportEstimate>("estimateImport", {
         files: payload.files,
         rate,
@@ -259,9 +255,8 @@ export function createWasmCore(): Core {
   };
 }
 
-// Folder imports move a copy of every file's buffer across as a
-// transferable: the transfer is for speed, and the caller's own bytes
-// stay usable for estimates and retries.
+// Folder imports transfer a copy of every file's buffer: the transfer
+// is for speed, and the caller's bytes stay usable for a retry.
 function folderPayload(
   files: Record<string, Uint8Array>,
   sfzPath: string,
@@ -277,9 +272,8 @@ function folderPayload(
   return { files: buffers, sfzPath, rate, fitToDisk, split, channel };
 }
 
-// A view narrower than its backing buffer must send only its own
-// bytes: posting the raw buffer would ship unrelated data and the
-// wrong length.
+// A view narrower than its backing buffer sends only its own bytes:
+// posting the raw buffer ships unrelated data and the wrong length.
 function wholeBytes(bytes: Uint8Array): ArrayBuffer {
   return bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
     ? (bytes.buffer as ArrayBuffer)

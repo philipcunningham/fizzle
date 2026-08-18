@@ -1,6 +1,5 @@
-// Contract tests for the core boundary, run against the fake core.
-// Slice 1 swaps in the real WASM module behind the same contract, and
-// these tests keep passing unchanged against it.
+// Contract tests for the core boundary, run against the fake core. The
+// real WASM module sits behind the same contract, so they hold for it.
 import { describe, expect, it } from "vitest";
 import { IMAGE_SIZE } from "../src/boundary/contract";
 import { createFakeCore } from "../src/core/fake";
@@ -592,8 +591,7 @@ describe("fake core import estimate", () => {
   });
 });
 
-// Parity with the real session where tests used to be able to pin
-// behaviour the product refuses: the missing-disk mutation guard, the
+// Parity with the real session: the missing-disk mutation guard, the
 // gesture bracket around undo and redo, and deleteArea's semantics.
 describe("fake core parity guards", () => {
   it("refuses every mutation on a lone half of a split pair", async () => {
@@ -651,8 +649,7 @@ describe("fake core parity guards", () => {
   });
 });
 
-// The parity guards the branch added, held to the real session's own
-// ordering and coverage.
+// The parity guards, held to the real session's ordering and coverage.
 describe("fake core parity, second pass", () => {
   it("validates arguments before the missing-disk refusal, as the session does", async () => {
     const core = createFakeCore();

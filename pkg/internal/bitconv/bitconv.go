@@ -18,8 +18,7 @@ func WriteInt16LE(b []byte, v int16) {
 }
 
 // NarrowU8 narrows v to uint8. The caller must have validated v fits in
-// [0, 255]; this helper does not check. Centralizes gosec G115 suppression
-// for documented, validated narrowings.
+// [0, 255]; this helper does not check.
 func NarrowU8(v int) uint8 {
 	return uint8(v) //nolint:gosec // G115: caller guarantees v fits in uint8
 }
@@ -36,9 +35,9 @@ func NarrowU32(v int) uint32 {
 	return uint32(v) //nolint:gosec // G115: caller guarantees v fits in uint32
 }
 
-// LenU32 returns len(s) as uint32. Use when a binary format field is
-// uint32 and the slice length is known by construction to fit (audio sample
-// buffers, sector arrays bounded by disk capacity, etc.).
+// LenU32 returns len(s) as uint32. Use it where a binary format field is
+// uint32 and the slice length fits by construction, as with audio sample
+// buffers and sector arrays bounded by disk capacity.
 func LenU32[E any](s []E) uint32 {
 	return uint32(len(s)) //nolint:gosec // G115: len is non-negative and bounded by container
 }

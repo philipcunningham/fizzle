@@ -110,10 +110,9 @@ type SyntheticImageOpts struct {
 	AllocatedAt []int  // sector indices to pre-mark allocated (beyond the format reservation)
 }
 
-// SyntheticImage builds a formatted, in-memory disk image as a byte slice with
-// optional pre-allocated sectors. This is intended for edge-case unit tests
-// that need specific disk states (fragmented CAT, near-full disk, etc.)
-// without relying on real .img fixtures.
+// SyntheticImage builds a formatted, in-memory disk image with optional
+// pre-allocated sectors, for edge-case tests that need a specific disk
+// state (fragmented CAT, near-full disk) without a real .img fixture.
 func SyntheticImage(t *testing.T, opts SyntheticImageOpts) []byte {
 	t.Helper()
 	if opts.Label == "" {

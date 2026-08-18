@@ -43,8 +43,7 @@ export function voiceName(filename: string): string {
 }
 
 // A miniature of the real schema: one field per control kind, plus a
-// kind no registry knows, so the numeric fallback stays tested. The
-// real schema comes from the Go core; the fake only drives UI tests.
+// kind no registry knows, so the numeric fallback stays tested.
 export const FAKE_SCHEMA: SchemaField[] = [
   {
     id: "playbackMode",
@@ -57,8 +56,7 @@ export const FAKE_SCHEMA: SchemaField[] = [
   },
   {
     // The core declares this one too, with the same id, label, and
-    // options, so a UI test sees the field the real schema carries.
-    // disk.SampleRates is where the options come from.
+    // options (from disk.SampleRates), so a UI test sees the real field.
     id: "sampleRate",
     label: "Sample rate (Hz)",
     group: "Sample",
@@ -169,8 +167,8 @@ function fakeArea(
   };
 }
 
-// fakeVoice builds an enriched instrument voice, params and detail
-// included, the shape the real snapshot carries per slot.
+// An enriched instrument voice, params and detail included: the shape
+// the real snapshot carries per slot.
 function fakeVoice(slot: number, name: string, referenced: boolean): InstrumentVoice {
   const frames = 4096 + slot * 256;
   return {
@@ -238,9 +236,8 @@ function fakeAudition(): AuditionData {
   return { sampleRate: 18000, root: 60, pcm };
 }
 
-// Mirrors the core's historyCap, which R24 puts at a floor of 100. A
-// fake that caps lower would let a UI test pass on a depth the real
-// core rejects.
+// Mirrors the core's historyCap, which R24 floors at 100. A fake that
+// caps lower would pass a UI test on a depth the real core rejects.
 const HISTORY_CAP = 100;
 
 /** Documents larger than one disk's payload split across a pair. */
@@ -270,10 +267,10 @@ function fakeMissingDisk(image: Uint8Array): number {
 }
 
 /**
- * Arguments the fake received that its snapshot cannot show. The
- * stereo answer is one of these: it changes the samples the real core
- * writes, and the fake has no samples, so a test asserts it here.
- * createFakeCore clears it, so each test starts from a blank record.
+ * Arguments the fake received that its snapshot cannot show. The stereo
+ * answer is one: it changes the samples the real core writes, and the
+ * fake has no samples, so a test asserts it here. createFakeCore clears
+ * it, so each test starts from a blank record.
  */
 export const fakeCalls: { wavFolderChannel: Channel | null; sfzChannel: Channel | null } = {
   wavFolderChannel: null,
@@ -323,9 +320,8 @@ export function createFakeCore(): Core {
           },
   });
 
-  // mutate applies a state change with the same history semantics as
-  // the real session: gestures coalesce to one entry, redo clears, and
-  // the empty pre-disk state never joins the history.
+  // The real session's history semantics: gestures coalesce to one
+  // entry, redo clears, and the empty pre-disk state never joins.
   const mutate = (next: FakeState): Snapshot => {
     const prev = state;
     if (prev.label !== null) {
@@ -341,9 +337,9 @@ export function createFakeCore(): Core {
     return snap();
   };
 
-  // commit is the fake's adoptPair: every accepted mutation lands
-  // here, so the missing-disk refusal sits after each method's own
-  // argument validation, exactly as the real session orders them.
+  // The fake's adoptPair: every accepted mutation lands here, so the
+  // missing-disk refusal sits after each method's own argument
+  // validation, as the real session orders them.
   const commit = (next: FakeState): CoreResult<Snapshot> => {
     const guard = missingGuard();
     if (guard) return guard;
@@ -351,9 +347,8 @@ export function createFakeCore(): Core {
   };
 
   // Mirrors Session.checkWholeDocument: every mutation on a lone half
-  // of a split pair refuses without touching the document. Opens,
-  // undo, redo, and the gesture brackets stay allowed, as the real
-  // session allows them.
+  // of a split pair refuses without touching the document. Opens, undo,
+  // redo, and the gesture brackets stay allowed.
   const missingGuard = (): CoreResult<never> | null =>
     state.missingDisk
       ? err(
@@ -549,9 +544,9 @@ export function createFakeCore(): Core {
         b.areas.some((a) => a.voiceSlot === freedSlot),
       );
       if (!stillPlayed) {
-        // The core sizes the voice area from the banks, so a freed
-        // slot leaves and every slot above it shifts down with the
-        // areas that play them renumbered to match.
+        // The core sizes the voice area from the banks, so a freed slot
+        // leaves and every slot above it shifts down, with the areas
+        // that play them renumbered to match.
         next.instrument.voices = next.instrument.voices
           .filter((v) => v.slot !== freedSlot)
           .map((v) => (v.slot > freedSlot ? { ...v, slot: v.slot - 1 } : v));
@@ -1198,15 +1193,9 @@ function voiceCount(s: FakeState): number {
 }
 
 /**
- * joinVoice lands a voice the way the core does: appended to the voice
- * list and mapped to a fresh area (membership is reference on the FZ
- * format), creating the instrument when the document has none.
- */
-/**
  * A header scan for the shape the estimate needs: channels, source
  * rate, and frame count, all from the declared sizes. Mirrors the
- * core's read of the same fields; null for anything that is not a
- * parseable WAV.
+ * core's read of the same fields; null for anything unparseable.
  */
 function wavShape(bytes: Uint8Array): { channels: number; rate: number; frames: number } | null {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -1235,6 +1224,11 @@ function convertedBytes(shape: { rate: number; frames: number }, rate: number): 
   return Math.round((shape.frames * rate) / shape.rate) * 2;
 }
 
+/**
+ * Lands a voice the way the core does: appended to the voice list and
+ * mapped to a fresh area (membership is reference on the FZ format),
+ * creating the instrument when the document has none.
+ */
 function joinVoice(next: FakeState, name: string): FakeState {
   if (!next.instrument) {
     next.instrument = {

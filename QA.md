@@ -12,11 +12,10 @@ Once those are green, work through the relevant scenarios below.
 
 The file is split into two sections:
 
-- **CLI QA** (`CLI-01` to `CLI-14`) is software-level testing that an
-  operator or agent can perform from a terminal with the `fizzle`
-  binary and the fixtures in `testdata/synthetic/`. These scenarios cover
-  exploratory testing, ergonomics, cross-command consistency, and
-  failure modes that are hard to encode as automated assertions.
+- **CLI QA** (`CLI-01` to `CLI-14`) runs from a terminal with the
+  `fizzle` binary and the fixtures in `testdata/synthetic/`. These
+  scenarios cover ergonomics, cross-command consistency, and failure
+  modes that are hard to encode as automated assertions.
 - **Hardware QA** (`HW-01` to `HW-13`) requires a real Casio FZ-1,
   FZ-10M, or FZ-20M and can't be automated.
 
@@ -32,9 +31,6 @@ Test assets in `testdata/synthetic/`: `HOOVER.img`, `STAB.img`, `TECHNO.img`,
 
 # CLI QA
 
-Scenarios that exercise the compiled `fizzle` binary against the
-fixtures and check behaviour the automated suite doesn't assert on.
-
 Use a scratch directory for outputs:
 
 ```sh
@@ -47,8 +43,7 @@ cd "$QA"
 ## CLI-01: Error message ergonomics
 
 **Why CLI-level QA:** Automated tests assert exit codes and rough
-substrings. They don't grade whether the message tells the user what
-went wrong, what limit was hit, or what to try instead.
+substrings, not whether the message names the failure or a fix.
 
 **Scenario:** Drive each command with malformed or boundary inputs and
 read the error like a first-time user would.
@@ -135,10 +130,9 @@ fish -c 'source completion.fish; complete -C "fizzle "' | head
 
 ## CLI-03: SIGINT / cancellation cleanup
 
-**Why CLI-level QA:** Nothing automated proves the README's
-cancellation claim. The README says: "Long conversions respect
-Ctrl+C: cancel a running `sfz convert` and the command exits cleanly
-without leaving a half-written file."
+**Why CLI-level QA:** Nothing automated proves the README's claim that
+a `sfz convert` cancelled with Ctrl+C exits cleanly without leaving a
+half-written file.
 
 **Steps:**
 
@@ -174,7 +168,7 @@ ls "$QA" | grep -E 'SPLIT-[12]\.img|\.tmp' || echo "no leftover files"
 ## CLI-04: Help text and examples
 
 **Why CLI-level QA:** Examples in `--help` and in the manual rot
-silently when flags or args change. No automated test runs them.
+silently when flags or args change, and no automated test runs them.
 
 **Steps:**
 
@@ -205,9 +199,8 @@ done
 
 ## CLI-05: Operational round-trips
 
-**Why CLI-level QA:** Byte-level round-trips are fuzzed. Round-trips
-that involve multiple subcommands chained through the filesystem are
-not.
+**Why CLI-level QA:** Byte-level round-trips are fuzzed; round-trips
+chaining several subcommands through the filesystem aren't.
 
 **Steps:**
 
@@ -253,9 +246,8 @@ fizzle fzv info --json unpacked/MY\ PAD.fzv | jq '.dcf.cutoff'   # expect 64
 
 ## CLI-06: Multi-bank `fzf edit`
 
-**Why CLI-level QA:** `fzf edit` is tested against single-bank dumps.
-Behaviour on a multi-bank dump (TECHNO has 8 bank sectors) isn't
-exercised at the CLI level.
+**Why CLI-level QA:** `fzf edit` is tested against single-bank dumps,
+not against a multi-bank dump like TECHNO (8 bank sectors).
 
 **Steps:**
 
@@ -280,9 +272,8 @@ fizzle fzv info --json "out/METAL-BELL.fzv" | jq '.dcf.cutoff,.dcf.resonance'
 
 ## CLI-08: `fzv play` on the native-audio platform
 
-**Why CLI-level QA:** Automated tests inject a `TestPlayer`. On
-darwin and windows the real `oto/v3` backend is selected; that path
-isn't exercised in `make check`.
+**Why CLI-level QA:** Automated tests inject a `TestPlayer`, so the
+real `oto/v3` backend on darwin and windows never runs in `make check`.
 
 **Steps:**
 
@@ -344,9 +335,9 @@ fizzle fzv extract loop.fzv loop.wav
 
 ## CLI-10: Concurrent disk operations
 
-**Why CLI-level QA:** `fileutil.WithFileLock` is unit-tested with the
-real filesystem but not driven from two separate processes. The
-cross-process serialisation guarantee is otherwise unverified.
+**Why CLI-level QA:** `fileutil.WithFileLock` is unit-tested on the
+real filesystem but never driven from two processes. The cross-process
+serialisation guarantee is unverified.
 
 **Steps:**
 
@@ -379,8 +370,7 @@ fizzle disk ls par.img
 ## CLI-11: `--json` schema stability
 
 **Why CLI-level QA:** Each `--json` flag is unit-tested independently.
-There is no single place that lists the documented schema and
-asserts the binary still emits it.
+Nothing asserts that the binary still emits the documented schema.
 
 **Steps:**
 
@@ -434,8 +424,7 @@ duration, and its key range should agree.
 ## CLI-13: Disk-full handling
 
 **Why CLI-level QA:** Boundary-at-capacity is fuzzed at the byte
-level. The user-facing behaviour of "the disk filled up while I
-was adding files" isn't.
+level. The user-facing "disk filled up mid-add" behaviour isn't.
 
 **Steps:**
 
@@ -460,8 +449,8 @@ fizzle disk ls full.img | tail -3
 ## CLI-14: Debug logging and warnings
 
 **Why CLI-level QA:** `--debug` is documented as showing per-file
-detail. The presence and shape of WARN lines on the fit-to-disk path
-is part of the user contract.
+detail. WARN lines on the fit-to-disk path are part of the user
+contract.
 
 **Steps:**
 
@@ -487,14 +476,11 @@ grep -i 'downsampling\|capacity\|fit' fit.log
 
 ## CLI-15: `sfz export` round-trip into a DAW
 
-**Why CLI-level QA:** The `sfz export` command produces an SFZ + WAV
-bundle intended to load in Renoise, Bitwig, or any other SFZ-aware
-DAW. Automated tests verify that the exported SFZ can be re-converted
-by `sfz convert`. Nothing automated proves the bundle actually
-loads in a DAW or that the audio plays back correctly. The export
-also has a known limitation around playback modes (CUE, SYNTH,
-REVERSE collapse to NORMAL on the SFZ side). An operator should
-confirm this matches expectations for their workflow.
+**Why CLI-level QA:** `sfz export` produces an SFZ + WAV bundle for
+Renoise, Bitwig, or any other SFZ-aware DAW. Automated tests re-convert
+the exported SFZ with `sfz convert`, but nothing proves the bundle
+loads in a DAW or sounds right. Playback modes are a known limitation:
+CUE, SYNTH, and REVERSE collapse to NORMAL on the SFZ side.
 
 **Scenario:** Export a real hardware FZF, load the result in a DAW,
 and confirm key ranges, velocities, and audio fidelity.
@@ -544,16 +530,14 @@ diff /tmp/orig.info /tmp/rt.info
 
 ## CLI-16: FZF to SFZ to FZF round-trip
 
-**Why CLI-level QA:** A package test covers this round-trip at the
-data level but on synthetic fixtures. Running it against real
-hardware FZFs exposes whatever drift exists in the export and
-re-conversion paths against the actual voice headers the sampler
-writes.
+**Why CLI-level QA:** A package test covers this round-trip, but only
+on synthetic fixtures. Real hardware FZFs expose drift in the export
+and re-conversion paths against the voice headers the sampler writes.
 
 **Scenario:** Export a hardware FZF as SFZ + WAVs, then re-convert
-that SFZ to a fresh FZF. Confirm every voice slot survives in the
-same order. Each slot keeps the same key range, MIDI channel,
-output, sample rate, and approximate duration.
+that SFZ to a fresh FZF. Confirm every voice slot survives in the same
+order, keeping its key range, MIDI channel, output, sample rate, and
+approximate duration.
 
 **Steps:**
 
@@ -605,10 +589,9 @@ fizzle fzf info --json "$QA/brass-rt.fzf" \
 
 ## CLI-17: SFZ to FZF to SFZ round-trip
 
-**Why CLI-level QA:** The complementary round-trip. Take an SFZ
-authored in a DAW, push it through fizzle into the FZ format, then
-pull it back out. Catches loss of fidelity in either direction
-against a known SFZ source-of-truth.
+**Why CLI-level QA:** The complementary round-trip. An SFZ authored in
+a DAW goes through fizzle into the FZ format and back out. Catches
+fidelity loss in either direction against a known SFZ source of truth.
 
 **Scenario:** Convert `JUNGLISM.sfz` to FZF, export the FZF back to
 SFZ + WAVs, and check that the region count and sample references
@@ -973,6 +956,6 @@ Copy `output-test.img` to the sampler.
 
 ## Exploratory testing
 
-Before a release, consider manually testing any new features or changed
-workflows that aren't yet covered by the CLI QA or hardware QA above.
-Use `--debug` to inspect log output during exploratory sessions.
+Before a release, manually test any new features or changed workflows
+the CLI QA and hardware QA above don't yet cover. Use `--debug` to
+inspect log output during exploratory sessions.

@@ -20,13 +20,11 @@ import (
 )
 
 // VoiceEntry holds the parsed parameters for a single voice slot in the
-// full dump. PlaybackMode reflects the spec's loop-mode field
-// ("normal"/"reverse"/"cue"/"synthesized"/"no_sound") and is the
-// authoritative signal for whether a slot is audible: a NoSound slot is a
-// spec-defined placeholder, included here so the array length matches the
-// declared voice_count and consumers can correlate slot index with bank
-// vp[] references. To filter to audible voices, skip entries with
-// PlaybackMode == "no_sound".
+// full dump. PlaybackMode mirrors the spec's loop-mode field ("normal",
+// "reverse", "cue", "synthesized", "no_sound") and decides whether a slot
+// is audible. NoSound slots are spec-defined placeholders, kept here so
+// the array length matches the declared voice_count and slot indices line
+// up with bank vp[] references. Skip them to filter to audible voices.
 type VoiceEntry struct {
 	fzutil.VoiceEntry
 	RateIndex uint8   `json:"rate_index"`
@@ -86,21 +84,20 @@ func Parse(path string) (*FullDump, error) {
 
 	// Multi-disk detection.
 	//
-	// AssembleMultiDisk stamps the *total* wave sector count (across both
-	// disks) into the bank sector at BankTotalWaveOffset. If that value
-	// exceeds the audio actually present in this file, this is disk 1 of a
-	// 2-disk split. The first voice whose wavst (cumulative sample address)
-	// points past the local audio area is the boundary: its audio lives on
-	// disk 2 and the sampler will append disk 2's bytes into RAM after the
-	// last local voice. See llm-wiki/topics/multi-disk-dumps.md.
+	// AssembleMultiDisk stamps the total wave sector count across both
+	// disks into the bank sector at BankTotalWaveOffset. A value above the
+	// audio present here means this is disk 1 of a 2-disk split. The first
+	// voice whose wavst (cumulative sample address) points past the local
+	// audio area is the boundary: its audio lives on disk 2, which the
+	// sampler appends into RAM after the last local voice. See
+	// llm-wiki/topics/multi-disk-dumps.md.
 	//
-	// The FZ-1 does not always write BankTotalWaveOffset, so this field is
-	// frequently garbage in real-world dumps. We therefore require
-	// corroborating evidence before declaring is_split=true: the candidate
-	// boundary voice must itself be plausible (printable name + valid sample
-	// rate index). If only non-plausible slots trigger the boundary
-	// detection, the totalWaveMarker is treated as noise and the file is
-	// reported as standalone.
+	// The FZ-1 doesn't always write BankTotalWaveOffset, so real-world
+	// dumps often carry garbage there. Declaring is_split=true therefore
+	// needs corroboration: the candidate boundary voice must itself be
+	// plausible (printable name and valid sample-rate index). When only
+	// implausible slots trigger it, the marker is noise and the file
+	// reports as standalone.
 	totalWaveMarker := int(binary.LittleEndian.Uint32(bank[disk.BankTotalWaveOffset : disk.BankTotalWaveOffset+4]))
 	localAudioBytes := len(data) - voiceAreaEnd
 	localWaveSectors := localAudioBytes / disk.SectorSize
@@ -139,10 +136,10 @@ func Parse(path string) (*FullDump, error) {
 		} else if len(data) > voiceAreaEnd {
 			totalBytes = uint32(localAudioBytes) //nolint:gosec // G115: localAudioBytes derived from file length, always non-negative
 		}
-		// Clamp to the audio actually present in the file. Real-world FZFs
-		// from older tooling can carry a garbage waveEnd in the last voice
-		// header (e.g. Drums.fzf reports ~4 GB before clamping). The audio
-		// area is the upper bound for memory used by this dump.
+		// Clamp to the audio present in the file. Real FZFs from older
+		// tooling carry a garbage waveEnd in the last voice header
+		// (Drums.fzf reports about 4 GB before clamping), and the audio
+		// area is the upper bound on this dump's memory.
 		if int64(totalBytes) > int64(localAudioBytes) {
 			totalBytes = uint32(localAudioBytes) //nolint:gosec // G115: localAudioBytes is non-negative
 		}
@@ -165,20 +162,17 @@ func Parse(path string) (*FullDump, error) {
 	return info, nil
 }
 
-// parseVoiceEntry always returns a VoiceEntry for slot i, even when the
-// slot is a PlaybackModeNoSound placeholder. NoSound entries carry only the
-// slot index and PlaybackMode = "no_sound"; all other fields are zero.
-// Callers that want audible voices only should filter on
-// PlaybackMode != disk.PlaybackModeNameNoSound.
+// parseVoiceEntry always returns a VoiceEntry for slot i, even for a
+// PlaybackModeNoSound placeholder, which carries only the slot index and
+// PlaybackMode "no_sound" with every other field zero.
 //
-// On multi-bank FZFs a single voice slot can be referenced from multiple
-// banks via vp[] (e.g. TECHNO.img shares slot 10 across banks 1-4/6-7).
-// The displayed key range, MIDI channel, output, velocity, and bvol are
-// read from the first BankSite (the bank that "owns" the slot in
-// bank-then-split order), so the value is deterministic and matches the
-// front panel's first reference to the voice. Voices with no bank site
-// (orphan headers) render with zero metadata; this never happens in
-// fizzle-built dumps but can occur in hand-crafted hardware files.
+// On multi-bank FZFs several banks can reference one voice slot through
+// vp[] (TECHNO.img shares slot 10 across banks 1 to 4 and 6 to 7). The
+// displayed key range, MIDI channel, output, velocity, and bvol come from
+// the first BankSite in bank-then-split order, so the value is
+// deterministic and matches the front panel's first reference. Orphan
+// headers with no bank site render with zero metadata; fizzle-built dumps
+// never produce those, hand-crafted hardware files can.
 func parseVoiceEntry(voiceArea, data []byte, fhdr *fzutil.FZFHeader, i int) VoiceEntry {
 	voff := disk.VoiceSlotOffset(0, i)
 	hdr := voiceArea[voff : voff+disk.VoiceHeaderUsed]
@@ -194,9 +188,9 @@ func parseVoiceEntry(voiceArea, data []byte, fhdr *fzutil.FZFHeader, i int) Voic
 	}
 
 	if mode == disk.PlaybackModeNormalVariant {
-		// Surface the undocumented variant so its occurrences remain
-		// visible. Treating as Normal is a best-effort: the structural
-		// fields validate and the file is otherwise clean, but the precise
+		// Surface the undocumented variant so its occurrences stay
+		// visible. Treating it as Normal is best-effort: the structural
+		// fields validate and the file is otherwise clean, but the
 		// hardware semantics of the cleared bit aren't documented.
 		logger.Warn().
 			Int("slot", i+1).
@@ -217,13 +211,12 @@ func parseVoiceEntry(voiceArea, data []byte, fhdr *fzutil.FZFHeader, i int) Voic
 		}
 	}
 	if !baseOK {
-		// No referenced bank site (orphan voice header) or
-		// ParseBankVoiceEntry returned false. We still know the voice's
-		// audio metadata from the header itself, so render the slot with
-		// defaults for the bank fields and continue computing duration /
-		// rate / hasLoop below. MIDIChannel reports 1 (spec channel 1) so
-		// downstream invariants don't treat 0 as out-of-range; the Output
-		// column renders as "none" to mirror the gchn=0 case.
+		// Orphan voice header, or ParseBankVoiceEntry declined. The
+		// header still carries the audio metadata, so default the bank
+		// fields and carry on with duration, rate, and hasLoop below.
+		// MIDIChannel reports 1 (spec channel 1) so downstream invariants
+		// don't read 0 as out of range, and Output renders "none" to
+		// mirror the gchn=0 case.
 		name := disk.TrimPadded(hdr[disk.VoiceNameOffset : disk.VoiceNameOffset+disk.LabelSize])
 		if name == "" || !disk.IsPrintableName([]byte(name)) {
 			name = fmt.Sprintf("VOICE %d", i+1)
@@ -251,10 +244,9 @@ func parseVoiceEntry(voiceArea, data []byte, fhdr *fzutil.FZFHeader, i int) Voic
 	}
 
 	loopSus := hdr[disk.VoiceLoopSusOffset]
-	// loop_sus (0..7) selects which of the eight loopst/looped pairs is
-	// the active sustain loop; loop_sus == 8 means no sustain loop.
-	// Mask the loop-fine and skip-flag bits the spec reserves so the
-	// address comparison reflects sample positions only.
+	// loop_sus (0 to 7) picks the active loopst/looped pair; 8 means no
+	// sustain loop. Mask the spec's reserved loop-fine and skip-flag bits
+	// so the comparison sees sample positions only.
 	hasLoop := false
 	if loopSus < disk.NoSustainLoop {
 		stOff := disk.VoiceLoopSt0Offset + int(loopSus)*4
@@ -284,9 +276,9 @@ func parseVoiceEntry(voiceArea, data []byte, fhdr *fzutil.FZFHeader, i int) Voic
 	}
 }
 
-// countAudibleVoices returns the count of entries with a non-NoSound
-// playback mode. This is the "what the sampler will actually play"
-// number, distinct from VoiceCount which is the spec's slot count.
+// countAudibleVoices counts entries with a non-NoSound playback mode:
+// what the sampler actually plays, as against VoiceCount, which is the
+// spec's slot count.
 func countAudibleVoices(voices []VoiceEntry) int {
 	n := 0
 	for _, v := range voices {
@@ -333,9 +325,8 @@ func Render(w io.Writer, info *FullDump, highlighted map[int]bool) {
 	t.AppendHeader(header)
 
 	for _, v := range info.Voices {
-		// NoSound slots are spec-defined placeholders with no audible output;
-		// they exist in the file for slot-index alignment with bank vp[] but
-		// have no meaningful row to render.
+		// NoSound slots exist only to keep slot indices aligned with bank
+		// vp[], so there's no row worth rendering.
 		if v.PlaybackMode == disk.PlaybackModeNameNoSound {
 			continue
 		}
@@ -361,9 +352,9 @@ func Render(w io.Writer, info *FullDump, highlighted map[int]bool) {
 			var vel string
 			switch {
 			case v.VelLow == 0 && v.VelHigh == 0:
-				// Spec §1-5 says htch/ltch range is 1-127; (0,0) is
-				// unreachable by MIDI note-on (which uses vel 1-127),
-				// so the voice will never trigger.
+				// Spec §1-5 gives htch/ltch the range 1 to 127, so (0,0)
+				// is unreachable by a MIDI note-on and the voice never
+				// triggers.
 				vel = "off"
 			default:
 				vel = fmt.Sprintf("%d to %d", v.VelLow, v.VelHigh)

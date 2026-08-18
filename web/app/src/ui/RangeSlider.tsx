@@ -1,5 +1,5 @@
-// The mockup's dual-handle range slider: pointer drags move the
-// nearer handle, arrow keys nudge the focused one.
+// The dual-handle range slider: pointer drags move the nearer handle,
+// arrow keys nudge the focused one.
 import { type KeyboardEvent, useRef } from "react";
 import { clamp } from "./format";
 import { useGestureBracket } from "./gesture";
@@ -46,9 +46,8 @@ export function RangeSlider({
     Math.round(clamp(min + ((x - 6) / (width - 12)) * (max - min), min, max));
 
   // Only a handle whose display differs from its number needs spelling
-  // out: a velocity handle reading 64 already says 64, while a key
-  // handle reading 37 shows C#2, and the value a reader hears has to
-  // be the value on screen (Q5).
+  // out: velocity 64 already reads 64, while key 37 shows C#2, and the
+  // value a reader hears has to be the value on screen (Q5).
   const speak = (v: number) => (format ? format(v) : undefined);
 
   const nudge = (which: "lo" | "hi", delta: number) => {
@@ -56,12 +55,8 @@ export function RangeSlider({
     else onChange(lo, clamp(Math.max(hi + delta, lo), min, max));
   };
 
-  // The keyboard is a first-class path (Q5), and auto-repeat fires
-  // about thirty keydowns a second. Each one used to land its own
-  // history entry, which against the 100 entry cap wipes a session. The
-  // run is bracketed rather than guarded on e.repeat. R24 asks for one
-  // undo step, and a repeat guard would buy that by making a held key
-  // stop working.
+  // The keyboard is a first-class path (Q5), so a key auto-repeat run
+  // is bracketed like a drag (R24). See useGestureBracket for why.
   const keyDown = (which: "lo" | "hi") => (e: KeyboardEvent<SVGCircleElement>) => {
     const step = arrowStep(e.key);
     if (step === null) return;
@@ -109,8 +104,8 @@ export function RangeSlider({
         gesture.commit();
       }}
       // A pointer that leaves the window, or a control that unmounts
-      // mid-drag, would otherwise leave the bracket open and swallow
-      // every later edit's history entry.
+      // mid-drag, otherwise leaves the bracket open and swallows every
+      // later edit's history entry.
       onPointerCancel={() => {
         drag.current = null;
         gesture.commit();

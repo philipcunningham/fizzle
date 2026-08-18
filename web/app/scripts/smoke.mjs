@@ -1,8 +1,8 @@
-// Headless smoke over the real WASM core behind the mockup-derived
-// UI: disks round trip byte identical, every editing surface commits
-// through the core, the placement matrix places, and a split pair
-// reopens in either order. Fails on any console error. Run
-// `make wasm` first; uses the locally installed Chrome channel.
+// Headless smoke over the real WASM core: disks round trip byte
+// identical, every editing surface commits through the core, the
+// placement matrix places, and a split pair reopens in either order.
+// Fails on any console error. Run `make wasm` first; uses the locally
+// installed Chrome channel.
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -266,8 +266,7 @@ await step("waveform, loops, and envelopes edit over the WASM core", async () =>
 
 await step("R14's Sample group reads and edits over the WASM core", async () => {
   // Sample rate is a schema select, so it reaches the screen through
-  // the same path every other schema control takes. If the schema is
-  // doing its job this needs no code of its own.
+  // the same path every other schema control takes.
   await page.getByRole("combobox", { name: "Sample rate (Hz)" }).click();
   await page.getByRole("option", { name: "9000" }).click();
   await page.waitForFunction(

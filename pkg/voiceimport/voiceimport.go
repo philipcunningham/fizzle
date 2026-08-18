@@ -44,22 +44,22 @@ const (
 )
 
 // Import converts the WAV at wavPath to an FZV voice file at fzvPath.
-// targetRate must be 36000, 18000, or 9000. Stereo input is rejected,
-// naming wavPath and the routes to a mono source; callers that carry a
-// channel choice use ImportBytes. The output is written atomically.
+// targetRate must be 36000, 18000, or 9000. Stereo input is rejected;
+// callers that carry a channel choice use ImportBytes instead. The
+// output is written atomically.
 func Import(wavPath, fzvPath string, targetRate uint32) error {
 	if err := disk.ValidateRate(targetRate); err != nil {
 		return fmt.Errorf("voiceimport: %w", err)
 	}
-	// ReadWAV streams the file through wav.Read, which bounds itself at
-	// limits.MaxRead, so nothing buffers the whole WAV. Its errors name
-	// the path already, which is what E1 asks for.
+	// ReadWAV streams through wav.Read, which bounds itself at
+	// limits.MaxRead, so nothing buffers the whole WAV, and its
+	// errors already name the path (E1).
 	f, err := fzutil.ReadWAV(wavPath)
 	if err != nil {
 		return fmt.Errorf("voiceimport: %w", err)
 	}
-	// The CLI has no channel flag, so name the file the user typed and
-	// give a remedy that exists.
+	// The CLI has no channel flag, so name the user's file and offer
+	// a remedy that exists.
 	if f.Channels >= 2 {
 		return fmt.Errorf("voiceimport: %q is stereo and fzv import writes mono only; convert it to mono first", wavPath)
 	}
@@ -137,10 +137,10 @@ func encodeVoice(f *wav.File, name string, targetRate uint32, channel Channel) (
 	}
 
 	data := Encode(samples, idx, name, 0, scaledLoop(f, targetRate, len(samples)))
-	// Honour the SMPL chunk's MIDIUnityNote so a WAV produced by `fzv extract`
-	// (which embeds the source voice's root key) round-trips its cent byte
-	// when re-imported. MIDIUnityNote=0 is the WAV "unset" sentinel; leave the
-	// Encode default in place in that case.
+	// Honour the SMPL chunk's MIDIUnityNote so a WAV from `fzv extract`
+	// (which embeds the source voice's root key) round-trips its cent
+	// byte. MIDIUnityNote=0 is the WAV "unset" sentinel: keep the Encode
+	// default there.
 	if f.MIDIUnityNote != 0 && len(data) > disk.VoiceKeyCentOffset {
 		data[disk.VoiceKeyCentOffset] = f.MIDIUnityNote
 	}
@@ -248,10 +248,8 @@ func NoLoop() LoopParams { return LoopParams{LoopStart: -1, LoopEnd: -1} }
 // loops between LoopStart and LoopEnd while the key is held, then releases
 // after note-off.
 func Encode(samples []int16, rateIdx uint8, name string, transpose int, loop LoopParams) []byte {
-	// Defensive clamp: dcp is a signed 16-bit field at 1/256-semitone resolution.
-	// ±127 semitones is the widest range that fits, matching the SFZ spec.
-	// Callers (e.g. pkg/sfz) should already clamp and warn; this guards against
-	// future callers passing through unchecked values that would silently wrap.
+	// Callers such as pkg/sfz clamp and warn already. This guard stops an
+	// unchecked value from silently wrapping the dcp field (see MaxTranspose).
 	if transpose < MinTranspose {
 		transpose = MinTranspose
 	}
@@ -306,7 +304,6 @@ func Encode(samples []int16, rateIdx uint8, name string, transpose int, loop Loo
 	}
 
 	if hasLoop {
-		// Loop 1 set to provided points; remaining loops at genEnd.
 		hdr.LoopSt[0] = bitconv.NarrowU32(loop.LoopStart)
 		hdr.LoopEd[0] = bitconv.NarrowU32(loop.LoopEnd)
 		for i := 1; i < disk.MaxGenerators; i++ {
@@ -324,20 +321,18 @@ func Encode(samples []int16, rateIdx uint8, name string, transpose int, loop Loo
 
 	var hdrBuf bytes.Buffer
 	if err := binary.Write(&hdrBuf, binary.LittleEndian, hdr); err != nil {
-		// voiceHeader contains only uint8/uint16/uint32 and fixed-size arrays
-		// of these, so binary.Write cannot fail at runtime. Panicking here
-		// turns a future struct-change regression into an immediate, loud
-		// failure rather than silent voice-file corruption.
+		// voiceHeader holds only fixed-size unsigned integers and arrays of
+		// them, so binary.Write cannot fail at runtime. Panicking turns a
+		// future struct-change regression into a loud failure rather than
+		// silent voice-file corruption.
 		panic(fmt.Errorf("voiceimport: binary.Write on voiceHeader: %w", err))
 	}
 
-	// Pad header to exactly SectorSize bytes.
 	hdrBytes := hdrBuf.Bytes()
 	if len(hdrBytes) < disk.SectorSize {
 		hdrBytes = append(hdrBytes, make([]byte, disk.SectorSize-len(hdrBytes))...)
 	}
 
-	// Pad audio to a sector boundary.
 	audioSize := len(samples) * disk.BytesPerSample
 	audio := make([]byte, disk.PadToSector(audioSize))
 	for i, s := range samples {

@@ -1,6 +1,6 @@
 // Command stophook is a Claude Code Stop hook: a turn never ends on a
-// red tree. It runs the fast checks from the Web UI plan's foundation,
-// each leg scoped to what actually changed in the working tree:
+// red tree. It runs the fast checks, each leg scoped to what changed in
+// the working tree:
 //
 //   - Go files changed: go build ./... plus the js/wasm build of the
 //     browser surface (web/wasm).

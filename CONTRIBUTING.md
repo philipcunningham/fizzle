@@ -1,17 +1,14 @@
 # Contributing to fizzle
 
-Requires **Go 1.26+**.
-
 ## Before you contribute
 
-Pull requests are disabled on this repository. If you'd like to make a
-contribution, please open an issue first. The issue may include a spec, a
-patch, or a proposal; it is how proposed changes get discussed and merged.
+Pull requests are disabled on this repository, so open an issue first. An
+issue can carry a spec, a patch, or a proposal; it's how changes get
+discussed and merged.
 
-If you encounter a bug or something that isn't very ergonomic, please consider
-sharing an `.img` or `.fzf` along with steps to reproduce. Concrete fixtures
-make it much easier to investigate and to add a regression test once the
-underlying issue is fixed.
+When reporting a bug or an awkward workflow, attach the `.img` or `.fzf`
+and the steps to reproduce. A concrete fixture becomes the regression
+test once the fix lands.
 
 If your issue includes a patch, please make sure that:
 
@@ -35,15 +32,13 @@ make tools   # one-off: installs go-licenses at a pinned version
 make build
 ```
 
-`make build` regenerates `internal/licenses/THIRD_PARTY_LICENSES.txt`
-every time, and compiles with `-tags release` so the binary embeds the
-attribution text. The generated file is gitignored.
+`make build` regenerates the gitignored
+`internal/licenses/THIRD_PARTY_LICENSES.txt` and compiles with `-tags
+release`, so the binary embeds the attribution text.
 
 Plain `go build`, `go test`, `go vet`, and `make check` work without
-running `make tools` or `make licenses`: they compile the
-`!release`-tagged stub in `internal/licenses/licenses.go`. The
-shipped binary uses the embedded version; development workflows use
-the stub.
+`make tools` or `make licenses`. They compile the `!release`-tagged stub
+in `internal/licenses/licenses.go` instead.
 
 To inspect the embedded attribution after a release build:
 
@@ -59,8 +54,8 @@ Run the full validation suite:
 make check
 ```
 
-This runs formatting, vet, lint, unit tests, CLI integration tests, and fuzz
-seed validation in sequence.
+Formatting, vet, lint, unit tests, CLI integration tests, fuzz seed
+validation, and the browser checks run in sequence.
 
 Run tests with race detection:
 
@@ -68,8 +63,8 @@ Run tests with race detection:
 make test
 ```
 
-For a faster inner loop during development, skip the package integration
-tests (which read large fixture files) with:
+For a faster inner loop, skip the package integration tests and the
+large fixture files they read:
 
 ```sh
 go test -short -race ./...
@@ -81,25 +76,25 @@ Run integration tests (builds the binary, then exercises the CLI end-to-end):
 make integration-test
 ```
 
-Integration tests use fixtures in `testdata/`. They are pure Go and run on
+Integration tests use fixtures in `testdata/`. They're pure Go and run on
 Linux, macOS, and Windows. No shell or Python required.
 
 ### Test layers
 
 fizzle uses three layers of automated tests:
 
-**Layer 1: Unit tests** (`pkg/*/_test.go`): validate individual package
-logic, edge cases, error paths, and boundary conditions. Run with `make test`.
+**Layer 1: Unit tests** (`pkg/*/_test.go`): individual package logic,
+edge cases, error paths, and boundary conditions. Run with `make test`.
 
 **Layer 2: Package integration tests** (`pkg/integration/integration_test.go`):
-validate multi-package pipelines at the data level using real hardware fixture
-images. Include audio fidelity correlation checks and golden SHA-256 checksums.
-Run with `make test`.
+multi-package pipelines at the data level, against real hardware fixture
+images. Include audio fidelity correlation checks and golden SHA-256
+checksums. Run with `make test`.
 
 **Layer 3: Binary-executing integration tests** (`pkg/integration/cli_test.go`):
-validate the compiled binary end-to-end via `os/exec`. These tests check CLI
-output, exit codes, error messages, and flag handling. Gated behind the
-`integration` build tag. Run with `make integration-test`.
+the compiled binary end-to-end via `os/exec`, checking CLI output, exit
+codes, error messages, and flag handling. Gated behind the `integration`
+build tag. Run with `make integration-test`.
 
 ### When to write which test
 
@@ -120,17 +115,14 @@ at two levels:
    serialized correctly (these already exist in `disklist`, `fzvinfo`,
    `fzfinfo`).
 2. **CLI test**: run the binary with `--json` and verify the output is valid
-   JSON with expected top-level keys. This catches flag wiring bugs that
+   JSON with the expected top-level keys. This catches flag wiring bugs that
    package tests can't detect.
-
-When adding `--json` to a new command, add both tests.
 
 ### Golden checksums
 
 `integration_test.go` uses SHA-256 checksums to verify that the conversion
-pipeline produces byte-identical output. If you intentionally change the
-output format (resampling, sector layout, voice packing), the golden
-checksums fail.
+pipeline produces byte-identical output. Intentional output changes
+(resampling, sector layout, voice packing) fail the golden checksums.
 
 To update after an intentional change:
 
@@ -242,14 +234,15 @@ rendering. The established pattern is:
 - `Render(w io.Writer, result *Result)` formats the struct for terminal output
 - `Info(path, w)` or `List(path, w)` is a convenience wrapper composing both
 
-This pattern is used in `fzfinfo`, `fzvinfo`, and `disklist`. The `fzfmidi`
+`fzfinfo`, `fzvinfo`, and `disklist` use this pattern. The `fzfmidi`
 package uses a similar structure (`Set`/`Render`) but is a side-effect command
 rather than a display command.
 
-Benefits:
-- Tests can assert on struct fields instead of parsing rendered text
-- Programmatic callers can use `Parse` without terminal output
-- Rendering changes don't require updating domain logic tests
+The split pays off three ways:
+
+- tests assert on struct fields instead of rendered text
+- programmatic callers use `Parse` without terminal output
+- rendering changes leave the domain logic tests alone
 
 When writing new display commands, follow this pattern. When writing
 side-effect commands (disk add, disk format, voice import), returning only
@@ -272,4 +265,3 @@ integer values. When decoding from raw bytes, use an explicit conversion:
 - Standard library assertions only (no testify)
 - Binary-executing tests use `runFizzle()` / `mustRun()` / `mustFail()` helpers
   from `cli_test.go`
-

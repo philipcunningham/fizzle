@@ -177,9 +177,9 @@ func FuzzDisSectorRoundTrip(f *testing.F) {
 			VoiceCount: voiceCount,
 			WaveCount:  waveCount,
 		}
-		// Skip fuzz inputs whose extent falls outside the valid data range
-		// (DecodeDisSector now rejects extents that touch the reserved
-		// sectors or run off the end of the disk).
+		// Skip fuzz inputs whose extent falls outside the valid data range:
+		// DecodeDisSector rejects extents that touch the reserved sectors
+		// or run off the end of the disk.
 		if start > 0 || end > 0 {
 			if int(start) < ReservedSectors || int(end) < ReservedSectors ||
 				int(start) >= SectorCount || int(end) >= SectorCount ||

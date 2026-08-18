@@ -512,13 +512,12 @@ func TestIsMultiDiskFirstHalf(t *testing.T) {
 	})
 }
 
-// TestParseFZFHeaderBStepLargerThanVoices is a regression test for the
-// bstep/vn conflation bug. Real-world Drums-style FZFs (e.g. CASIO005,
-// CASIO019, several factory drum kits) declare a bank-level bstep that
-// counts key splits, not voices, and is larger than the file-level voice
-// count. Slots past index vn are audio bytes, not voice headers. The
-// parser must stop at the first non-plausible slot rather than trusting
-// bstep.
+// TestParseFZFHeaderBStepLargerThanVoices guards the bstep and vn
+// conflation. Real-world Drums-style FZFs (CASIO005, CASIO019, several
+// factory drum kits) declare a bank-level bstep counting key splits, not
+// voices, which runs past the file-level voice count. Slots beyond vn are
+// audio bytes, so the parser must stop at the first non-plausible slot
+// rather than trust bstep.
 func TestParseFZFHeaderBStepLargerThanVoices(t *testing.T) {
 	t.Parallel()
 	// Three real voices, but bstep declares 8 (as if the bank had 8 key
@@ -624,11 +623,11 @@ const (
 	testNameBass  = "BASS"
 )
 
-// makeFZFWithNames assembles a minimal in-memory FZF byte slice with one bank
-// sector and nvoice voice headers carrying the supplied names. It is used by
-// tests for ExtractStoredNames and ResolveVoiceTargets so the fzutil package
-// does not depend on the higher-level fzfbuilder helper (which would form an
-// import cycle through voicebuild).
+// makeFZFWithNames assembles a minimal in-memory FZF byte slice with one
+// bank sector and nvoice voice headers carrying the supplied names. The
+// ExtractStoredNames and ResolveVoiceTargets tests use it instead of the
+// higher-level fzfbuilder helper, which would form an import cycle through
+// voicebuild.
 func makeFZFWithNames(t *testing.T, names []string) ([]byte, *FZFHeader) {
 	t.Helper()
 	nvoice := len(names)
@@ -824,14 +823,13 @@ func TestFindBankSitesForVoiceMultiBank(t *testing.T) {
 		{0, 1},
 		{0, 2},
 		{3},
-		// Slot 4 is reachable in the voice area (maxSlot=3 -> wait, we need
-		// slot 4 referenced somewhere or it won't be in the voice area).
+		// No plan references slot 4, so the voice area stops at slot 3.
 	})
 	// Force the voice area to span slot 4 by writing one extra slot manually.
 	data = append(data, make([]byte, disk.SectorSize)...)
-	// Re-stamp slot 4 as a plausible voice. NOTE: VoicesPerSector=4 means
-	// slots 0-3 share one sector; slot 4 lives in the next sector. Append
-	// added that sector, so the existing voice area now covers slots 0-7.
+	// Re-stamp slot 4 as a plausible voice. VoicesPerSector=4, so slots 0-3
+	// share one sector and slot 4 lives in the sector just appended, which
+	// takes the voice area to slots 0-7.
 	voiceAreaStart := 3 * disk.SectorSize
 	voff := disk.VoiceSlotOffset(voiceAreaStart, 4)
 	v05Name := disk.PadLabel("V05")

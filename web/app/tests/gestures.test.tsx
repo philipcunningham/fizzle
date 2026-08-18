@@ -1,14 +1,13 @@
-// Pointer drags on the controls, the gap section 8 of the ship review
-// names: nothing pressed, moved, and released a pointer on any control,
-// so every gesture fix the decision log records was unpinned.
-//
+// Pointer drags on the controls, the gap the ship review findings name
+// under "What the suites don't assert": no test pressed, moved, and
+// released a pointer on any control, so every gesture fix was unpinned.
 // What each drag control owes the core is the same contract, so the
-// tests are the same shape. A drag opens the gesture bracket once and
-// closes it exactly once, whatever ends it: a release, a cancel, a lost
-// capture, or the control leaving the document mid-drag. A run of
-// auto-repeat arrow keys is one bracket too, because R24 makes a
-// continuous gesture one undo step. And a press that changes no value,
-// the drag that runs into a rail, writes nothing at all.
+// tests are the same shape. A drag opens
+// the gesture bracket once and closes it exactly once, whatever ends it:
+// a release, a cancel, a lost capture, or the control leaving the
+// document mid-drag. A run of auto-repeat arrow keys is one bracket too,
+// because R24 makes a continuous gesture one undo step. And a press that
+// changes no value, the drag that runs into a rail, writes nothing.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { EnvelopeSnapshot } from "../src/boundary/contract";
@@ -486,7 +485,7 @@ describe("the editor that unmounts mid-drag", () => {
       expect(screen.getByLabelText<HTMLInputElement>("Bend range (1/8 semi)").value).toBe("24");
     });
 
-    // The stale bracket used to swallow this edit and every later one.
+    // A stale bracket swallows this edit and every later one.
     const undo = screen.getByRole<HTMLButtonElement>("button", { name: "Undo" });
     expect(undo.disabled).toBe(false);
     fireEvent.click(undo);

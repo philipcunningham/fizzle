@@ -124,7 +124,6 @@ func TestSwapAreaPatches(t *testing.T) {
 	binary.LittleEndian.PutUint16(data[disk.BankVoiceNumOffset+1*disk.VPEntrySize:], 200)
 
 	patches := SwapAreaPatches(data, SwapAreaParams{Base: 0, SrcArea: 0, TgtArea: 1})
-	// apply in-place to verify the swap result
 	for _, p := range patches {
 		copy(data[p.Offset:p.Offset+len(p.New)], p.New)
 	}
@@ -280,10 +279,9 @@ func TestDefaultBankRangePatches(t *testing.T) {
 	}
 }
 
-// TestCompactedSize_AgreesWithCompactVoiceArea pins that the cheap,
-// non-allocating size predictor returns exactly what CompactVoiceArea
-// would shrink the buffer to, so the free-space display (which uses
-// CompactedSize) matches what a save actually reclaims (N-04).
+// TestCompactedSize_AgreesWithCompactVoiceArea pins the non-allocating
+// size predictor to exactly what CompactVoiceArea shrinks the buffer to,
+// so the free-space display matches what a save reclaims (N-04).
 func TestCompactedSize_AgreesWithCompactVoiceArea(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -338,9 +336,9 @@ func TestIsBareSingleVoice(t *testing.T) {
 		t.Error("a named bank should not be a bare single voice")
 	}
 
-	// Multi-bank (bankCount=2): a name in the SECOND bank must also
-	// disqualify, locking the per-bank name scan rather than only checking
-	// bank 0. Bank 0 stays blank with its single voice; bank 1 is named.
+	// With bankCount=2, a name in the second bank disqualifies too, which
+	// locks the scan to every bank rather than bank 0 alone. Bank 0 stays
+	// blank with its single voice, and bank 1 is named.
 	secondNamed := make([]byte, 3*disk.SectorSize)
 	binary.LittleEndian.PutUint16(secondNamed[disk.BankVoiceCountOffset:], 1)
 	binary.LittleEndian.PutUint16(secondNamed[disk.BankVoiceNumOffset:], 0)

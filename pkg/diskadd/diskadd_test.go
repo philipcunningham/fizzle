@@ -73,9 +73,8 @@ func TestDetectFileTooSmall(t *testing.T) {
 	}
 }
 
-// TestAddDiskFullError is a regression test for the disk-full error message.
-// Previously it reported only internal sector counts with no context. It should
-// now report the file size and disk capacity in MB so the user understands why.
+// TestAddDiskFullError pins the disk-full error message: it must name the
+// file size and the usable disk capacity, not just internal sector counts.
 func TestAddDiskFullError(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -209,12 +208,9 @@ func TestAddMultiDiskDisk1WnIsTotal(t *testing.T) {
 // TestAddIgnoresGarbageTotalWaveMarker verifies that detectFile does NOT
 // honour a high BankTotalWaveOffset value when no voice slot corroborates
 // it. Real-world FZFs frequently carry uninitialised garbage in this field
-// (the FZ-1 firmware doesn't always write it), and inflating wn from
-// garbage causes the sampler to ask for a phantom disk 2.
-//
-// This mirrors the corroboration heuristic in fzfinfo.Parse: a high marker
-// is only adopted when at least one plausible voice slot has wavst pointing
-// past the local audio area.
+// (the FZ-1 firmware doesn't always write it), and inflating wn from garbage
+// makes the sampler ask for a phantom disk 2. The corroboration rule mirrors
+// fzfinfo.Parse.
 func TestAddIgnoresGarbageTotalWaveMarker(t *testing.T) {
 	t.Parallel()
 
@@ -725,10 +721,9 @@ func TestDetectFileAcceptsValidVoiceWithEachRate(t *testing.T) {
 	}
 }
 
-// TestDetectFileMultiBank guards a regression where detectFile hardcoded
-// nbank=1, so multi-bank FZFs (e.g. the factory Clarinet.fzf with 4 banks)
-// got the wrong bn count in their DIS tail and the firmware would only
-// see bank 0. detectFile must now walk the bank-sector chain.
+// TestDetectFileMultiBank pins the DIS tail's bn for multi-bank FZFs (the
+// factory Clarinet.fzf has 4 banks). detectFile has to walk the bank-sector
+// chain; a hardcoded nbank=1 leaves the firmware seeing only bank 0.
 func TestDetectFileMultiBank(t *testing.T) {
 	t.Parallel()
 
@@ -771,17 +766,13 @@ func TestDetectFileMultiBank(t *testing.T) {
 	}
 }
 
-// TestHeuristicDetectFileVoiceCountCap is a regression test for an
-// off-by-up-to-3 bug in heuristicDetectFile. The phaseVoices guard
-// checked `fi.nvoice < disk.MaxVoices` *before* adding, but
-// countVoicesInSector adds up to 4 voices per call, so nvoice could
-// climb from 63 to 67 (exceeding MaxVoices=64). The DIS tail's vn field
-// would then be out of spec and could mislead the firmware.
+// TestHeuristicDetectFileVoiceCountCap pins heuristicDetectFile's voice cap.
+// countVoicesInSector adds up to 4 voices per call, so a `fi.nvoice <
+// disk.MaxVoices` guard checked before adding lets nvoice climb from 63 to
+// 67, putting the DIS tail's vn field out of spec.
 //
-// We construct a synthetic FZF where the heuristic walks: 15 voice
-// sectors of 4 voices each (60), then one sector with only 3 voices
-// (63), then one sector with 4 voices. The pre-add guard would let the
-// last sector add 4 -> 67. With the fix, the 64th cap is respected.
+// The synthetic FZF walks 15 voice sectors of 4 voices each (60), then one
+// sector with 3 voices (63), then one sector with 4 that would overshoot.
 func TestHeuristicDetectFileVoiceCountCap(t *testing.T) {
 	t.Parallel()
 
@@ -813,11 +804,10 @@ func TestHeuristicDetectFileVoiceCountCap(t *testing.T) {
 	for i := range fullSectors {
 		fillVoiceSector(banks+i, disk.VoicesPerSector)
 	}
-	// One sector of 3 voices (so isVoiceSector still accepts it because
-	// slot 0 has a printable name + valid sample rate).
+	// One sector of 3 voices; isVoiceSector still accepts it because slot 0
+	// has a printable name and a valid sample rate.
 	fillVoiceSector(banks+fullSectors, partialSlots)
-	// One more sector of 4 voices; pre-fix this would push nvoice from
-	// 63 to 67.
+	// One more sector of 4 voices, the one that would overshoot the cap.
 	fillVoiceSector(banks+fullSectors+1, disk.VoicesPerSector)
 
 	fi, err := detectFile(data)
@@ -1215,13 +1205,10 @@ func TestAddNearFullDirectory(t *testing.T) {
 	}
 }
 
-// TestAddDirectoryFullLeavesImageClean verifies that when the directory is
-// completely full, addToImage rejects the operation BEFORE allocating any
-// sectors or mutating the CAT, leaving the in-memory image untouched.
-// Previously the CAT and data sectors were written first, only to discover
-// NextFreeDirSlot returned ErrDirFull, leaving the in-memory image dirty
-// (the on-disk file was saved by WriteAtomic, but a caller holding the
-// *Image now has a broken view of the disk).
+// TestAddDirectoryFullLeavesImageClean verifies that on a full directory,
+// addToImage rejects the operation BEFORE allocating sectors or mutating the
+// CAT. Allocating first and hitting ErrDirFull afterwards leaves a caller
+// holding the *Image with a broken view of the disk.
 func TestAddDirectoryFullLeavesImageClean(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

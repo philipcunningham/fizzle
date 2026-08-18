@@ -7,10 +7,10 @@ import (
 	"pgregory.net/rapid"
 )
 
-// TestModel_ApplyUndoIsIdentity is the headline invariant for the
-// patch/undo system: apply any batch, then Undo, and the bytes must
-// equal what they were before the apply. If this ever fails, undo
-// is silently lossy and every editor built on it inherits the bug.
+// TestModel_ApplyUndoIsIdentity is the headline invariant of the patch
+// and undo system: apply any batch, Undo, and the bytes match what they
+// were. A failure here makes undo silently lossy, and every editor built
+// on the model inherits it.
 func TestModel_ApplyUndoIsIdentity(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		bufLen := rapid.IntRange(16, 2048).Draw(rt, "bufLen")
@@ -43,7 +43,6 @@ func TestModel_ApplyUndoIsIdentity(t *testing.T) {
 			}
 		}
 
-		// Undo each one in reverse.
 		for i := nPatches - 1; i >= 0; i-- {
 			if !m.CanUndo() {
 				rt.Fatalf("CanUndo=false at step %d; expected %d undo entries", i, nPatches)
@@ -59,9 +58,9 @@ func TestModel_ApplyUndoIsIdentity(t *testing.T) {
 	})
 }
 
-// TestModel_ApplyUndoRedoMatchesApplied pins that Redo after Undo
-// reproduces the post-apply state exactly. Catches asymmetric
-// edge cases (e.g. an undo that drops the redo stack).
+// TestModel_ApplyUndoRedoMatchesApplied pins Redo after Undo to
+// reproduce the post-apply state exactly, catching asymmetries such as
+// an undo that drops the redo stack.
 func TestModel_ApplyUndoRedoMatchesApplied(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		bufLen := rapid.IntRange(16, 1024).Draw(rt, "bufLen")
@@ -105,11 +104,10 @@ func TestModel_ApplyUndoRedoMatchesApplied(t *testing.T) {
 	})
 }
 
-// TestModel_BatchUndoReversesAtomically pins that ApplyBatch + Undo
-// reverts the entire batch in one Undo call (not patch-by-patch).
-// The editor.go field patches use ApplyBatch for multi-site edits
-// (e.g. the envelope Role change touches both SUS and the stop
-// level); a per-patch Undo would leave the user mid-state.
+// TestModel_BatchUndoReversesAtomically pins one Undo call to revert a
+// whole ApplyBatch, not patch by patch. Field patches use ApplyBatch for
+// multi-site edits, such as an envelope Role change touching both SUS and
+// the stop level, where a per-patch Undo strands the user mid-state.
 func TestModel_BatchUndoReversesAtomically(t *testing.T) {
 	buf := make([]byte, 64)
 	for i := range buf {
@@ -126,7 +124,6 @@ func TestModel_BatchUndoReversesAtomically(t *testing.T) {
 	if err := m.ApplyBatch(patches); err != nil {
 		t.Fatalf("ApplyBatch: %v", err)
 	}
-	// All three sites changed.
 	if m.Bytes()[0] != 0xAA || m.Bytes()[10] != 0xBB || m.Bytes()[20] != 0xCC {
 		t.Fatalf("ApplyBatch did not apply all sites: %x", m.Bytes()[:32])
 	}

@@ -13,9 +13,9 @@ import { noteName } from "../src/ui/notes";
 import { openInstrumentDisk } from "./helpers";
 
 /**
- * The fake's disk carries the instrument dump alone, so there would be
- * no second row to prove the open marker is not on everything. One
- * spare file is injected into every snapshot.
+ * The fake's disk carries the instrument dump alone, leaving no second
+ * row to prove the open marker isn't on everything, so one spare file
+ * is injected into every snapshot.
  */
 function twoFileCore(): Core {
   const inner = createFakeCore();
@@ -179,8 +179,8 @@ describe("the bank rename field (Q5)", () => {
     await openBanksTab();
     fireEvent.doubleClick(screen.getByRole("button", { name: /BANK A \(2\)/ }));
     const field = await screen.findByLabelText("bank name");
-    // HTML forbids interactive content inside a button, and while the
-    // field lived there the button's name was the field's live value.
+    // HTML forbids interactive content inside a button, and nesting the
+    // field makes the button's name the field's live value.
     expect(field.closest("button")).toBeNull();
   });
 

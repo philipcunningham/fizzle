@@ -1,7 +1,7 @@
-// The mockup's Banks and Areas screen (R11 to R13) over the real
-// core: a bank strip with inline rename, the areas table with
-// duplicate (the velocity switch), delete, and reorder, and the edit
-// panel with draggable ranges beside numeric entry (R12).
+// The Banks and Areas screen (R11 to R13): a bank strip with inline
+// rename, the areas table with duplicate (the velocity switch), delete,
+// and reorder, and the edit panel with draggable ranges beside numeric
+// entry (R12).
 import { useEffect, useRef, useState } from "react";
 import type { InstrumentSnapshot } from "../boundary/contract";
 import { RangeSlider } from "../ui/RangeSlider";
@@ -38,10 +38,10 @@ export function BanksAreas(props: BanksAreasProps) {
   const [renamingBank, setRenamingBank] = useState<number | null>(null);
 
   // The rename field replaces the bank button rather than sitting
-  // inside it: HTML forbids a control inside a button, and while it was
-  // nested the button's accessible name was whatever had been typed.
-  // Committing therefore unmounts the field, so focus has to be handed
-  // back or it falls to the body (Q5).
+  // inside it: HTML forbids a control inside a button, and nesting one
+  // makes the button's accessible name whatever was typed. Committing
+  // therefore unmounts the field, so focus has to be handed back or it
+  // falls to the body (Q5).
   const bankButtons = useRef(new Map<number, HTMLButtonElement>());
   const wasRenaming = useRef<number | null>(null);
   useEffect(() => {
@@ -85,8 +85,8 @@ export function BanksAreas(props: BanksAreasProps) {
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 // Committing hands focus back to the button that opened
-                // this field, and it does so during the keydown. Enter's
-                // default action would then land on that button.
+                // this field, during the keydown, so Enter's default
+                // would then land on that button.
                 e.preventDefault();
                 (e.target as HTMLInputElement).blur();
               }}
@@ -151,8 +151,8 @@ export function BanksAreas(props: BanksAreasProps) {
                   props.onSelectArea(i);
                 }}
                 onKeyDown={(e) => {
-                  // Only when the row itself holds focus. Duplicate,
-                  // Delete, and the move buttons sit inside the row;
+                  // Only when the row itself holds focus: Duplicate,
+                  // Delete, and the move buttons sit inside it, and
                   // their Enter must not be cancelled here.
                   if (e.target !== e.currentTarget) return;
                   if (e.key === "Enter" || e.key === " ") {

@@ -128,10 +128,9 @@ func monoWAVBytes(samples int) []byte {
 }
 
 // TestConvertDirFSStereoReducesToChosenChannel covers B2: the folder
-// import asks for left, right, or mix once and that answer must reach
-// the samples. An unreduced stereo file resamples as one interleaved
-// stream, so the voice comes out twice as long and an octave low with
-// the channels alternating sample by sample.
+// import asks for left, right, or mix once and that answer must reach the
+// samples. An unreduced stereo file resamples as one interleaved stream,
+// so the voice comes out twice as long and an octave low.
 func TestConvertDirFSStereoReducesToChosenChannel(t *testing.T) {
 	t.Parallel()
 	const frames = 512
@@ -204,9 +203,9 @@ func stereoKitFS(frames int) fstest.MapFS {
 }
 
 // TestConvertFSStereoReducesToChosenChannel covers B2 on the SFZ route
-// the browser uses. Before the channel was threaded through, the
-// interleaved buffer resampled as one stream: 1024 samples where 512
-// frames went in, the two channels alternating (100, 200, 101, 201).
+// the browser uses. Without the channel answer the interleaved buffer
+// resamples as one stream: 1024 samples where 512 frames went in, the two
+// channels alternating (100, 200, 101, 201).
 func TestConvertFSStereoReducesToChosenChannel(t *testing.T) {
 	t.Parallel()
 	const frames = 512

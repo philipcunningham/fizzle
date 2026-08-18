@@ -1,6 +1,5 @@
-// The mockup-derived components (stage 4 of the port): pure controls
-// driven by props and callbacks, exercised the way the screens use
-// them.
+// The pure controls: driven by props and callbacks, exercised the way
+// the screens use them.
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { CapacityBar } from "../src/ui/CapacityBar";
@@ -19,7 +18,7 @@ describe("Knob", () => {
     render(<Knob label="Cutoff" value={127} min={0} max={127} onChange={(v) => values.push(v)} />);
     const knob = screen.getByRole("slider", { name: "Cutoff" });
     // Up at the rail writes nothing: the value the core already holds
-    // is not an edit, and writing it landed a phantom undo step.
+    // is not an edit, and writing it lands a phantom undo step.
     fireEvent.keyDown(knob, { key: "ArrowUp" });
     fireEvent.keyDown(knob, { key: "ArrowDown" });
     expect(values).toEqual([126]);
@@ -97,7 +96,7 @@ describe("MatrixGrid", () => {
     fireEvent.keyDown(cell, { key: "ArrowUp" });
     fireEvent.dblClick(cell);
     // Down at zero writes nothing: the value the core already holds is
-    // not an edit, and writing it landed a phantom undo step.
+    // not an edit, and writing it lands a phantom undo step.
     const other = screen.getByRole("spinbutton", { name: "Aftertouch to DCQ" });
     fireEvent.keyDown(other, { key: "ArrowDown" });
     expect(calls).toEqual([

@@ -90,10 +90,9 @@ describe("focus return (Q5)", () => {
 });
 
 // Committing a rename hands focus back to the button that opened the
-// field, during the keydown. Enter's default action would then land on
-// that button and reopen the rename, which is the row-key regression
-// one level up: a control that gives focus away mid-key has to stop
-// that key's default action.
+// field, during the keydown, so Enter's default would land there and
+// reopen the rename. A control that gives focus away mid-key has to
+// stop that key's default action.
 describe("committing a rename does not reopen it", () => {
   it("cancels Enter so the refocused button is not activated", async () => {
     await openInstrumentDisk();
@@ -107,10 +106,9 @@ describe("committing a rename does not reopen it", () => {
   });
 });
 
-// The disk label got its focus return; the voice name is the same
-// gesture in another file and did not. A manual pass found focus on the
-// body after committing, which on the voices tab means restarting from
-// the first tab stop.
+// The voice name is the same gesture as the disk label in another file.
+// Focus on the body after committing means restarting from the first
+// tab stop on the voices tab.
 describe("committing a voice rename", () => {
   it("returns focus to the row it began on", async () => {
     await openInstrumentDisk();

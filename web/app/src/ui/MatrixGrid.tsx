@@ -1,4 +1,4 @@
-// The mockup's controller modulation matrix (R19): a 3 by 7 grid of
+// The controller modulation matrix (R19): a 3 by 7 grid of
 // drag-and-arrow cells, lit by value.
 import { useRef } from "react";
 import { EFFECT_CONTROLLERS, EFFECT_TARGETS } from "../boundary/contract";
@@ -32,11 +32,9 @@ export function MatrixGrid({ matrix, onChange, onGestureBegin, onGestureCommit }
             <td className="matrixrow">{ctl}</td>
             {EFFECT_TARGETS.map((target, c) => {
               const v = matrix[r]?.[c] ?? 0;
-              // Only a value the core doesn't already hold is an edit.
-              // A drag into a rail, or a double click on a cell already
-              // at zero, otherwise writes the value on screen. That
-              // lands a phantom undo step and lights the unexported
-              // marker.
+              // Only a value the core doesn't already hold is an edit:
+              // a drag into a rail or a click on a zero cell otherwise
+              // lands a phantom undo step and lights the dirty marker.
               const emit = (next: number) => {
                 if (next !== v) onChange(r, c, next);
               };
@@ -51,8 +49,8 @@ export function MatrixGrid({ matrix, onChange, onGestureBegin, onGestureCommit }
                     tabIndex={0}
                     className="matrixcell"
                     // The lit border is a box-shadow, not an outline: an
-                    // inline outline would beat the stylesheet's
-                    // :focus-visible ring and hide keyboard focus (Q5).
+                    // inline outline beats the stylesheet's
+                    // :focus-visible ring and hides keyboard focus (Q5).
                     style={{
                       color: v > 0 ? "var(--fz-fg)" : "var(--fz-fg-faint)",
                       background:
@@ -85,14 +83,9 @@ export function MatrixGrid({ matrix, onChange, onGestureBegin, onGestureCommit }
                     onDoubleClick={() => {
                       emit(0);
                     }}
-                    // The keyboard is a first-class path (Q5), and
-                    // auto-repeat fires about thirty keydowns a second.
-                    // Each one used to land its own history entry,
-                    // which against the 100 entry cap wipes a session.
-                    // The run is bracketed rather than guarded on
-                    // e.repeat. R24 asks for one undo step, and a
-                    // repeat guard would buy that by making a held key
-                    // stop working.
+                    // The keyboard is a first-class path (Q5), so a key
+                    // auto-repeat run is bracketed like a drag (R24).
+                    // See useGestureBracket for why.
                     onKeyDown={(e) => {
                       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
                       gesture.begin();

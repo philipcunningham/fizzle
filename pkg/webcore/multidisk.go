@@ -54,11 +54,10 @@ func (s *Session) OpenImagePair(a, b []byte) (Snapshot, *Error) {
 	}
 	// Disk 1 has to want a continuation before one is stitched on. A
 	// complete one disk dump answers for all of its own audio, so
-	// appending anything to it lengthens a file that was already whole:
-	// the reviewer's ExtractFile handed back 503,808 bytes where the
-	// dump on the disk is 9,216. This is the same test missingDiskOf
-	// applies to a lone image, so what the shell offers a pair for and
-	// what a pair is accepted for agree.
+	// appending anything to it lengthens a whole file: ExtractFile then
+	// hands back 503,808 bytes where the disk's dump is 9,216. This is
+	// the test missingDiskOf applies to a lone image, so what the shell
+	// offers a pair for and what a pair is accepted for agree.
 	if !needsContinuation(fzf) {
 		return s.Snapshot(), errf(codePairMismatch,
 			"disk 1 holds a complete instrument and needs no continuation, so these are not disks 1 and 2 of one set; open it on its own")

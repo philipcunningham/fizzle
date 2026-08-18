@@ -151,9 +151,9 @@ func TestExtractFileBytesEmptyExtents(t *testing.T) {
 
 // TestGetRejectsCorruptDIS covers two corruption modes:
 //  1. The directory entry's DIS sector pointer points at sector 0 (reserved
-//     for the disk label). Without bounds-checking, Get would happily read
-//     the label bytes as a DIS, return garbage extents, and silently emit a
-//     bad file. We now refuse before touching the sector.
+//     for the disk label). Get must refuse before touching the sector:
+//     unguarded, it reads label bytes as a DIS, follows garbage extents, and
+//     silently emits a bad file.
 //  2. The directory entry's DIS sector pointer is valid, but the sector
 //     contents themselves point at reserved sectors. DecodeDisSector must
 //     surface this via ErrCorruptDIS rather than reading garbage.

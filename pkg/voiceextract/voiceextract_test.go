@@ -131,11 +131,10 @@ func TestExtractRoundTrip(t *testing.T) {
 	}
 }
 
-// TestExtractPreservesRootNote verifies the FZV -> WAV round trip preserves
-// the voice's root note (byte 0xB0) even for one-shot voices without a
-// sustain loop. Earlier WAV writer behaviour only emitted the SMPL chunk
-// when a loop was present, silently dropping the root note for one-shots;
-// this test exercises the no-loop path to pin the fix.
+// TestExtractPreservesRootNote verifies the FZV to WAV extract keeps the
+// voice's root note (byte 0xB0) even for a one-shot voice with no sustain
+// loop. A writer that emits the SMPL chunk only when a loop is present
+// drops the root note on exactly that path.
 func TestExtractPreservesRootNote(t *testing.T) {
 	t.Parallel()
 	samples := []int16{100, -200, 300, -400, 500}
@@ -175,11 +174,10 @@ func TestExtractPreservesRootNote(t *testing.T) {
 	}
 }
 
-// TestExtractImportPreservesRootForOneShot pins the full FZV -> WAV -> FZV
-// round-trip for one-shot voices. The WAV writer used to omit the SMPL
-// chunk when no loop was present, so a non-default root key (cent byte at
-// 0xB0) was silently lost when the extracted WAV was re-imported. The
-// round-trip must now preserve the cent byte for one-shot voices too.
+// TestExtractImportPreservesRootForOneShot pins the extract then re-import
+// round trip for one-shot voices: the cent byte at 0xB0 must survive. Omit
+// the SMPL chunk when there's no loop and a non-default root key is lost
+// on the way back in.
 func TestExtractImportPreservesRootForOneShot(t *testing.T) {
 	t.Parallel()
 	samples := []int16{100, -200, 300, -400, 500, 600, -700, 800}
@@ -254,12 +252,10 @@ func TestExtractWithLoopPoints(t *testing.T) {
 	}
 }
 
-// TestDecodeLoopPointsUsesLoopSusIndex pins the fix for the bug where
-// decodeLoopPoints always read loopst[0]/looped[0] regardless of the
-// loop_sus selector at 0x12. The FZ-1 voice header carries eight
-// loopst/looped pairs; loop_sus picks which pair drives the WAV SMPL
-// chunk's sustain loop. Hard-coding [0] silently exported wrong loop
-// points for any voice whose active loop was not the first.
+// TestDecodeLoopPointsUsesLoopSusIndex pins decodeLoopPoints to the loop_sus
+// selector at 0x12. The FZ-1 voice header carries eight loopst/looped pairs
+// and loop_sus picks which one drives the WAV SMPL chunk's sustain loop, so
+// hard-coding [0] exports wrong loop points whenever it isn't the first.
 func TestDecodeLoopPointsUsesLoopSusIndex(t *testing.T) {
 	t.Parallel()
 	const (

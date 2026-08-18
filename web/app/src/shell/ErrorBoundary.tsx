@@ -1,16 +1,16 @@
 // A rendering failure is contained here (E5): the boundary offers
-// recovery, and, while the core still responds, a last resort export
-// of the current document. A crash never silently eats the session.
-// The panel itself is shared, because a core that has stopped
-// answering needs the same surface with different wording.
+// recovery, and, while the core still responds, a last resort export of
+// the current document, so a crash never silently eats the session. The
+// panel is shared, because a core that has stopped answering needs the
+// same surface with different wording.
 import { Component } from "react";
 import type { ReactNode } from "react";
 
 /**
  * What a crash looks like (E5): a plain sentence about what happened,
- * the technical reason folded away, and the ways on as children. The
- * display failing and the core failing differ in wording and in what
- * can still be offered, so the caller supplies both.
+ * the technical reason folded away, and the ways on as children. A
+ * display failure and a core failure differ in wording and in what can
+ * still be offered, so the caller supplies both.
  */
 export function CrashPanel({
   label,

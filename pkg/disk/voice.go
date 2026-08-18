@@ -47,25 +47,21 @@ const (
 	MaxLoopXF = 1023
 	MaxLoopTm = 1022
 
-	// Envelope offsets (DCA and DCF).
+	// Envelope offsets (DCA controls amplitude, DCF filter cutoff).
 	//
 	// Both envelopes have the same 8-stage structure: a sustain point (Sus),
-	// an end point (End), and per-stage Rate + Stop level arrays. On the
-	// hardware front panel these are labelled RATE 1..8 and LEVEL 1..8
-	// (called "stop level" in struct voicedata). Stages 0..Sus run on
-	// note-on; stages Sus+1..End run on note-off. The hardware displays
-	// rates and stop levels on a 0-99 scale; the stored bytes are 0-127 for
-	// rates and 0-255 for stop levels (see Rate*/Stop* conversion helpers
-	// below).
-	//
-	// DCA controls amplitude; DCF controls filter cutoff over time.
+	// an end point (End), and per-stage Rate + Stop level arrays, labelled
+	// RATE 1..8 and LEVEL 1..8 on the front panel ("stop level" in struct
+	// voicedata). Stages 0..Sus run on note-on; stages Sus+1..End run on
+	// note-off. The hardware displays both on a 0-99 scale; the stored bytes
+	// are 0-127 for rates and 0-255 for stop levels (see the Rate*/Stop*
+	// helpers below).
 	//
 	// All 8 DCA and 8 DCF stages are storage-backed, user-editable,
 	// and audible.
 	//
-	// The edit screen at F000:54ED in the disassembled firmware ROM
-	// drives a shared parameter cluster, configured asymmetrically
-	// (raw asm at F000:550F / F000:553A):
+	// The edit screen at F000:54ED drives a shared parameter cluster,
+	// configured asymmetrically (raw asm at F000:550F / F000:553A):
 	//
 	//   DCA arm: [0x0486] = 6 rows, [0x048A] = 2 scroll-top offset.
 	//   DCF arm: [0x0486] = 8 rows, [0x048A] = 0 scroll-top offset.
@@ -94,12 +90,11 @@ const (
 	// consume. The state machine has no awareness of the editor's
 	// row count.
 	//
-	// F000:3E30 (1889 bytes) is the maths pipeline that prepares the
-	// edit-screen envelope visualisation. It performs no LCD writes
-	// itself; the actual plotting happens in F000:4591, which the
-	// maths pipeline invokes at F000:43F2. Neither function drives
-	// synthesis, so chasing audibility questions through either is a
-	// dead end.
+	// F000:3E30 (1889 bytes) is the maths pipeline behind the
+	// edit-screen envelope visualisation. It writes no LCD bytes
+	// itself; it calls the plotter at F000:4591 from F000:43F2.
+	// Neither drives synthesis, so audibility questions dead-end in
+	// both.
 	VoiceDCPOffset     = 0x74
 	VoiceDCFOffset     = 0x76
 	VoiceDCQOffset     = 0x77
@@ -144,13 +139,12 @@ const (
 
 	// Sample pointer range bounds for ForEachSamplePointer.
 	//
-	// LoopPointerRangeEnd marks the end of the loopst/looped address arrays
-	// only (loopst[8] at 0x14..0x33, looped[8] at 0x34..0x53). The two
-	// arrays that immediately follow (loopxf[8] (0x54..0x63, crossfade
-	// times) and looptm[8] (0x64..0x73, loop times)) are also loop-related
-	// but hold scalar values rather than sample-address pointers, so they
-	// are not scanned by ForEachSamplePointer. LoopXfStart and LoopTmStart
-	// are provided for callers that need to address those fields directly.
+	// LoopPointerRangeEnd covers the address arrays only (loopst[8] at
+	// 0x14..0x33, looped[8] at 0x34..0x53). loopxf[8] (0x54..0x63,
+	// crossfade times) and looptm[8] (0x64..0x73, loop times) follow and
+	// are loop-related too, but hold scalars rather than sample addresses,
+	// so ForEachSamplePointer skips them. LoopXfStart and LoopTmStart
+	// address those fields directly.
 	WavePointerRangeStart = 0x00
 	WavePointerRangeEnd   = 0x10
 	LoopPointerRangeStart = 0x14
@@ -205,11 +199,6 @@ const (
 //     plus 2-byte terminator ends at exactly 0x290) and stops short
 //     of the effect block at +0x3C0.
 //
-// Bytes 0x290 to 0x3BF of a bank sector are outside the active-bank-
-// record stride. The multi-disk firmware stamps the total wave
-// sector count across both disks of a 2-disk full dump into this
-// region at BankTotalWaveOffset.
-//
 // The effect block at BankEffectOffset = 0x3C0 (24 bytes,
 // struct effectdata) round-trips to the live RAM copy at [0x5288]
 // via two mirror helpers in the disassembled firmware:
@@ -254,18 +243,14 @@ const (
 	// MOV [0x0DFE], BX and MOV [0x0E00], DS at F000:6383 / F000:6387.
 	//
 	// The +1 then clamp-to-64 post-processing makes
-	// [0x0488] = min(disk_bstep+1, 64). fizzle writes
-	// bstep = voice_count (see voicebuild and pkg/model for the
-	// single-voice wrappers). Real Casio factory disks round-trip
-	// correctly under this convention, so [0x0488] is not a literal
-	// voice count for the load screen: it is a "highest index
-	// inclusive" derived value used to size the CKPLAY-style
-	// listing.
+	// [0x0488] = min(disk_bstep+1, 64), so for the load screen it is
+	// a "highest index inclusive" value sizing the CKPLAY-style
+	// listing, not a literal voice count.
 	//
-	// Writers of this offset must follow the established convention
-	// (bstep = voice_count). Any future path that adds or removes
-	// voice slots must rewrite bstep accordingly; the type system
-	// does not enforce this.
+	// fizzle writes bstep = voice_count, and real Casio factory disks
+	// round-trip correctly under that convention, so any path that
+	// adds or removes voice slots must rewrite bstep to match. The
+	// type system doesn't enforce it.
 	BankVoiceCountOffset = 0x00
 	BankNameOffset       = 0x282
 	// BankTotalWaveOffset sits at exactly the firmware's in-RAM bank
@@ -289,14 +274,13 @@ const (
 	// range 0-127). Each entry is one byte (HP 64000 short).
 	BankVolumeOffset = 0x1c2
 	// DefaultBankVolume is the per-voice bank volume written by voicebuild.
-	// Spec §2-2 calls bvol "sound volume" (0-127). We don't fully understand
-	// the field: factory Casio dumps sit in 0..27, and on a real FZ-10M a
-	// disk with bvol=127 plays much quieter than one with bvol=0, yet
-	// changing the per-area volume in the on-instrument bank editor has no
-	// audible effect. That rules out a plain continuous attenuator at this
-	// offset; the field may be consulted only at load time, or the editor
-	// may target a different byte. We default to 0 because that matches
-	// factory disks and produces the loudest reliable playback observed.
+	// Spec §2-2 calls bvol "sound volume" (0-127), but the field isn't
+	// understood: factory Casio dumps sit in 0..27, a real FZ-10M plays a
+	// bvol=127 disk much quieter than a bvol=0 one, yet changing per-area
+	// volume in the on-instrument bank editor has no audible effect. That
+	// rules out a plain continuous attenuator here; the field may be read
+	// only at load time, or the editor may target a different byte. 0
+	// matches factory disks and gives the loudest reliable playback seen.
 	DefaultBankVolume  = 0
 	BankVoiceNumOffset = 0x202
 	// VPEntrySize is the size of a single vp[] entry in a bank
@@ -305,11 +289,10 @@ const (
 	EffectDataSize = 24
 
 	// Effect block field offsets (relative to BankEffectOffset). See spec
-	// section 2-3 (struct effectdata). Every field is one byte. The
-	// aft_lfp offset is 17, NOT 18; the original constant was off by one
-	// and pointed at aft_lfa instead. Documented but unused fields (mvol,
-	// suss; spec: "normally 0") are kept here so parse round-trips can
-	// inspect them.
+	// section 2-3 (struct effectdata). Every field is one byte. aft_lfp
+	// sits at 17, not 18; the off-by-one lands on aft_lfa. Documented but
+	// unused fields (mvol, suss; spec: "normally 0") are kept here so
+	// parse round-trips can inspect them.
 	//
 	// EffectBendOffset (byte 0) is the pitch-bender depth in 1/8
 	// semitone units, range 0..127. The full runtime chain in the
@@ -324,8 +307,7 @@ const (
 	//   ADD result to the pitch accumulator
 	//
 	// The matching menu editor at F000:6AEE uses SHR/SHL by 3 on
-	// the byte to round-trip the 1/8-semitone UI. Boot init at
-	// F000:0860 writes 0x18, giving the default depth of 3 semitones.
+	// the byte to round-trip the 1/8-semitone UI.
 	EffectBendOffset   = 0x00 // bend: pitch-bender depth (1/8 semitone units, 0-127)
 	EffectMVolOffset   = 0x01 // mvol: master volume (unused, spec says normally 0)
 	EffectSusSOffset   = 0x02 // suss: sustain switch (unused, spec says normally 0)
@@ -422,16 +404,14 @@ const (
 	// behaviour here if a bit-level read of voicedata+0x10 surfaces
 	// elsewhere in the ROM.
 	//
-	// Note on voicestate vs voicedata: voicedata is the disk-resident
-	// static struct this enum covers. The runtime voicestate block
-	// (RAM, firmware base 0x5420, stride 0x3A per voice) stores a
-	// signed loop-status word at +0x10 with sentinels 0xFFFE
-	// (boundary just crossed) and 0xFFFF (waiting for chip to reach
-	// loopst[idx]); these are voicestate values, not voicedata, and
-	// do not belong in this enum. The voice-service handler at
-	// F000:1E88 pins both reads: voicedata at [SI+0x10] (front gate)
-	// and voicestate at [DI+0x10] (loop tracking: CMP word
-	// [DI+0x10], -2 at F000:1F4E).
+	// Note on voicestate vs voicedata: the runtime voicestate block
+	// stores a signed loop-status word at its own +0x10, sentinels
+	// 0xFFFE (boundary just crossed) and 0xFFFF (waiting for the chip
+	// to reach loopst[idx]). Those are not voicedata values and don't
+	// belong in this enum. The voice-service handler at F000:1E88 pins
+	// both reads: voicedata at [SI+0x10] (front gate) and voicestate
+	// at [DI+0x10] (loop tracking: CMP word [DI+0x10], -2 at
+	// F000:1F4E).
 	PlaybackModeNormalVariant = 0x0157
 )
 
@@ -480,8 +460,7 @@ func LoopStartAddress(loopst uint32) uint32 {
 }
 
 // LoopFineBits returns the loop-fine byte stored in the upper 8 bits of a
-// loopst[] value (spec §2-1: "Upper 8 bits for loopst are used for loop
-// fine and take a number among 0 - 255").
+// loopst[] value (spec §2-1, range 0 to 255).
 func LoopFineBits(loopst uint32) uint8 {
 	return uint8(loopst >> LoopStartFineShift)
 }
@@ -492,9 +471,8 @@ func LoopEndAddress(looped uint32) uint32 {
 	return looped & LoopEndAddressMask
 }
 
-// LoopSkipFlag reports whether the looped[] value has the skip-flag bit
-// set (spec §2-1: "The MSB for looped is used for loop patterns; 1 for
-// Skip, 0 for Trace").
+// LoopSkipFlag reports whether the looped[] value has the skip-flag bit set
+// (spec §2-1: MSB 1 for Skip, 0 for Trace).
 func LoopSkipFlag(looped uint32) bool {
 	return looped&LoopEndSkipMask != 0
 }
@@ -651,10 +629,10 @@ const (
 //
 // This is the strict heuristic used by file-type disambiguation: it
 // distinguishes FZF bank sectors (no printable name at offset 0xb2) from
-// mis-named FZV voice files (printable name + valid rate). For loading FZV
-// files that are KNOWN by the caller to be voices but may have blank/garbage
-// name bytes (e.g. output of `fzf unpack` on real-world dumps), callers
-// should use IsPlausibleVoiceSlot on the first VoiceHeaderUsed bytes instead.
+// mis-named FZV voice files (printable name plus valid rate). Callers who
+// already know the bytes are a voice but may see blank or garbage name bytes
+// (`fzf unpack` output on real-world dumps, say) should use
+// IsPlausibleVoiceSlot on the first VoiceHeaderUsed bytes instead.
 func IsPlausibleVoiceHeader(data []byte) bool {
 	if len(data) < SectorSize {
 		return false
@@ -671,14 +649,13 @@ func IsPlausibleVoiceHeader(data []byte) bool {
 // that explicitly), the sample rate index is in range, wave pointers are
 // non-decreasing, and the envelope sustain stages are in [0, EnvelopeStages).
 //
-// Unlike IsPlausibleVoiceHeader (which validates a whole 1024-byte FZV
-// header sector), this only sees the 192 packed bytes the FZF voice area
-// stores per slot, and intentionally does NOT require the name field to be
-// printable: factory dumps frequently zero out names while still carrying
-// real voice data, and downstream code substitutes "VOICE N" for empty
-// names. Distinguishing "valid voice with blank name" from "audio bytes
-// that happen to fall here" relies on the rate-index and wave-pointer
-// checks instead.
+// Unlike IsPlausibleVoiceHeader, which validates a whole 1024-byte FZV
+// header sector, this sees only the 192 packed bytes the FZF voice area
+// stores per slot, and deliberately does NOT require a printable name:
+// factory dumps often zero names while still carrying real voice data, and
+// downstream code substitutes "VOICE N". The rate-index and wave-pointer
+// checks are what separate a blank-named voice from audio bytes that happen
+// to fall here.
 func IsPlausibleVoiceSlot(slot []byte) bool {
 	if len(slot) < VoiceHeaderUsed {
 		return false
@@ -728,11 +705,9 @@ func IsActiveOrEmptyVoiceSlot(slot []byte) bool {
 
 // SamplePointerKind classifies the four-byte fields that
 // ForEachSamplePointer iterates over. Wave pointers are plain 32-bit sample
-// addresses with no reserved bits. Loop-start and loop-end pointers reserve
-// flag bits in addition to the address (spec §2-1: the upper 8 bits of
-// loopst encode loop-fine, the MSB of looped encodes the skip flag). Wave
-// vs loop distinction matters when rewriting addresses for round-trips:
-// adjusting the raw 32-bit value would corrupt the reserved bits.
+// addresses; loop-start and loop-end pointers reserve flag bits alongside
+// the address (spec §2-1). The distinction matters when rewriting addresses
+// for round-trips: adjusting the raw 32-bit value corrupts the reserved bits.
 type SamplePointerKind int
 
 const (
@@ -751,11 +726,9 @@ const (
 
 // ForEachSamplePointer calls fn for each 4-byte sample pointer field in a
 // voice header: wave pointers (0x00 to 0x0f) and loop pointers (0x14 to 0x53).
-// fn receives a mutable slice of the 4-byte field plus a kind tag that tells
-// the callback which reserved bits, if any, the field protects. Wave-pointer
-// fields are plain addresses; LoopStartPointer fields carry the loop-fine
-// byte in their upper 8 bits; LoopEndPointer fields carry the skip flag in
-// their MSB. Callers that read/modify only the address bits must mask via
+// fn receives a mutable slice of the 4-byte field plus its
+// SamplePointerKind, which says which reserved bits, if any, the field
+// protects. Callers that read or modify only the address bits must mask via
 // LoopStartAddress/LoopEndAddress and reassemble before writing back.
 func ForEachSamplePointer(voice []byte, fn func(field []byte, kind SamplePointerKind)) {
 	if len(voice) < LoopPointerRangeEnd {
@@ -764,9 +737,8 @@ func ForEachSamplePointer(voice []byte, fn func(field []byte, kind SamplePointer
 	for i := WavePointerRangeStart; i < WavePointerRangeEnd; i += 4 {
 		fn(voice[i:i+4], WavePointer)
 	}
-	// loopst[8] occupies the first half of the loop-pointer range
-	// (LoopPointerRangeStart..VoiceLoopEd0Offset); looped[8] occupies the
-	// second half (VoiceLoopEd0Offset..LoopPointerRangeEnd).
+	// loopst[8] fills the first half of the loop-pointer range, looped[8]
+	// the second.
 	for i := LoopPointerRangeStart; i < VoiceLoopEd0Offset; i += 4 {
 		fn(voice[i:i+4], LoopStartPointer)
 	}

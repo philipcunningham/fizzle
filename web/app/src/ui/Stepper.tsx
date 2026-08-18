@@ -1,4 +1,4 @@
-// The mockup's stepper: minus, a typed value, plus; shift steps by 10.
+// The stepper: minus, a typed value, plus; shift steps by 10.
 // The text is local while the user types and commits on blur or Enter,
 // so the core's confirmed value is what the field shows afterwards.
 // Input the field cannot parse (empty, letters, a note name in a plain

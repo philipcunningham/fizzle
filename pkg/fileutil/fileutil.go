@@ -12,18 +12,17 @@ const (
 	lockAttempts      = 50
 	lockRetryInterval = 100 * time.Millisecond
 	// staleLockThreshold is how old a lockfile may be before WithFileLock
-	// treats it as orphaned (i.e. left behind by a fizzle process that died
-	// before its defer could run) and forcibly clears it. fizzle's disk
-	// operations complete in seconds; five minutes is a generous safety
-	// margin against a slow real workload looking stale.
+	// clears it as orphaned, left behind by a fizzle process that died
+	// before its defer could run. Disk operations finish in seconds, so
+	// five minutes leaves a slow real workload plenty of margin.
 	staleLockThreshold = 5 * time.Minute
 )
 
-// WithFileLock acquires an exclusive file lock on path and runs fn while the
-// lock is held. The lock is released when fn returns. If the lock cannot be
-// acquired within 5 seconds, an error is returned. Lockfiles older than
-// staleLockThreshold are treated as orphaned and cleared automatically so a
-// killed fizzle process does not permanently block subsequent runs.
+// WithFileLock acquires an exclusive file lock on path, runs fn while the
+// lock is held, and releases it when fn returns. It errors if the lock
+// stays out of reach for 5 seconds. Lockfiles older than
+// staleLockThreshold clear automatically, so a killed fizzle process
+// can't block later runs for good.
 func WithFileLock(path string, fn func() error) error {
 	lockPath := path + ".lock"
 	for range lockAttempts {
@@ -44,9 +43,9 @@ func WithFileLock(path string, fn func() error) error {
 	return fmt.Errorf("fileutil: could not acquire lock on %s (another fizzle process may be using it; if none is running, remove %s manually)", path, lockPath)
 }
 
-// WriteAtomic writes data to path atomically by writing to a temp file in the
-// same directory then renaming it. This ensures partial writes never corrupt
-// an existing file. The output directory is created if it does not exist.
+// WriteAtomic writes data to path atomically, through a temp file in the
+// same directory that it then renames, so a partial write never corrupts
+// an existing file. It creates the output directory when missing.
 func WriteAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {

@@ -146,7 +146,7 @@ func TestGestureWithNoEditsAddsNoHistory(t *testing.T) {
 
 func TestHistoryIsCapped(t *testing.T) {
 	// R24 is a MUST: undo and redo cover every mutating operation, at
-	// least 100 deep. Q-D leaves open only the depth beyond that floor.
+	// least 100 deep.
 	if historyCap < 100 {
 		t.Fatalf("historyCap = %d, want at least the 100 deep R24 requires", historyCap)
 	}
@@ -220,8 +220,8 @@ func TestUndoDuringGestureKeepsTheTimeline(t *testing.T) {
 
 // The drag continues after a mid-drag undo: the pointer never came up,
 // so the rest of it is still one gesture and lands one entry. Without
-// the reopened bracket every movement after the undo pushed its own
-// entry, and one drag left a dozen of them.
+// the reopened bracket every movement after the undo pushes its own
+// entry, and one drag leaves a dozen of them.
 func TestDragAfterAMidDragUndoStillCoalesces(t *testing.T) {
 	s, file := importedSession(t)
 

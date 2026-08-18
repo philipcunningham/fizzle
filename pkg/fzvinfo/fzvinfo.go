@@ -37,10 +37,9 @@ var lfoWaveforms = map[uint8]string{
 	disk.LFORandom:    "Random",
 }
 
-// allMatch reports whether every byte in b equals val. Used by the
-// DCA/DCF "default envelope" detector to recognise the canonical
-// pattern (e.g. stages 1-7 all at rate 0xC0, stops 0) without writing
-// out an 8-element comparison at each call site.
+// allMatch reports whether every byte in b equals val. The DCA/DCF
+// default-envelope detector uses it to spot the canonical pattern, for
+// example stages 1 to 7 all at rate 0xC0 with stops 0.
 func allMatch(b []byte, val byte) bool {
 	for _, c := range b {
 		if c != val {
@@ -50,17 +49,17 @@ func allMatch(b []byte, val byte) bool {
 	return true
 }
 
-// rateStr formats an envelope rate byte using the FZ-10M front-panel
-// display scale (0-99), discarding the sign bit. The mapping is in
-// pkg/disk.RateByteToDisplay; this is a render-side convenience.
+// rateStr formats an envelope rate byte on the FZ-10M front-panel
+// display scale (0 to 99), discarding the sign bit. The mapping itself
+// lives in disk.RateByteToDisplay.
 func rateStr(b uint8) string {
 	return fmt.Sprintf("%d", disk.RateByteToDisplay(b))
 }
 
 // kfDisplay converts a signed key-follow byte into its hardware display
-// value (-15..+15). VoiceParams stores these fields as int8 so JSON sees
-// signed values; disk.KFByteToDisplay accepts a uint8 and reinterprets via
-// int8 internally, so we cast on the way in.
+// value (-15 to +15). VoiceParams stores these fields as int8 so JSON
+// sees signed values, and disk.KFByteToDisplay reinterprets a uint8 as
+// int8 internally, hence the cast on the way in.
 func kfDisplay(b int8) int {
 	return disk.KFByteToDisplay(uint8(b)) //nolint:gosec // G115: intentional int8 -> uint8 reinterpretation; KFByteToDisplay treats the byte as two's-complement
 }
@@ -197,14 +196,12 @@ func parseFrom(data []byte, source string) (*VoiceParams, error) {
 	if source != "" {
 		subject = fmt.Sprintf("%q", source)
 	}
-	// Use the structural plausibility check (active playback mode, sane wave
-	// pointers, valid envelope stages) rather than the strict
-	// IsPlausibleVoiceHeader. Real-world FZF dumps sometimes contain voices
-	// whose 12-byte name field is zeroed or otherwise non-printable. Once
-	// extracted via `fzf unpack`, these are still valid voices and should
-	// parse here even though they fail the strict name check. The
-	// IsPlausibleVoiceSlot bytes-level checks reject non-voice data (FZF
-	// bank sectors, text files, etc.) just as effectively.
+	// IsPlausibleVoiceSlot checks structure (active playback mode, sane
+	// wave pointers, valid envelope stages) where IsPlausibleVoiceHeader
+	// also demands a printable name. Real FZF dumps hold voices with a
+	// zeroed 12-byte name field; those are still valid once `fzf unpack`
+	// extracts them. The structural checks reject non-voice data (bank
+	// sectors, text files) just as effectively.
 	if len(data) < disk.SectorSize {
 		return nil, fmt.Errorf("fzvinfo: %s is too small to be a voice file", subject)
 	}
@@ -246,11 +243,10 @@ func parseHeader(hdr []byte, source string) (*VoiceParams, error) {
 
 	lfo := parseLFO(hdr)
 
-	// Audio length is waveEnd-waveStart samples. For standalone FZV files
-	// waveStart is 0 and waveEnd is the full sample count, but for voices
-	// parsed via ParseVoiceInFZF the wave pointers are cumulative addresses
-	// in the FZF audio area, so reporting waveEnd alone inflates both the
-	// duration (by waveStart/rate) and the sample count (by waveStart).
+	// Audio length is waveEnd minus waveStart. A standalone FZV has
+	// waveStart 0, but ParseVoiceInFZF hands back cumulative addresses
+	// into the FZF audio area, where waveEnd alone inflates the sample
+	// count by waveStart and the duration by waveStart/rate.
 	var samples uint32
 	if waveEnd >= waveStart {
 		samples = waveEnd - waveStart
@@ -260,13 +256,12 @@ func parseHeader(hdr []byte, source string) (*VoiceParams, error) {
 		duration = float64(samples) / float64(rate)
 	}
 
-	// Spec §2-1: wavst, genst, gened, waved are all word-addressed pointers
-	// satisfying wavst <= genst <= gened <= waved. For standalone FZVs
-	// waveStart is 0 and this is a no-op; for voices borrowed from an FZF
-	// audio area via ParseVoiceInFZF, the raw pointers are cumulative and
-	// must be localised to 0..N for display so the "Gen range" line shows
-	// voice-local sample addresses, not multi-thousand FZF-area offsets.
-	// This is the sibling of the Samples/Duration localisation above (F7).
+	// Spec §2-1: wavst, genst, gened, and waved are word-addressed
+	// pointers satisfying wavst <= genst <= gened <= waved. Localise them
+	// to 0..N so "Gen range" shows voice-local addresses rather than the
+	// cumulative FZF-area offsets ParseVoiceInFZF sees. Sibling of the
+	// Samples/Duration localisation above (F7); a no-op for standalone
+	// FZVs, where waveStart is 0.
 	if waveEnd >= waveStart {
 		waveEnd -= waveStart
 	} else {
@@ -283,11 +278,10 @@ func parseHeader(hdr []byte, source string) (*VoiceParams, error) {
 		genEnd = 0
 	}
 
-	// Delegate to disk.PlaybackModeName so fzvinfo, fzfinfo, and sfzexport
-	// agree on the canonical lowercase identifier (spec: "no_sound",
-	// "normal", "normal_variant", "reverse", "cue", "synthesized"). For
-	// truly unrecognised modes, fall back to a hex literal that surfaces
-	// the raw value rather than swallowing it.
+	// disk.PlaybackModeName keeps fzvinfo, fzfinfo, and sfzexport on the
+	// same canonical lowercase identifiers (spec: "no_sound", "normal",
+	// "normal_variant", "reverse", "cue", "synthesized"). Unrecognised
+	// modes fall back to a hex literal so the raw value still surfaces.
 	modeName := disk.PlaybackModeName(loopMode)
 	if modeName == disk.PlaybackModeNameUnknown {
 		modeName = fmt.Sprintf("unknown (0x%04x)", loopMode)
@@ -424,8 +418,8 @@ func parseLoop(hdr []byte, loopMode uint16) loopInfo {
 	if info.sustain < disk.NoSustainLoop {
 		stOff := disk.VoiceLoopSt0Offset + int(info.sustain)*4
 		edOff := disk.VoiceLoopEd0Offset + int(info.sustain)*4
-		// Mask the spec's flag bits (loop-fine in upper 8 of loopst,
-		// skip in MSB of looped) so we report just the sample addresses.
+		// Mask the spec's flag bits (loop-fine in the upper 8 of loopst,
+		// skip in the MSB of looped) to leave the sample addresses.
 		rawSt := binary.LittleEndian.Uint32(hdr[stOff : stOff+4])
 		rawEd := binary.LittleEndian.Uint32(hdr[edOff : edOff+4])
 		info.start = disk.LoopStartAddress(rawSt)
@@ -536,8 +530,7 @@ func Render(w io.Writer, p *VoiceParams) {
 		if p.LoopSustain < disk.NoSustainLoop {
 			susStr = fmt.Sprintf("%d", p.LoopSustain+1)
 		}
-		// loop_end values 0..7 pick a release-loop pair; 8 means
-		// "execute all 8 loops" (the spec's release-fade semantics).
+		// loop_end 8 means "execute all 8 loops"; see parseLoop.
 		var relStr string
 		if p.LoopRelease < disk.NoReleaseLoop {
 			relStr = fmt.Sprintf("loop %d", p.LoopRelease+1)

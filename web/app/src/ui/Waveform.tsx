@@ -1,9 +1,8 @@
-// The mockup's waveform (R17) over real core peaks: wavesurfer draws
-// the strip, the selected loop is a draggable region, edges snap to
-// the nearest zero-crossing bucket, and the numeric fields beside
-// always show the frames the core confirmed. jsdom has no canvas; the
-// component degrades to nothing there and the numeric fields in the
-// loops table keep the flow testable.
+// The waveform (R17) over real core peaks: wavesurfer draws the strip,
+// the selected loop is a draggable region, edges snap to the nearest
+// zero-crossing bucket, and the numeric fields beside always show the
+// frames the core confirmed. jsdom has no canvas, so the component
+// degrades to nothing there and the loops table keeps the flow testable.
 import { useEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
@@ -27,9 +26,9 @@ interface Props {
 // frame space: frame f sits at time f/frames.
 const DURATION = 1;
 
-// snapToZero moves a frame to the centre of the nearest peak bucket
-// that crosses zero, searching at most 5 percent of the span (a snap
-// assists, it never teleports).
+// Moves a frame to the centre of the nearest peak bucket that crosses
+// zero, searching at most 5 percent of the span: a snap assists, it
+// never teleports.
 function snapToZero(peaks: Int16Array, frames: number, frame: number): number {
   const buckets = peaks.length / 2;
   if (buckets < 1 || frames < 1) return frame;
@@ -61,8 +60,8 @@ export function Waveform({
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
   const regionRef = useRef<ReturnType<RegionsPlugin["addRegion"]> | null>(null);
-  // Rebuilds the region from scratch. The mount effect owns it; the
-  // loop effect below calls it when the region has to change shape.
+  // Rebuilds the region from scratch: the mount effect owns it, the
+  // loop effect calls it when the region has to change shape.
   const remakeRegionRef = useRef<((start: number, end: number) => void) | null>(null);
   const draggingRef = useRef(false);
   const [zoom, setZoom] = useState(1);
@@ -129,11 +128,10 @@ export function Waveform({
     // wavesurfer's regions plugin decides marker-versus-region styling
     // once, in the element it builds: a region whose start equals its
     // end gets a bare left border and no resize handles, and setOptions
-    // repairs neither when the region is later widened. A freshly
-    // imported voice's loop 1 does start equal to its end, so the
-    // widened loop came back invisible with edges that could not be
-    // dragged (R17). Building the region is therefore a function the
-    // loop effect can call again whenever the shape has to change.
+    // repairs neither when it is later widened. A freshly imported
+    // voice's loop 1 does start equal to its end, so widening it left
+    // an invisible loop with undraggable edges (R17). Hence a function
+    // the loop effect can call again whenever the shape changes.
     const makeRegion = (start: number, end: number) => {
       const region = regions.addRegion({
         start,
@@ -181,9 +179,7 @@ export function Waveform({
       );
 
       // The zoom effect below runs while the new instance is still
-      // decoding, where a zoom call throws, so the strip would come
-      // back at 1x while the slider still read 8x. Here the audio is
-      // decoded.
+      // decoding, where a zoom call throws. Here the audio is decoded.
       if (zoomRef.current !== 1) {
         ws.zoom(zoomRef.current * (containerRef.current?.clientWidth ?? 600));
       }
@@ -203,9 +199,9 @@ export function Waveform({
     });
 
     return () => {
-      // A drag that never released (the voice changed, or an edit
-      // rebuilt the peaks, mid-drag) would leave the core's gesture
-      // bracket open, and every later edit would fold into it.
+      // A drag that never released (a voice change or a peaks rebuild
+      // mid-drag) leaves the core's gesture bracket open, folding every
+      // later edit into it.
       if (draggingRef.current) {
         draggingRef.current = false;
         onGestureCommitRef.current?.();
@@ -215,8 +211,8 @@ export function Waveform({
       regionRef.current = null;
       remakeRegionRef.current = null;
     };
-    // The waveform remounts per voice and per peak payload; loop moves
-    // are applied to the existing region below.
+    // Remounts per voice and per peak payload; loop moves apply to the
+    // existing region below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceKey, peaks]);
 

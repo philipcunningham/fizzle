@@ -159,8 +159,6 @@ func instrumentFrom(fileName string, fzfData []byte) (*InstrumentSnapshot, error
 			name = fmt.Sprintf("VOICE %d", slot+1)
 		}
 		voice := InstrumentVoice{Slot: slot, Name: name, Referenced: referenced[slot]}
-		// A slot pointing at audio an earlier slot already owns is a
-		// clone (the velocity switch): it costs no extra bytes.
 		waveStart := binary.LittleEndian.Uint32(slotHdr[disk.VoiceWaveStartOffset : disk.VoiceWaveStartOffset+4])
 		if seenAt, ok := audioOwners[waveStart]; ok && seenAt != slot {
 			voice.SharesAudio = true

@@ -307,9 +307,9 @@ Example:
 					}
 					fzfPath := cmd.Args().Get(0)
 
-					// effectFlagBinding pairs a CLI flag name with the
-					// SetParams field it writes to. Used both to detect
-					// "any flag set" and to populate the SetParams.
+					// effectFlagBinding pairs a CLI flag with the SetParams
+					// field it writes, for both the "any flag set" check
+					// and the population below.
 					type effectFlagBinding struct {
 						flag  string
 						field *int

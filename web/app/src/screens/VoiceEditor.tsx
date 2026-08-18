@@ -1,8 +1,8 @@
-// The mockup's voice editor over the real core: the voices table
-// (rename, export, map, unreferenced marker), schema-driven group
-// panels, the waveform with the active loop, the loops table with
-// cross-fade and time, and both envelopes. Every edit is a slot
-// addressed core call; the values shown are the core's confirmed ones.
+// The voice editor: the voices table (rename, export, map,
+// unreferenced marker), schema-driven group panels, the waveform with
+// the active loop, the loops table with cross-fade and time, and both
+// envelopes. Every edit is a slot addressed core call, and the values
+// shown are the core's confirmed ones.
 import { useEffect, useRef, useState } from "react";
 import type { InstrumentSnapshot, SchemaField } from "../boundary/contract";
 import { EnvelopeEditor } from "../ui/EnvelopeEditor";
@@ -80,10 +80,9 @@ export function VoiceEditor(props: VoiceEditorProps) {
             .map((f) => {
               const value = params[f.id] ?? 0;
               if (f.kind === "select") {
-                // A real voice can carry a mode the schema does not
-                // list (the factory library's normal_variant, or an
-                // unrecognised one). Show it rather than rendering a
-                // blank control the user cannot read.
+                // A real voice can carry a mode the schema doesn't list
+                // (the factory library's normal_variant, say). Show it
+                // rather than a blank control the user can't read.
                 const options = f.options ?? [];
                 const shown = options.includes(String(value))
                   ? options
@@ -181,11 +180,10 @@ export function VoiceEditor(props: VoiceEditorProps) {
                   props.onSelectVoice(v.slot);
                 }}
                 onKeyDown={(e) => {
-                  // Only when the row itself holds focus. A key pressed
-                  // on a button or the rename input inside the row
-                  // bubbles up here, and cancelling its default action
-                  // would stop the button activating or a space
-                  // reaching the field.
+                  // Only when the row itself holds focus: a key pressed
+                  // on a button or the rename input inside it bubbles
+                  // up here, and cancelling the default would stop the
+                  // button activating or a space reaching the field.
                   if (e.target !== e.currentTarget) return;
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();

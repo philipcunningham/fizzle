@@ -56,10 +56,9 @@ func FuzzRead(f *testing.F) {
 	})
 }
 
-// FuzzWriteReadRoundTripWithSMPL exercises the SMPL-chunk path of the
-// reader and writer. The earlier asymmetry where Read accepted degenerate
-// loops that Write silently dropped landed a real bug in voiceimport.Import;
-// fuzzing this combination guards against the same class returning.
+// FuzzWriteReadRoundTripWithSMPL exercises the SMPL-chunk path of the reader
+// and writer together. Read accepting a degenerate loop that Write silently
+// drops is the asymmetry that broke voiceimport.Import.
 func FuzzWriteReadRoundTripWithSMPL(f *testing.F) {
 	f.Add(uint32(36000), uint16(100), int32(10), int32(50))
 	f.Add(uint32(18000), uint16(50), int32(0), int32(49))

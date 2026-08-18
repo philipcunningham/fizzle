@@ -80,9 +80,8 @@ func (p *otoPlayer) PlayWAV(ctx context.Context, path string) error {
 		return fmt.Errorf("audioplayer: resampling: %w", err)
 	}
 	pcm := samplesToBytes(samples)
-	// oto.Player resources are reclaimed by the runtime when player is
-	// unreachable (oto v3.4 deprecated explicit Close); the variable goes
-	// out of scope on function return, so no manual cleanup is needed.
+	// oto v3.4 deprecated explicit Close. The runtime reclaims the player
+	// once it's unreachable, which this function's return sees to.
 	player := p.ctx.NewPlayer(bytes.NewReader(pcm))
 	player.Play()
 

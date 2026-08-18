@@ -89,13 +89,11 @@ func (d *dumpState) voiceAreaSectors() int {
 	return (d.audioStart - d.header.VoiceAreaStart) / disk.SectorSize
 }
 
-// checkGeometry holds an operation to the one thing every reader
-// agrees on. A reader walks the voice area, bounded by the summed bank
-// bstep values, and sizes the voice area from the count it reaches;
-// the byte after that area is where it looks for the audio. When that
-// byte is not where this operation left the audio, every voice plays
-// from the wrong offset, so the operation is refused rather than
-// written.
+// checkGeometry holds an operation to the one thing every reader agrees
+// on: the audio starts at the byte after the voice area the walked
+// count sizes (see bstepSum). When that byte is not where this
+// operation left the audio, every voice plays from the wrong offset, so
+// the operation is refused rather than written.
 func (d *dumpState) checkGeometry() *Error {
 	hdr, err := fzutil.ParseFZFHeader(d.fzf)
 	if err != nil {
@@ -142,9 +140,8 @@ func slotReferenced(d *dumpState, slot int) bool {
 }
 
 // ensureVoiceSlots brings the voice area back in step with the banks
-// whenever an operation moves a bstep. It is the one place that does
-// so: an area that arrives needs a slot to grow into, and one that
-// goes gives its slot back.
+// whenever an operation moves a bstep (see bstepSum). It is the one
+// place that does so.
 //
 // delta is the change to the summed bstep values that d.fzf does not
 // carry yet, so an operation that raises a bstep through a patch
@@ -186,7 +183,7 @@ func ensureVoiceSlots(d *dumpState, delta, freed int) *Error {
 // real voice header into it: duplicate clones one, and a joining voice
 // brings its own. Those raise a bstep and fill a slot in the same
 // move, so the slot is taken outright rather than derived from the
-// bound. Returns the slot's index.
+// bound.
 func allocVoiceSlot(d *dumpState) (int, *Error) {
 	slot := d.header.NVoice
 	if slot >= disk.MaxVoices {
@@ -247,9 +244,7 @@ func growVoiceSlots(d *dumpState, target int) *Error {
 // shrinkVoiceSlots gives slots back until the voice area holds target,
 // and shrinks it by a sector each time the count crosses one. A slot
 // that falls off the end while an area still plays it takes an unused
-// slot's place first, so no area is left pointing past the count. The
-// dropped voice's samples stay in the audio area until the next
-// rebuild, and undo restores the area and the voice together.
+// slot's place first, so no area is left pointing past the count.
 func shrinkVoiceSlots(d *dumpState, target, freed int) *Error {
 	sectors := d.voiceAreaSectors()
 	capacity := sectors * disk.VoicesPerSector
@@ -269,8 +264,8 @@ func shrinkVoiceSlots(d *dumpState, target, freed int) *Error {
 			freed--
 		}
 	}
-	// Past the count is padding now. Clearing it keeps a stale header
-	// from walking back into the count when the next area arrives.
+	// Past the count is padding; clear it so no stale header walks back
+	// into the count when the next area arrives.
 	if tail := disk.VoiceSlotOffset(d.header.VoiceAreaStart, target); tail < d.audioStart {
 		clear(d.fzf[tail:d.audioStart])
 	}
@@ -285,9 +280,8 @@ func shrinkVoiceSlots(d *dumpState, target, freed int) *Error {
 // the slots below limit that no area plays. The deleted area's own
 // slot goes first, so an area that leaves takes its voice with it.
 // Failing that a silent placeholder goes, which costs nothing. What
-// stays is a named voice no area plays: that is exactly the voice R13's
-// Map button exists to rescue, so the operation refuses and names it
-// rather than losing it in silence.
+// stays is a named voice no area plays, so the operation refuses and
+// names it rather than losing it in silence (codeSpareVoice).
 func spareVoiceSlot(d *dumpState, freed, limit int) (int, *Error) {
 	if freed >= 0 && freed < limit && !slotReferenced(d, freed) {
 		return freed, nil
@@ -538,12 +532,11 @@ func (s *Session) SwapAreas(bank, a, b int) (Snapshot, *Error) {
 }
 
 // DeleteArea removes an area, shifting later areas down (R11), and
-// gives its voice slot back to the voice area with it. Membership is
-// reference: the format sizes a dump's voice area from the banks' area
-// counts, so a voice no area references has nowhere to live (the same
-// reason AddVoice maps every voice it places). The freed voice's
-// samples stay in the audio area until the next rebuild, and undo
-// restores the area and the voice together.
+// gives its voice slot back to the voice area with it: the format sizes
+// a dump's voice area from the banks' area counts, so a voice no area
+// references has nowhere to live. The freed voice's samples stay in the
+// audio area until the next rebuild, and undo restores the area and the
+// voice together.
 func (s *Session) DeleteArea(bank, area int) (Snapshot, *Error) {
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
 		return deleteAreaPatches(d, bank, area)
@@ -644,9 +637,7 @@ func mapVoicePatches(d *dumpState, voiceSlot int) ([]model.Patch, *Error) {
 // DuplicateArea appends a clone of an area: the velocity switch
 // workflow (R11). The clone's voice header is copied into a fresh slot
 // at the end of the voice area (growing it by a sector when full), so
-// the two areas share audio and the PCM footprint is unchanged. This
-// mirrors the duplicate behaviour the retired studio TUI established;
-// that implementation was the behavioural oracle.
+// the two areas share audio and the PCM footprint is unchanged.
 func (s *Session) DuplicateArea(bank, area int) (Snapshot, *Error) {
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
 		return duplicateAreaPatches(d, bank, area)

@@ -1,9 +1,8 @@
 // The preview plays at the voice's current pitch (R20). The audition
-// query is keyed by the audio identity alone, which is the settled
-// optimisation that stops a knob turn re-decoding the PCM, so a root
-// key edit never refetches the payload. Pitch therefore has to come
-// from the snapshot at play time. R21's approximation licence covers
-// the filter and the velocity response, not the pitch.
+// query is keyed by audio identity alone, so a knob turn never
+// re-decodes the PCM and a root key edit never refetches the payload.
+// Pitch therefore comes from the snapshot at play time. R21's
+// approximation licence covers the filter and velocity, not the pitch.
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Core } from "../src/boundary/contract";

@@ -2,10 +2,10 @@
 // and modifies the 24-byte global effect block (struct efectdata) in an FZF
 // full dump's bank sector.
 //
-// The effect block controls how the sampler routes performance controllers
-// (pitch bend, mod wheel, foot pedal, aftertouch) to the synthesis engine.
-// The block lives at offset 0x3c0 in each bank sector; fizzle targets
-// bank 0 (the first and usually only bank).
+// The block controls how the sampler routes performance controllers (pitch
+// bend, mod wheel, foot pedal, aftertouch) into the synthesis engine. It
+// sits at offset 0x3c0 in each bank sector, and fizzle targets bank 0, the
+// first and usually the only bank.
 package fzfeffects
 
 import (
@@ -20,15 +20,14 @@ import (
 
 const unchanged = -1
 
-// Params holds the effect block fields exposed by fizzle. The bend field is
-// the pitch-bender depth (1/8-semitone units, 0-127). MVol and SusS are the
-// "unused, normally 0" mvol/suss bytes (spec §2-3); they are surfaced so
-// non-default values become visible. All other fields are the 18 active
-// controller -> target routings (0-127). The naming follows the FZ-1 spec
-// matrix: <controller>_<target>, where controllers are mod/fot/aft (mod
-// wheel, foot pedal, aftertouch) and targets are lfp/lfa/lff/lfq (LFO
-// pitch/amp/filter/resonance) and dca/dcf/dcq (amp/filter/resonance
-// offset).
+// Params holds the effect block fields fizzle exposes. BendRange is the
+// pitch-bender depth in 1/8-semitone units (0 to 127). MVol and SusS are
+// the "unused, normally 0" mvol/suss bytes (spec §2-3), surfaced so
+// non-default values stay visible. The rest are the active controller
+// routings (0 to 127), named after the FZ-1 spec matrix: controllers
+// mod, fot, and aft (mod wheel, foot pedal, aftertouch) crossed with
+// targets lfp, lfa, lff, and lfq (LFO pitch, amp, filter, resonance)
+// and dca, dcf, and dcq (amp, filter, and resonance offset).
 type Params struct {
 	BendRange int // pitch bend range in 1/8-semitone units (0-127)
 	MVol      int // master volume (unused, normally 0)
@@ -176,10 +175,10 @@ type Result struct {
 }
 
 // effectFieldSpec describes one settable byte in the effect block: the
-// caller-facing flag name (for error messages), the byte offset (relative to
-// BankEffectOffset), a pointer to the SetParams field, and the upper bound
-// of the byte's valid range (always 127 for the routings; bend uses
-// MaxBendRange which is also 127).
+// caller-facing flag name for error messages, the offset relative to
+// BankEffectOffset, the upper bound of the byte's valid range (127 for
+// every routing, and MaxBendRange, also 127, for bend), and a pointer to
+// the SetParams field.
 type effectFieldSpec struct {
 	flagName string
 	offset   int
@@ -187,9 +186,8 @@ type effectFieldSpec struct {
 	value    *int
 }
 
-// effectFieldSpecs returns the table of settable effect-block bytes. The
-// returned slice references &p.<field> so callers can iterate and apply each
-// non-unchanged value uniformly.
+// effectFieldSpecs returns the table of settable effect-block bytes,
+// each pointing at its SetParams field so one loop applies them all.
 func effectFieldSpecs(p *SetParams) []effectFieldSpec {
 	return []effectFieldSpec{
 		{"bend", disk.EffectBendOffset, disk.MaxBendRange, &p.BendRange},
@@ -278,18 +276,16 @@ func ParseBytes(data []byte) (*Params, error) {
 	return parseBlock(data), nil
 }
 
-// renderField is one row in the human-readable matrix output. Pairing the
-// label with the value lets Render emit the spec's mod/fot/aft routing
-// matrix without repeating Printf calls for each cell.
+// renderField is one cell of the spec's mod/fot/aft routing matrix in
+// the human-readable output.
 type renderField struct {
 	label string
 	value int
 }
 
-// Effect-target label constants used in the rendered routing matrix. The
-// labels match the spec §2-3 effectdata field-name suffixes so users
-// scanning Render output can correlate with the spec or the CLI flag
-// names (e.g. --mod-lfa, --aftertouch-dcq).
+// Effect-target labels for the rendered routing matrix. They match the
+// spec §2-3 effectdata field-name suffixes, so Render's output lines up
+// with the spec and with the CLI flags (--mod-lfa, --aftertouch-dcq).
 const (
 	labelLFP = "lfp" // LFO pitch
 	labelLFA = "lfa" // LFO amp

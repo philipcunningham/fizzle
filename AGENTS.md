@@ -11,8 +11,7 @@ make check
 This runs formatting, vet, lint, unit tests, CLI integration tests, fuzz
 seed validation, and the browser checks below.
 
-The browser editor has three of its own targets, and `make check` runs
-all three:
+`make check` also runs the browser editor's three targets:
 
 - `make wasm` builds the browser core into the front end's assets
 - `make wasm-check` builds the browser target, catching a broken `js/wasm` build
@@ -49,7 +48,7 @@ needs running by hand before a UI change ships.
 - `pkg/wav/` is the WAV file reader/writer
 - `pkg/voice*/` contains voice file operations (import, extract, build, unpack, edit)
 - `pkg/disk*/` contains disk operations (format, list, add, get, copy)
-- `pkg/container/` contains pure FZF/disk container byte surgery: compaction, bank grow, and area swap/delete/duplicate patches. Functions take raw container bytes and return new bytes or `model.Patch` lists, unit-testable without any UI.
+- `pkg/container/` contains pure FZF/disk container byte surgery: compaction, bank grow, and area swap/delete/duplicate patches. Functions take container bytes and return new bytes or `model.Patch` lists, unit-testable without a UI.
 - `pkg/model/` contains the in-memory representation of an open container (.img or .fzf): the container bytes plus the undo/redo stacks, the dirty flag, and the current file path.
 - `pkg/webcore/` is the session facade the browser talks to. It owns the open document, validation, capacity, undo history, and the parameter schema the voice editor renders its controls from. A document is one disk image, or the pair a split instrument spans. Every mutating call is atomic: it returns either a fresh snapshot or a structured error envelope carrying a stable machine code. Canonical state lives here, never in the layers above.
 - `web/wasm/` is the `js/wasm` entry point that exposes the facade to JavaScript. `module/` registers `fizzleCore` on the JS global and wraps each result in an `{ok, value}` or `{ok, error}` envelope. A Go panic is recovered into an envelope rather than crossing the boundary raw. `surface_js.go` pins the import surface the browser build needs, so `make wasm-check` catches a broken `js/wasm` build.
@@ -85,11 +84,10 @@ Tests pass `bytes.Buffer`.
 **Pure data functions:** Many packages separate pure computation from I/O.
 Unexported byte-level functions (for example `fzvinfo.parseHeader`,
 `voiceedit.applyPatches`, `voiceunpack.unpack`) accept `[]byte` and return
-values without filesystem access. Other pure functions like
-`diskformat.buildImage` accept plain parameters (a `string` label) and
-return `[]byte` with no I/O. Same-package
-tests can call these directly. Don't export pure internals solely for
-test access; use white-box tests instead.
+values without filesystem access. Others like `diskformat.buildImage` take
+plain parameters (a `string` label) and return `[]byte` with no I/O.
+Same-package tests call these directly. Don't export pure internals solely
+for test access; use white-box tests instead.
 
 **Logging:** Use `logger.InitWithWriter(debug, w)` in tests to capture log
 output to a `bytes.Buffer` instead of mutating the global logger. Production
@@ -149,8 +147,8 @@ change must keep the output bytes identical.
 
 Don't use `--`, `-`, or an em dash (U+2014) as a grammatical separator
 in code comments, markdown files, or documentation. Use proper
-punctuation instead: periods, colons, semicolons, commas, or
-parentheses. Restructure the sentence if needed.
+punctuation instead (periods, colons, semicolons, commas, or
+parentheses), and restructure the sentence if needed.
 
 Don't use the right-arrow character (U+2192) in code comments, markdown
 files, or documentation. Write the relationship in English: "SFZ to FZF"

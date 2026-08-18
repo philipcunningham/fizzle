@@ -116,7 +116,7 @@ func TestInstrumentSnapshotFromCorpusImage(t *testing.T) {
 		t.Fatal("corpus instrument parsed empty")
 	}
 	// The TECHNO dump carries a velocity split: LUNAR LO plays only
-	// above velocity 95. That is the field slice 5 exists to edit.
+	// above velocity 95.
 	found := false
 	for _, b := range inst.Banks {
 		for _, a := range b.Areas {

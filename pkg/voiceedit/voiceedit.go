@@ -18,8 +18,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/internal/bitconv"
 )
 
-// Sentinel errors. Wrap with %w; callers should use errors.Is to identify
-// a specific failure mode rather than matching error message substrings.
+// Sentinel errors. Wrap with %w; match with errors.Is, not on message text.
 var (
 	ErrNotVoiceFile     = errors.New("voiceedit: file does not appear to be a voice file")
 	ErrUnsupportedPatch = errors.New("voiceedit: unsupported patch size")
@@ -78,9 +77,8 @@ func applyToFZVLocked(path string, patches []Patch) error {
 }
 
 // ApplyToFZFVoice reads the FZF file at path, locates the voice by name,
-// applies patches to that voice's header, and writes back atomically. The
-// read-modify-write sequence is serialised across processes via
-// fileutil.WithFileLock to prevent lost writes from concurrent edits.
+// applies patches to that voice's header, and writes back atomically. It
+// takes the same cross-process lock as ApplyToFZV.
 func ApplyToFZFVoice(path string, voiceName string, patches []Patch) error {
 	return fileutil.WithFileLock(path, func() error {
 		return applyToFZFVoiceLocked(path, voiceName, patches)
@@ -147,13 +145,12 @@ func ApplyToFZFSlotBytes(data []byte, slot int, patches []Patch) error {
 //
 // Spec context: the voice-header fields at 0xae/0xaf/0xb0 (`hwid`/`lwid`/`cent`,
 // §2-1) are read only when the FZ-1 loads a voice standalone via the per-voice
-// disk path. When the FZF is loaded as a bank (the normal case), the firmware
-// reads the per-split arrays in the bank sector (§2-2: `hwid[64]` @ 0x02,
-// `lwid[64]` @ 0x42, `cent[64]` @ 0x102), and the spec explicitly notes that
-// these "can be set independently from those for voice data". A `fizzle fzf
-// edit --key-low/--key-high/--root` that touched only the voice header would
-// be a silent no-op on hardware playback. This mirrors the multi-bank
-// fan-out pattern used by fzfmidi.Set / fzfoutput.Set.
+// disk path. Loaded as a bank (the normal case), the firmware reads the
+// per-split arrays in the bank sector (§2-2: `hwid[64]` @ 0x02, `lwid[64]`
+// @ 0x42, `cent[64]` @ 0x102), which the spec says "can be set independently
+// from those for voice data". So a `fizzle fzf edit --key-low/--key-high/--root`
+// touching only the voice header is a silent no-op on hardware playback. The
+// fan-out mirrors fzfmidi.Set and fzfoutput.Set.
 //
 // Non-key-range patches (filter, LFO, envelope, name, tune, playback mode)
 // have no bank counterpart and are skipped.
@@ -177,8 +174,8 @@ func syncBankKeyRange(data []byte, hdr *fzutil.FZFHeader, idx int, voiceOffset i
 		if !ok {
 			continue
 		}
-		// Read the post-write byte directly from the voice-header slot;
-		// robust to whatever applyPatches actually wrote (Value vs Bytes).
+		// Read the post-write byte from the voice-header slot, so this
+		// works whichever way applyPatches wrote it (Value or Bytes).
 		srcOff := voiceOffset + p.Offset
 		if srcOff >= len(data) {
 			return fmt.Errorf("key-range source byte at %d beyond data", srcOff)
@@ -254,8 +251,7 @@ func BuildLFOPatches(wave, rate, delay, attack, pitch, amp, filter, q int, origL
 		if err := ValidateWaveform(wave); err != nil {
 			return nil, err
 		}
-		// Preserve bit 7 (phase-sync) of the original lfo_name byte;
-		// writing a clean byte(wave) would silently clear it.
+		// A clean byte(wave) would silently clear bit 7 (phase-sync).
 		val := uint8(wave)&disk.LFOWaveformMask | (origLFOName & disk.LFOPhaseFlag) //nolint:gosec // wave is validated above (0..5)
 		patches = append(patches, Patch{Offset: disk.VoiceLFONameOffset, Size: 1, Value: uint16(val)})
 	}
@@ -362,14 +358,13 @@ func BuildFilterPatches(cutoff, resonance int) ([]Patch, error) {
 }
 
 // BuildNamePatch creates a patch for the voice name (max 12 characters). The
-// 12-byte padded name is followed by two zero bytes required by the FZ voice
-// header layout.
-// BuildNamePatch stores the voice name verbatim: mixed case preserved.
-// The FZ-1 hardware supports mixed-case names (factory disks such as
-// "All Voices" demonstrate this); upper-casing on commit surprises
-// users when they Tab through an unchanged field and the displayed
-// value mutates. Voice-name lookups elsewhere (findVoiceIndex) match
-// case-insensitively, so existing case-insensitive flows still work.
+// 12-byte padded name is followed by the two zero bytes the FZ voice header
+// layout requires.
+//
+// Case is stored verbatim. The FZ-1 supports mixed-case names (factory disks
+// carry "All Voices"), and upper-casing on commit mutates a field the user
+// only tabbed through. findVoiceIndex matches case-insensitively, so lookups
+// still work either way.
 func BuildNamePatch(name string) ([]Patch, error) {
 	if len(name) > disk.LabelSize {
 		return nil, fmt.Errorf("voiceedit: name %q exceeds %d characters", name, disk.LabelSize)
@@ -536,21 +531,20 @@ func BuildPlaybackModePatch(mode string) ([]Patch, error) {
 }
 
 // BuildDCAPatches creates patches for DCA envelope parameters. Pass Unchanged
-// for sustain/end to leave unchanged. Pass Unchanged for individual rate/level
-// array elements to leave them unchanged. Rates and levels use the hardware
-// display scale (0 to 99). origRates carries the original rate bytes so the
-// sign bit (envelope direction) is preserved when only the magnitude changes.
+// for sustain/end, or for an individual rate/level element, to leave it alone.
+// Rates and levels use the hardware display scale (0 to 99). origRates carries
+// the original rate bytes so the sign bit (envelope direction) survives a
+// magnitude-only change.
 func BuildDCAPatches(sustain, end int, rates, stops [disk.EnvelopeStages]int, origRates [disk.EnvelopeStages]uint8) ([]Patch, error) {
 	return buildEnvelopePatches("dca", sustain, end, rates, stops, origRates,
 		disk.VoiceDCASusOffset, disk.VoiceDCAEndOffset,
 		disk.VoiceDCARateOffset, disk.VoiceDCAStopOffset)
 }
 
-// BuildDCFPatches creates patches for DCF envelope parameters. Pass
-// Unchanged for sustain/end to leave unchanged. Pass Unchanged for individual
-// rate/level array elements to leave them unchanged. Rates and levels use
-// the hardware display scale (0 to 99). origRates carries the original rate
-// bytes so the sign bit (envelope direction) is preserved.
+// BuildDCFPatches creates patches for DCF envelope parameters, under the same
+// conventions as BuildDCAPatches: Unchanged skips a field or element, rates
+// and levels use the 0 to 99 display scale, and origRates preserves the
+// envelope-direction sign bit.
 func BuildDCFPatches(sustain, end int, rates, stops [disk.EnvelopeStages]int, origRates [disk.EnvelopeStages]uint8) ([]Patch, error) {
 	return buildEnvelopePatches("dcf", sustain, end, rates, stops, origRates,
 		disk.VoiceDCFSusOffset, disk.VoiceDCFEndOffset,

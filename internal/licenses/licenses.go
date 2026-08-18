@@ -10,10 +10,8 @@
 //   - With `-tags release`: the embedded text from
 //     internal/licenses/LICENSE.txt and
 //     internal/licenses/THIRD_PARTY_LICENSES.txt. `make build` adds the
-//     tag automatically after running `make licenses`.
-//
-// Release binaries always carry real attribution. Development builds
-// show a clear "run make licenses" placeholder.
+//     tag automatically after running `make licenses`, so release
+//     binaries always carry real attribution.
 package licenses
 
 const stubMessage = "license data not embedded in this build. Run `make licenses` and rebuild with `-tags release` (or `make build`) to populate.\n"

@@ -778,11 +778,9 @@ lovel=1 hivel=127
 	}
 }
 
-// TestParseVelocityZeroRoundTrip verifies that an SFZ region with
-// lovel=0 hivel=0 (as emitted by sfzexport for silenced FZ-1 voices)
-// parses back to (0, 0) rather than being clamped to DefaultLoVel=1.
-// Without this, FZ-1 voices exported with velocity (0, 0) would change
-// to (1, 1) on re-import.
+// TestParseVelocityZeroRoundTrip verifies an SFZ region with lovel=0
+// hivel=0 parses back to (0, 0). sfzexport emits that pair for silenced
+// FZ-1 voices, and re-import must not move it to (1, 1).
 func TestParseVelocityZeroRoundTrip(t *testing.T) {
 	t.Parallel()
 	sfz := writeSFZ(t, `
@@ -1098,9 +1096,8 @@ sample=b.wav lokey=37 hikey=37 pitch_keycenter=37
 	}
 }
 
-// TestParseIntMalformedWarns guards a regression where a malformed integer
-// opcode (e.g. transpose=foo) was silently swallowed by parseInt. The parser
-// now emits a warning so the user can locate the bad opcode.
+// TestParseIntMalformedWarns checks a malformed integer opcode
+// (transpose=foo) warns rather than being swallowed by parseInt.
 func TestParseIntMalformedWarns(t *testing.T) {
 	t.Parallel()
 	sfz := writeSFZ(t, `
@@ -1112,7 +1109,6 @@ transpose=foo
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Default value should be used.
 	if regions[0].Transpose != 0 {
 		t.Errorf("transpose default on malformed input: got %d, want 0", regions[0].Transpose)
 	}
@@ -1151,8 +1147,8 @@ tune=bar
 }
 
 // TestLovelClampWarns verifies lovel values outside [0, 127] are clamped
-// and emit a warning. SFZ spec velocity range is 0-127, so lovel=200 is
-// malformed input that previously was silently clamped.
+// and warn. The SFZ spec velocity range is 0-127, so lovel=200 is
+// malformed input.
 func TestLovelClampWarns(t *testing.T) {
 	t.Parallel()
 	sfz := writeSFZ(t, `
@@ -1293,9 +1289,8 @@ func TestIncludeInsideRootDoesNotWarn(t *testing.T) {
 }
 
 func TestNestedIncludeEscapingRootWarns(t *testing.T) {
-	// The root is locked to the top-level SFZ's directory. An #include
-	// inside a nested SFZ that escapes via "../" should still warn even if
-	// the path is relative to its own (already-nested) directory.
+	// The root is locked to the top-level SFZ's directory, so an #include
+	// escaping via "../" warns even when it's relative to a nested file.
 	t.Parallel()
 	dir := t.TempDir()
 	root := filepath.Join(dir, "pack")
@@ -1308,9 +1303,8 @@ func TestNestedIncludeEscapingRootWarns(t *testing.T) {
 	if err := os.WriteFile(escaped, []byte("<region>\nsample=x.wav lokey=36 hikey=36 pitch_keycenter=36\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Nested include inside root/sub references ../../escaped.sfz, which
-	// is *relative to sub* still inside root only if root's parent is the
-	// root; but our rootDir is filepath.Dir(top-level). So this escapes.
+	// root/sub includes ../../escaped.sfz. rootDir is the top-level SFZ's
+	// directory, so that lands outside it.
 	nested := filepath.Join(sub, "nested.sfz")
 	if err := os.WriteFile(nested, []byte(`#include "../../escaped.sfz"`+"\n"), 0o644); err != nil {
 		t.Fatal(err)

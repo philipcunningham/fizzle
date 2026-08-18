@@ -8,10 +8,9 @@ import (
 	"testing"
 )
 
-// TestSave_EmptyPathReturnsError pins the trivial guard: Save("")
-// must fail with an error rather than writing to a path-derived
-// .tmp like "" or "/.tmp". Catches a callsite that forgot to pass
-// a destination.
+// TestSave_EmptyPathReturnsError pins the guard: Save("") errors rather
+// than writing a path-derived .tmp like "" or "/.tmp", which catches a
+// callsite that forgot its destination.
 func TestSave_EmptyPathReturnsError(t *testing.T) {
 	m := FromBytes("", []byte("hello"))
 	if err := m.Save(""); err == nil {
@@ -19,14 +18,13 @@ func TestSave_EmptyPathReturnsError(t *testing.T) {
 	}
 }
 
-// TestSave_UnwritableDir_LeavesOriginalIntact is the data-loss
-// safety check: Save uses a write-tmp-then-rename pattern, but if
-// the directory is read-only, even the .tmp write fails. The
-// existing target file at path must be byte-identical afterward,
-// with no orphan .tmp lingering in the directory.
+// TestSave_UnwritableDir_LeavesOriginalIntact is the data-loss safety
+// check. Save writes a tmp file then renames, but a read-only directory
+// fails even the .tmp write, and the existing target must stay
+// byte-identical with no orphan .tmp left behind.
 //
-// Linux/macOS only; Windows doesn't honour 0500 perms for the
-// owning user the same way; skipped there.
+// Linux and macOS only: Windows doesn't honour 0500 perms for the owning
+// user the same way.
 func TestSave_UnwritableDir_LeavesOriginalIntact(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("0500 directory perms not enforced for the owner on windows")
@@ -41,9 +39,6 @@ func TestSave_UnwritableDir_LeavesOriginalIntact(t *testing.T) {
 	if err := os.WriteFile(target, original, 0o644); err != nil {
 		t.Fatalf("seed target: %v", err)
 	}
-	// chmod 0444 the file itself too; we want to make sure even
-	// if the dir is the gate, a stricter setup would still preserve
-	// bytes.
 
 	m := FromBytes(target, []byte("the new bytes Save wants to write"))
 	// Lock the directory so .tmp creation fails.
@@ -75,10 +70,9 @@ func TestSave_UnwritableDir_LeavesOriginalIntact(t *testing.T) {
 	}
 }
 
-// TestSave_HappyPath_ClearsDirtyAndStacks is the inverse check:
-// a successful Save clears the dirty flag plus the undo / redo
-// stacks. The editor uses dirty to gate quit-confirmation; a
-// stale-dirty after Save would re-prompt and confuse the user.
+// TestSave_HappyPath_ClearsDirtyAndStacks is the inverse check: a
+// successful Save clears the dirty flag and both stacks. The editor gates
+// quit-confirmation on dirty, so a stale flag re-prompts after a save.
 func TestSave_HappyPath_ClearsDirtyAndStacks(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "data.bin")

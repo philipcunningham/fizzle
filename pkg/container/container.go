@@ -1,9 +1,8 @@
 // Package container holds the pure FZF/disk container byte-surgery that
-// editors use to reshape an in-memory container (compaction, area
-// edits, etc.). Functions operate on the raw container bytes and return
-// new bytes with no dependency on any user interface, so this format
-// logic (risky because a wrong offset corrupts a disk image) is
-// unit-testable in isolation.
+// editors use to reshape an in-memory container: compaction, area edits,
+// and bank growth. Functions take raw container bytes and depend on no
+// user interface, so offset logic that would corrupt a disk image if it
+// slipped stays unit-testable in isolation.
 //
 // Two mutation paradigms, split by whether the operation changes the
 // container's length:
@@ -24,10 +23,8 @@ import (
 )
 
 // swapPerAreaFields are the per-area byte fields SwapAreaPatches swaps.
-// BankMIDIRecvChanOffset is included: the channel belongs to the key
-// split the user is reordering, so it travels with the area. That
-// settles the REMAIN-008 question, which the browser editor forced by
-// making the channel editable per area.
+// BankMIDIRecvChanOffset is included because the channel belongs to the
+// key split being reordered, so it travels with the area (REMAIN-008).
 var swapPerAreaFields = []int{
 	disk.BankKeyHighOffset,
 	disk.BankKeyLowOffset,
@@ -62,9 +59,9 @@ func SwapAreaPatches(data []byte, p SwapAreaParams) []model.Patch {
 	}
 	srcVPOff := p.Base + disk.BankVoiceNumOffset + disk.VPEntrySize*p.SrcArea
 	tgtVPOff := p.Base + disk.BankVoiceNumOffset + disk.VPEntrySize*p.TgtArea
-	// srcVP/tgtVP are fresh snapshots taken before any write; model never
-	// mutates patch slices, so each can serve as one patch's New and the
-	// other's Old without a further copy.
+	// Fresh snapshots taken before any write. model never mutates patch
+	// slices, so each serves as one patch's New and the other's Old
+	// without a further copy.
 	srcVP := append([]byte(nil), data[srcVPOff:srcVPOff+disk.VPEntrySize]...)
 	tgtVP := append([]byte(nil), data[tgtVPOff:tgtVPOff+disk.VPEntrySize]...)
 	patches = append(patches,
@@ -83,8 +80,8 @@ func SwapAreaPatches(data []byte, p SwapAreaParams) []model.Patch {
 // bankCount is the number of bank sectors; audioAreaStart is the byte
 // offset where the audio area begins. It returns the rebuilt bytes and
 // the new audio-area start. When nothing can be reclaimed it returns
-// (data, audioAreaStart, false): the original slice unchanged, so a caller
-// that overlooks the changed flag does a wasteful copy rather than a wipe.
+// (data, audioAreaStart, false), the original slice unchanged, so a
+// caller that ignores changed copies needlessly rather than wiping.
 func CompactVoiceArea(data []byte, bankCount, audioAreaStart int) (newData []byte, newAudioStart int, changed bool) {
 	voiceAreaStart, requiredVoiceSectors, requiredAudioBytes, ok := compactPlan(data, bankCount, audioAreaStart)
 	if !ok {
@@ -147,10 +144,9 @@ func compactPlan(data []byte, bankCount, audioAreaStart int) (voiceAreaStart, re
 }
 
 // CompactedSize returns the byte length CompactVoiceArea would shrink
-// the container to right now, computed without allocating. The App uses
-// it for the free-space figure so reclaimable orphan audio (for example
-// after an import is undone) is reflected immediately, not only once a
-// save compacts it (N-04).
+// the container to right now, computed without allocating. The free-space
+// figure uses it so reclaimable orphan audio (say after an undone import)
+// shows immediately, not only once a save compacts it (N-04).
 func CompactedSize(data []byte, bankCount, audioAreaStart int) int {
 	voiceAreaStart, vsec, abytes, ok := compactPlan(data, bankCount, audioAreaStart)
 	if !ok {
@@ -200,10 +196,9 @@ func CompactEmptyBanks(data []byte, bankCount, audioAreaStart int) (newData []by
 	return out, newBankCount, audioAreaStart - droppedBytes, true
 }
 
-// perAreaMetadataOffsets enumerates the one-byte-per-Area arrays inside
-// a bank sector, shifted/copied in sync with vp[] by DeleteAreaPatches
-// and DuplicateAreaPatches. It holds the same fields swap moves, the
-// MIDI receive channel included.
+// perAreaMetadataOffsets enumerates the one-byte-per-area arrays inside
+// a bank sector, shifted or copied in sync with vp[] by DeleteAreaPatches
+// and DuplicateAreaPatches. Same fields swapPerAreaFields moves.
 var perAreaMetadataOffsets = []int{
 	disk.BankKeyHighOffset,
 	disk.BankKeyLowOffset,
@@ -421,14 +416,13 @@ func DefaultBankRangePatches(data []byte, bankIdx, areaIdx int) []model.Patch {
 }
 
 // IsBareSingleVoice reports whether the container holds exactly one voice
-// and no bank metadata that a single FZV file cannot represent (no bank
-// names). This is the only state in which a wrapped single-voice .img can
-// be saved back faithfully as a bare FZV; any richer content (a second
-// voice, or a bank name) must be promoted to a full dump on save so it
-// isn't dropped (UXF / UXD).
+// and no bank name, the only state a wrapped single-voice .img can be
+// saved back faithfully as a bare FZV. Richer content (a second voice or
+// a bank name) must be promoted to a full dump on save so it isn't
+// dropped (UXF / UXD).
 func IsBareSingleVoice(data []byte, bankCount int) bool {
-	// maxReferencedSlot: -1 = no voices, 0 = exactly one (slot 0),
-	// >0 = multiple. Only the single-voice case can round-trip as an FZV.
+	// -1 means no voices and >0 means several; only slot 0 alone
+	// round-trips as an FZV.
 	if maxReferencedSlot(data, bankCount) != 0 {
 		return false
 	}

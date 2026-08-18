@@ -224,11 +224,10 @@ export interface WorkerResponse {
   result: CoreResult<unknown>;
 }
 
-// The Go module invokes onFizzleReady once fizzleCore is registered.
-// A boot that never gets there (a missing or corrupt module) must fail
-// every call with an envelope rather than parking it forever.
-// Declared before the promise below: its executor runs at once, and it
-// assigns this.
+// The Go module invokes onFizzleReady once fizzleCore is registered. A
+// boot that never gets there (a missing or corrupt module) must fail
+// every call with an envelope rather than parking it forever. Declared
+// before the promise below, whose executor runs at once and assigns it.
 let bootFailed: (reason: Error) => void = () => undefined;
 
 const ready = new Promise<void>((resolve, reject) => {
@@ -242,8 +241,7 @@ void ready.catch(() => undefined);
 async function boot(): Promise<void> {
   const go = new Go();
   // Relative to the deployed base, not the server root: a project site
-  // serves from a sub-path, and an absolute URL 404s the core there
-  // while the shell loads fine.
+  // serves from a sub-path, where an absolute URL 404s the core.
   const response = await fetch(`${import.meta.env.BASE_URL}fizzle.wasm`);
   if (!response.ok) {
     throw new Error(`the core module did not load (HTTP ${String(response.status)})`);
@@ -256,11 +254,10 @@ async function boot(): Promise<void> {
     const buffer = await response.arrayBuffer();
     ({ instance } = await WebAssembly.instantiate(buffer, go.importObject));
   }
-  // The Go program runs forever; if it returns, it aborted, and the
-  // core is gone. An abort during runtime setup (a fizzle.wasm built
-  // against a different wasm_exec.js, say) settles this before the
-  // core ever signals ready, so fail the boot too: a call parked on
-  // `ready` would otherwise wait for a core that will never answer.
+  // The Go program runs forever; a return means it aborted and the core
+  // is gone. An abort during runtime setup (a fizzle.wasm built against
+  // a different wasm_exec.js) lands before ready ever fires, so fail the
+  // boot too, or a call parked on `ready` waits forever.
   go.run(instance).then(
     () => {
       dead = new Error("the core stopped running");
@@ -287,8 +284,7 @@ function core(): FizzleCore {
 }
 
 // The return type admits undefined against the interface above: a Go
-// fatal error unwinds the exported function, and the call to it then
-// yields nothing at all. The caller checks.
+// fatal error unwinds the exported function, which then yields nothing.
 function dispatch(request: WorkerRequest): CoreResult<unknown> | undefined {
   switch (request.method) {
     case "snapshot":
@@ -445,9 +441,8 @@ function dispatch(request: WorkerRequest): CoreResult<unknown> | undefined {
       return core().extractVoiceSlot(p.slot, p.format);
     }
     default:
-      // The union above rules this out; a stale bundle on one side of
-      // the boundary doesn't. An unanswered call parks the caller for
-      // the life of the page, so answer it.
+      // The union above rules this out; a stale bundle on either side
+      // doesn't, and an unanswered call parks the caller forever.
       return err("unknown-method", `the core has no method named ${String(request.method)}`);
   }
 }
@@ -481,9 +476,8 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       return;
     }
     if (!result) {
-      // A Go fatal error unwinds through the exported function, which
-      // then returns nothing. Reading the envelope below would throw
-      // out of this handler, and the call would never be answered.
+      // A Go fatal error returns nothing (see dispatch): reading the
+      // envelope below would throw out of this handler, unanswered.
       dead ??= new Error("the core stopped part way through the call");
       self.postMessage(fatal(dead));
       return;
@@ -494,9 +488,8 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       self.postMessage(response, { transfer: [result.value.buffer as ArrayBuffer] });
       return;
     }
-    // Audition PCM and an extracted voice both travel inside an object;
-    // transfer the buffer too, so megabytes of samples are moved rather
-    // than copied.
+    // Audition PCM and an extracted voice travel inside an object, so
+    // transfer the buffer too: megabytes moved rather than copied.
     const inner = (result as { value?: { pcm?: Uint8Array; bytes?: Uint8Array } }).value;
     const buffer = inner?.pcm ?? inner?.bytes;
     if (result.ok && buffer instanceof Uint8Array) {

@@ -101,12 +101,11 @@ type Snapshot struct {
 	CanRedo  bool          `json:"canRedo"`
 }
 
-// historyCap bounds the undo stack at the depth R24 requires, which is
-// at least 100. Each entry is a whole document, so the cap also bounds
-// memory: at 1.25 MB an image, 100 entries is 125 MB for a one disk
-// document and 250 MB for a split pair. That is the honest cost of
-// holding images rather than diffs; R24 sets the floor, and Q-D leaves
-// open only the depth beyond it.
+// historyCap bounds the undo stack at the 100 deep R24 requires; Q-D
+// leaves open only the depth beyond that floor. Each entry is a whole
+// document, so the cap bounds memory too: at 1.25 MB an image, 100
+// entries is 125 MB for one disk and 250 MB for a split pair, the price
+// of holding images rather than diffs.
 const historyCap = 100
 
 // imagePair is one document state: a single image, or two when a
@@ -182,8 +181,6 @@ func (s *Session) OpenImage(data []byte) (Snapshot, *Error) {
 	if len(data) != disk.ImageSize {
 		return s.Snapshot(), errf("invalid-image", "an FZ image is %d bytes, got %d", disk.ImageSize, len(data))
 	}
-	// ReadImage copies out of the reader, so the caller's buffer is
-	// never aliased.
 	return s.install(data)
 }
 
@@ -341,8 +338,8 @@ func (s *Session) openedImage() (*disk.Image, *Error) {
 	return img, nil
 }
 
-// patchVoice extracts a voice file, applies the built patches, and
-// replaces the file on the image, adopting the result.
+// patchVoice applies build's patches to a voice file on the image and
+// adopts the result.
 func (s *Session) patchVoice(fileName string, build func([]byte) ([]voiceedit.Patch, error)) (Snapshot, *Error) {
 	img, cerr := s.openedImage()
 	if cerr != nil {
@@ -411,9 +408,9 @@ func (s *Session) CommitGesture() bool {
 // pending, and the later commit would push it on top of the undone
 // state, inverting the timeline.
 //
-// The bracket reopens straight away: the pointer is still down, and the
-// rest of that drag belongs in one entry, not one per movement. The
-// reopened bracket starts from the undone state, so its entry sits
+// The bracket reopens straight away: the pointer is still down, so the
+// rest of that drag belongs in one entry rather than one per movement.
+// The reopened bracket starts from the undone state, so its entry sits
 // after the undo rather than across it.
 func (s *Session) endGesture() {
 	if !s.inGesture {
@@ -457,7 +454,7 @@ func (s *Session) Redo() (Snapshot, *Error) {
 }
 
 // ExportImage returns a copy of disk 1's image bytes. Opening then
-// exporting is byte identical; that is slice 1's contract.
+// exporting is byte identical.
 func (s *Session) ExportImage() ([]byte, *Error) {
 	return s.ExportImageAt(0)
 }
@@ -530,12 +527,11 @@ func (s *Session) adopt(img *disk.Image) (Snapshot, *Error) {
 // checkWholeDocument refuses a mutation while half of a split pair is
 // absent (R5). A lone half carries a truncated dump: a size growing
 // edit re-splits that truncation and formats a fresh disk 2 over the
-// real one, and a header only edit rewrites disk 1's wave count from
-// the pair's total down to what this half holds, so the sampler stops
-// asking for the other disk. Writing either is worse than refusing, so
-// the refusal names the disk to fetch (E1) and changes nothing (E3).
-// Reads are untouched: the shell opens a lone half deliberately, and
-// the user can still look at it and export what they opened.
+// real one, and a header only edit rewrites disk 1's wave count down to
+// what this half holds, so the sampler stops asking for the other disk.
+// The refusal names the disk to fetch (E1) and changes nothing (E3).
+// Reads stay open: the shell opens a lone half deliberately, so the
+// user can still look at it and export it.
 func (s *Session) checkWholeDocument() *Error {
 	if s.missingDisk == 0 {
 		return nil
@@ -550,10 +546,10 @@ func (s *Session) checkWholeDocument() *Error {
 // document joins the undo history (or the pending gesture) and the
 // redo stack clears.
 //
-// Every mutating call lands here, whatever it edited, so this is the
-// one place a document missing half of its pair refuses one. Opening
-// and undo go through adoptState instead, which is what lets the user
-// open the other half, or a different document, from here.
+// Every mutating call lands here, so this is the one place a document
+// missing half of its pair refuses one. Opening and undo go through
+// adoptState instead, which is what lets the user open the other half,
+// or a different document, from here.
 func (s *Session) adoptPair(img *disk.Image, img2 []byte) (Snapshot, *Error) {
 	if cerr := s.checkWholeDocument(); cerr != nil {
 		return s.Snapshot(), cerr
@@ -587,8 +583,6 @@ func (s *Session) adoptState(img *disk.Image, img2 []byte) (Snapshot, *Error) {
 	}
 	files := make([]FileSnapshot, 0, len(listing.Entries))
 	for _, e := range listing.Entries {
-		// disklist reports display names ("Voice", "Full Dump"); the
-		// boundary carries stable one-word lowercase codes.
 		f := FileSnapshot{Name: e.Name, Type: typeCode(e.TypeName), SizeBytes: e.Size}
 		if f.Type == "voice" {
 			// A voice that fails to parse simply carries no params;

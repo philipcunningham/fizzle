@@ -63,13 +63,9 @@ func walkCorpus(t *testing.T, exts []string, fn func(t *testing.T, relPath, absP
 	}
 }
 
-// matchSnapshot writes payload to the given snapshot location, using the
-// suffix to keep multiple snapshots-per-fixture (e.g. fzf-info vs disk-ls)
-// from colliding. Snapshot directory mirrors the fixture layout.
-//
-// Absolute paths to bundled testdata are rewritten to a stable
-// <TESTDATA>/... placeholder so snapshots remain identical regardless of
-// where the repo is checked out (developer workstation vs CI runner).
+// matchSnapshot writes payload to the given snapshot location, in a
+// directory mirroring the fixture layout. The suffix keeps a fixture's
+// several snapshots (fzf-info against disk-ls) from colliding.
 func matchSnapshot(t *testing.T, snapRoot, relPath, suffix string, payload []byte) {
 	t.Helper()
 	snaps.WithConfig(
@@ -79,10 +75,10 @@ func matchSnapshot(t *testing.T, snapRoot, relPath, suffix string, payload []byt
 	).MatchStandaloneJSON(t, normaliseTestdataPaths(payload))
 }
 
-// normaliseTestdataPaths replaces absolute paths pointing into the bundled
-// testdata directory with a stable <TESTDATA>/... placeholder. Without this,
-// snapshots that capture resolved file paths (e.g. SFZ sample= opcodes) drift
-// between checkouts and CI fails on path mismatches alone.
+// normaliseTestdataPaths replaces absolute paths into the bundled
+// testdata directory with a stable <TESTDATA>/... placeholder. Without
+// it, snapshots capturing resolved paths (SFZ sample= opcodes) drift
+// between checkouts and CI fails on the path mismatch alone.
 func normaliseTestdataPaths(payload []byte) []byte {
 	absTestdata, err := filepath.Abs("../../testdata")
 	if err != nil {

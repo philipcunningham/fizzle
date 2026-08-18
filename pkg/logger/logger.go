@@ -19,8 +19,8 @@ func Init(debug bool) {
 }
 
 // InitWithWriter configures the global zerolog logger with a human-readable
-// console writer directed to w. Color output is disabled. This is useful in
-// tests where log output must be captured without mutating stderr.
+// console writer directed to w, colour disabled. Tests use it to capture
+// log output without mutating stderr.
 func InitWithWriter(debug bool, w io.Writer) {
 	initLogger(debug, w, true)
 }
@@ -45,11 +45,10 @@ func initLogger(debug bool, w io.Writer, noColor bool) {
 	log.Logger = zerolog.New(output).Level(level)
 }
 
-// Silence replaces the global zerolog logger with one that discards all output
-// and returns a function that restores the previous logger. It is intended for
-// callers (such as benchmarks) that need to suppress library
-// log noise without redirecting their own stderr. Callers should defer the
-// returned function so the swap is reversed on exit.
+// Silence swaps the global zerolog logger for one that discards output and
+// returns a function restoring the previous logger. Callers such as
+// benchmarks use it to mute library log noise without redirecting their
+// own stderr; defer the returned function so the swap reverses on exit.
 func Silence() func() {
 	prev := log.Logger
 	log.Logger = zerolog.New(io.Discard)
@@ -58,10 +57,9 @@ func Silence() func() {
 	}
 }
 
-// Event is the chainable log event returned by the level constructors below.
-// It is an alias for the underlying zerolog event so callers can use the
-// familiar .Str(...).Int(...).Err(...).Msg(...) chain without importing
-// zerolog directly.
+// Event is the chainable log event the level constructors below return.
+// Aliasing zerolog's own event lets callers write the familiar
+// .Str(...).Int(...).Err(...).Msg(...) chain without importing zerolog.
 type Event = zerolog.Event
 
 // Debug returns a chainable log event at DEBUG level. The event is a no-op

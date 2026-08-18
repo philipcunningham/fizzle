@@ -36,10 +36,10 @@ const (
 	DiskNameTagOffset = 0x00e
 
 	// PasswordOffset is the byte offset of the 12-byte Password field per
-	// spec §1-2 a) Disk ID. fizzle does not support password-protected
-	// disks; the byte slot exists in the on-disk format and must be
-	// occupied. Format() writes the disk name here (rather than zeros) to
-	// match the byte pattern observed on real-world factory FZ-1 disks.
+	// spec §1-2 a) Disk ID. fizzle doesn't support password-protected
+	// disks, and the firmware ignores the slot on an unprotected disk, but
+	// the slot must still be occupied: Format writes the disk name here
+	// rather than zeros, matching the byte pattern on factory FZ-1 disks.
 	PasswordOffset = 0x010
 
 	// CATOffset is the byte offset of the CAT bitmap within sector 0.
@@ -158,8 +158,8 @@ var ErrDirFull = errors.New("disk: directory is full")
 // ErrNoSpace is returned when there are not enough free sectors for an allocation.
 var ErrNoSpace = errors.New("disk: not enough free sectors")
 
-// typeNames maps file type codes to human-readable display strings.
-// Order matches the type constants: Full Dump, Voice, Bank, Effect, Sequence, Program.
+// typeNames maps file type codes to display strings, indexed in the same
+// order as the type constants.
 var typeNames = [...]string{TypeFullDumpLabel, "Voice", "Bank", "Effect", "Sequence", "Program"}
 
 // String returns a human-readable label for a file type code.
@@ -264,10 +264,10 @@ func DecodeDisSector(b []byte) (DisSector, error) {
 		return DisSector{}, errors.New("disk: buffer too small for DIS sector")
 	}
 	var d DisSector
-	// Per spec §1-4 the dBP area is 256 bytes (64 entries) and the
-	// remaining 768 bytes of the file head are an unrelated work area.
-	// Scan only the dBP area so we don't misread work-area bytes as
-	// extra extents on third-party files.
+	// Spec §1-4: the dBP area is 256 bytes (64 entries) and the remaining
+	// 768 bytes of the file head are an unrelated work area. Scanning only
+	// the dBP area avoids misreading work-area bytes as extra extents on
+	// third-party files.
 	for i := 0; i+ExtentEntrySize <= DBPAreaSize; i += ExtentEntrySize {
 		start := binary.LittleEndian.Uint16(b[i : i+2])
 		end := binary.LittleEndian.Uint16(b[i+2 : i+4])
@@ -360,10 +360,9 @@ func (img *Image) Sector(n int) ([]byte, error) {
 }
 
 // SectorRef returns a sub-slice into the image at sector n. It aliases the
-// underlying storage and must NOT be mutated; the caller is responsible for
-// not writing through the returned slice. Use SetSector to write a sector.
-// Use this in hot read-only paths (directory walks, DIS decoding) to avoid
-// allocating a fresh 1024-byte copy.
+// underlying storage and must NOT be mutated; use SetSector to write a
+// sector. Prefer it in hot read-only paths (directory walks, DIS decoding),
+// where it avoids a fresh 1024-byte copy per access.
 func (img *Image) SectorRef(n int) ([]byte, error) {
 	if n < 0 || n >= SectorCount {
 		return nil, fmt.Errorf("disk: sector %d out of range", n)
@@ -426,10 +425,10 @@ func (img *Image) FreeSectors() int {
 	return free
 }
 
-// CATAllocated reports whether sector n is marked allocated in the CAT bitmap.
-// Returns false for out-of-range sector numbers. This is safe because
-// FreeSectors and AllocateSectors only iterate valid ranges (2..SectorCount-1),
-// so returning false for invalid input simplifies iteration without masking bugs.
+// CATAllocated reports whether sector n is marked allocated in the CAT
+// bitmap. Out-of-range sectors report false, which is safe because
+// FreeSectors and AllocateSectors only ever iterate 2..SectorCount-1: it
+// simplifies iteration without masking bugs.
 func (img *Image) CATAllocated(n int) bool {
 	if n < 0 || n >= SectorCount {
 		return false
@@ -481,14 +480,12 @@ func (img *Image) RemoveFile(name string) error {
 		return fmt.Errorf("%w: %s", ErrNotFound, name)
 	}
 
-	// Reject directory entries whose DIS pointer lands in the reserved
-	// range (sector 0 = label/CAT, sector 1 = directory per spec §1-1/§1-2)
-	// or past the end of the disk. Without this guard, DecodeDisSector
-	// would mis-parse label/directory bytes as a DIS, returning fake
-	// extents that drive CATClearAllocated calls against arbitrary sectors,
-	// and CATClearAllocated(0)/(1) would clear the reserved bits,
-	// corrupting the CAT bitmap. Sibling readers in pkg/disklist and
-	// pkg/diskget enforce the same bound; this closes the unpatched path.
+	// Reject DIS pointers in the reserved range (sector 0 = label/CAT,
+	// sector 1 = directory per spec §1-1/§1-2) or past the end of the disk.
+	// Unguarded, DecodeDisSector mis-parses label or directory bytes as a
+	// DIS, and its fake extents drive CATClearAllocated over arbitrary
+	// sectors, clearing the reserved bits and corrupting the CAT bitmap.
+	// pkg/disklist and pkg/diskget enforce the same bound.
 	if int(entries[idx].DisSector) < ReservedSectors || int(entries[idx].DisSector) >= SectorCount {
 		return fmt.Errorf("%w: directory entry %q DIS sector %d out of range [%d,%d)",
 			ErrCorruptDIS, entries[idx].NameString(), entries[idx].DisSector, ReservedSectors, SectorCount)
@@ -581,7 +578,7 @@ func PadLabel(s string) [LabelSize]byte {
 
 // IsPrintableName reports whether all bytes in b are printable ASCII.
 // The FZ series identifies valid name fields by checking that every byte
-// falls within the printable ASCII range (space through tilde, 0x20–0x7e).
+// falls within the printable ASCII range (space through tilde, 0x20 to 0x7e).
 func IsPrintableName(b []byte) bool {
 	for _, c := range b {
 		if !isPrintableASCII(c) {
@@ -640,10 +637,10 @@ const ProgramHeaderMinLen = 14
 //	standard:    E8 ?? ??       CB 8F 06 ?? ?? CC FF 36 ?? ?? C3   (CKMIDI etc)
 //	with STI:    E8 ?? ?? FB    CB 8F 06 ?? ?? CC FF 36 ?? ??       (ONBOARDKEY)
 //
-// We require byte 0 == 0xE8 (near CALL) AND a 0xCB (RETF) at either offset 3
-// or offset 4. Those two positions cover every program seen on the factory
-// disk. Voice and full-dump files do not start with 0xE8, so this signature
-// safely distinguishes Programs from the other file types.
+// Byte 0 must be 0xE8 (near CALL) with a 0xCB (RETF) at offset 3 or 4, the
+// two positions every program on the factory disk uses. Voice and full-dump
+// files never start with 0xE8, so the signature separates Programs from the
+// other file types.
 func IsPlausibleProgramHeader(data []byte) bool {
 	if len(data) < ProgramHeaderMinLen {
 		return false

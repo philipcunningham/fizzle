@@ -1,5 +1,5 @@
-// The mockup's always-visible capacity readout (R23), fed from the
-// core snapshot: used bytes, whole-document capacity, and whether the
+// The always-visible capacity readout (R23), fed from the core
+// snapshot: used bytes, whole-document capacity, and whether the
 // document already spans two disks.
 import { IMAGE_SIZE } from "../boundary/contract";
 import { formatBytes } from "./format";

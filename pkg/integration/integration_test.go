@@ -98,8 +98,6 @@ func TestVoiceExtractSanity(t *testing.T) {
 	dir := t.TempDir()
 	wavPath := filepath.Join(dir, "hoover.wav")
 
-	// Extract the voice from HOOVER.img. We need to get the raw FZV data from
-	// the disk image first, then extract via the package.
 	fzvData := extractFirstVoiceData(t, hooverImg)
 	fzvPath := filepath.Join(dir, "hoover.fzv")
 	if err := os.WriteFile(fzvPath, fzvData, 0644); err != nil {
@@ -118,7 +116,6 @@ func TestVoiceExtractSanity(t *testing.T) {
 		t.Errorf("WAV file too small: %d bytes", info.Size())
 	}
 
-	// Decode and check sample values.
 	rate, samples, err := voiceextract.Decode(fzvData)
 	if err != nil {
 		t.Fatal(err)
@@ -145,16 +142,13 @@ func TestFullRoundTrip(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	// Extract the raw FZV data from HOOVER.img.
 	fzvData := extractFirstVoiceData(t, hooverImg)
 
-	// Decode the original samples.
 	origRate, origSamples, err := voiceextract.Decode(fzvData)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Write the original FZV to a temp file, extract to WAV, re-import.
 	fzvPath := filepath.Join(dir, "orig.fzv")
 	if err := os.WriteFile(fzvPath, fzvData, 0644); err != nil {
 		t.Fatal(err)
@@ -169,7 +163,6 @@ func TestFullRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Decode the re-imported FZV.
 	reimportedData, err := os.ReadFile(reimportedFZV)
 	if err != nil {
 		t.Fatal(err)
@@ -179,8 +172,7 @@ func TestFullRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Because we import at the same rate as the source, there is no resampling
-	// and the sample counts and values should match exactly.
+	// Importing at the source rate skips resampling, so counts match.
 	if len(reimportedSamples) != len(origSamples) {
 		t.Errorf("sample count mismatch: got %d, want %d", len(reimportedSamples), len(origSamples))
 		return
@@ -208,21 +200,18 @@ func TestDiskRebuild(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	// Get the original entry details from HOOVER.img.
 	origEntries := readEntries(t, hooverImg)
 	if len(origEntries) == 0 {
 		t.Fatal("HOOVER.img has no directory entries")
 	}
 	origEntry := origEntries[0]
 
-	// Extract the FZV from HOOVER.img.
 	fzvData := extractFirstVoiceData(t, hooverImg)
 	fzvPath := filepath.Join(dir, "voice.fzv")
 	if err := os.WriteFile(fzvPath, fzvData, 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Create a new blank disk, add the FZV, list it.
 	newImg := filepath.Join(dir, "new.img")
 	if err := diskformat.Format(newImg, "HOOVER"); err != nil {
 		t.Fatal(err)
@@ -272,8 +261,8 @@ func extractFirstVoiceData(t *testing.T, imagePath string) []byte {
 		t.Fatal("no extents")
 	}
 
-	// The first sector of the extent is the DIS sector itself. The voice
-	// header and audio data begin at the sector after it.
+	// The extent's first sector is the DIS sector itself; the voice header
+	// and audio start at the next one.
 	var raw []byte
 	for sec := int(dis.Extents[0][0]) + 1; sec <= int(dis.Extents[0][1]); sec++ {
 		b, err := img.Sector(sec)
@@ -288,10 +277,10 @@ func extractFirstVoiceData(t *testing.T, imagePath string) []byte {
 const junglismSFZ = "../../testdata/synthetic/JUNGLISM.sfz"
 const junglismSamplesDir = "../../testdata/synthetic/JUNGLISM Samples"
 
-// TestSFZFullPipeline is the end-to-end test for the complete workflow:
-// SFZ to FZF to disk image, then disk get, unpack, and extract WAV.
-// Uses JUNGLISM.sfz with 36kHz (split to 2 disks if needed, here we test single-disk
-// path using 9kHz which fits). Verifies audio fidelity across sector boundaries.
+// TestSFZFullPipeline drives the whole workflow: SFZ to FZF to disk
+// image, then disk get, unpack, and extract WAV. It converts JUNGLISM.sfz
+// at 9kHz, which fits one disk, and checks audio fidelity across sector
+// boundaries.
 func TestSFZFullPipeline(t *testing.T) {
 	skipShort(t)
 	t.Parallel()
@@ -301,12 +290,10 @@ func TestSFZFullPipeline(t *testing.T) {
 	imgPath := filepath.Join(dir, "junglism.img")
 	unpackDir := filepath.Join(dir, "voices")
 
-	// Step 1: SFZ to FZF at 9kHz (fits on one disk)
 	if err := sfzconvert.Convert(context.Background(), junglismSFZ, fzfPath, 9000, false); err != nil {
 		t.Fatalf("Convert: %v", err)
 	}
 
-	// Step 2: Create disk image and add FZF
 	if err := diskformat.Format(imgPath, "JUNGLISM"); err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +301,6 @@ func TestSFZFullPipeline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Step 3: Verify disk listing
 	var buf bytes.Buffer
 	if err := disklist.List(imgPath, &buf); err != nil {
 		t.Fatal(err)
@@ -323,7 +309,7 @@ func TestSFZFullPipeline(t *testing.T) {
 		t.Errorf("disk ls missing FULL-DATA-FZ: %s", buf.String())
 	}
 
-	// Step 4: Get FZF back from disk. Must be byte-identical.
+	// The FZF must come back off the disk byte-identical.
 	gotFZFPath := filepath.Join(dir, "got.fzf")
 	if err := diskget.Get(imgPath, "FULL-DATA-FZ", gotFZFPath); err != nil {
 		t.Fatalf("disk get: %v", err)
@@ -340,7 +326,6 @@ func TestSFZFullPipeline(t *testing.T) {
 		t.Errorf("FZF retrieved from disk differs from original (%d vs %d bytes)", len(orig), len(got))
 	}
 
-	// Step 5: Unpack to individual FZVs
 	if err := voiceunpack.Unpack(gotFZFPath, unpackDir); err != nil {
 		t.Fatalf("Unpack: %v", err)
 	}
@@ -352,8 +337,8 @@ func TestSFZFullPipeline(t *testing.T) {
 		t.Errorf("expected 26 voices, got %d", len(entries))
 	}
 
-	// Step 6: Verify audio fidelity across sector boundaries.
-	// Boundaries at voice indices 4, 8, 12, 16, 20, 24.
+	// Audio fidelity across sector boundaries, which fall at voice
+	// indices 4, 8, 12, 16, 20, and 24.
 	checkVoices := []struct {
 		fzvName string
 		srcWAV  string
@@ -418,7 +403,7 @@ func TestSFZFullPipeline(t *testing.T) {
 		})
 	}
 
-	// Step 7: Verify DCA/DCF defaults on a generated voice.
+	// DCA/DCF defaults on a generated voice.
 	fzvPath := filepath.Join(unpackDir, entries[0].Name())
 	vp, err := fzvinfo.Parse(fzvPath)
 	if err != nil {
@@ -431,7 +416,7 @@ func TestSFZFullPipeline(t *testing.T) {
 		t.Errorf("voice %s: DCFDefault=false, want true", entries[0].Name())
 	}
 
-	// Step 8: Verify reese is one-shot (no sustain loop).
+	// reese is one-shot, so it carries no sustain loop.
 	reeseFZV, err := os.ReadFile(filepath.Join(unpackDir, "REESE.fzv"))
 	if err == nil {
 		loopSus := reeseFZV[0x12]
@@ -524,15 +509,13 @@ func TestTechnoFZFUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// TECHNO is multi-bank (8 banks, 32 distinct voice slots). The
-	// pre-fix count of 11 came from bank 0's bstep alone, which dropped
-	// every voice referenced only by banks 1-7's vp[]. After the
-	// multi-bank-aware voice-count fix, all 32 unpack.
+	// TECHNO is multi-bank: 8 banks, 32 distinct voice slots. Counting
+	// from bank 0's bstep alone yields 11, dropping every voice only
+	// banks 1 to 7 reference through vp[].
 	if len(entries) != 32 {
 		t.Errorf("expected 32 voices from TECHNO.img, got %d", len(entries))
 	}
 
-	// Verify all voices have a non-empty name and sane waveStart=0.
 	for _, e := range entries {
 		fzv, err := os.ReadFile(filepath.Join(unpackDir, e.Name()))
 		if err != nil {
@@ -549,9 +532,9 @@ func TestTechnoFZFUnpack(t *testing.T) {
 	}
 }
 
-// TestTechnoVoiceHeaderSanity verifies that unpacked voices from real hardware
-// have sane header values, particularly that the envelope does not immediately
-// silence the voice (dca_sus and dca_end must not both be 0).
+// TestTechnoVoiceHeaderSanity checks that voices unpacked from real
+// hardware carry sane headers, above all an envelope that doesn't silence
+// the voice at once (dca_sus and dca_end must not both be 0).
 func TestTechnoVoiceHeaderSanity(t *testing.T) {
 	skipShort(t)
 	t.Parallel()
@@ -579,19 +562,18 @@ func TestTechnoVoiceHeaderSanity(t *testing.T) {
 		dcaSus := fzv[0x78]
 		dcaEnd := fzv[0x79]
 
-		// Both dca_sus=0 and dca_end=0 means the envelope has no sustain and
-		// no release, so the sampler may produce no audible output.
+		// dca_sus=0 with dca_end=0 leaves the envelope no sustain and no
+		// release, so the sampler may produce nothing audible.
 		if dcaSus == 0 && dcaEnd == 0 {
 			t.Errorf("%s: dca_sus=0 and dca_end=0 (envelope will silence the voice immediately)", e.Name())
 		}
 	}
 }
 
-// TestEnvelopeDefaultsMatchHardware verifies that our generated voice envelope
-// defaults (dca_sus, dca_end, dca_rate, dca_stop) are compatible with real
-// hardware. The METAL-BELL voice from TECHNO.img is the reference.
-// This is a regression test for the silent playback bug where dca_sus=0 and
-// dca_end=0 caused the FZ-1 to produce no audio.
+// TestEnvelopeDefaultsMatchHardware checks fizzle's generated envelope
+// defaults (dca_sus, dca_end, dca_rate, dca_stop) against real hardware,
+// with METAL-BELL from TECHNO.img as the reference. It guards the silent
+// playback bug, where dca_sus=0 and dca_end=0 left the FZ-1 mute.
 func TestEnvelopeDefaultsMatchHardware(t *testing.T) {
 	skipShort(t)
 	t.Parallel()
@@ -606,7 +588,6 @@ func TestEnvelopeDefaultsMatchHardware(t *testing.T) {
 		t.Fatalf("fzf unpack: %v", err)
 	}
 
-	// Read METAL-BELL as reference.
 	ref, err := os.ReadFile(filepath.Join(unpackDir, "METAL-BELL.fzv"))
 	if err != nil {
 		t.Fatalf("reading METAL-BELL: %v", err)
@@ -614,7 +595,7 @@ func TestEnvelopeDefaultsMatchHardware(t *testing.T) {
 	refDCASus := ref[0x78]
 	refDCAEnd := ref[0x79]
 
-	// Generate a synthetic voice using our defaults.
+	// A synthetic voice built from fizzle's own defaults.
 	samples := make([]int16, 1000)
 	fzv := voiceimport.Encode(samples, 0, "TEST", 0, voiceimport.NoLoop())
 
@@ -628,7 +609,6 @@ func TestEnvelopeDefaultsMatchHardware(t *testing.T) {
 		t.Errorf("our dca_end=%d, want 7", ourDCAEnd)
 	}
 
-	// Reference values from hardware for documentation.
 	t.Logf("Hardware reference: dca_sus=%d dca_end=%d", refDCASus, refDCAEnd)
 	t.Logf("Our defaults:       dca_sus=%d dca_end=%d", ourDCASus, ourDCAEnd)
 }
@@ -652,8 +632,8 @@ func TestBrassFZFUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// BRASS is multi-bank; 13 distinct voice slots are used across banks.
-	// See TestTechnoFZFUnpack for the rationale on the count change.
+	// BRASS is multi-bank, with 13 distinct voice slots across banks. See
+	// TestTechnoFZFUnpack for why bank 0's bstep undercounts.
 	if len(entries) != 13 {
 		t.Errorf("expected 13 voices from BRASS.img, got %d", len(entries))
 	}
@@ -731,7 +711,6 @@ func TestTechnoRoundTripExtract(t *testing.T) {
 		t.Fatalf("fzf unpack: %v", err)
 	}
 
-	// Extract each voice to WAV and verify it's non-silent with valid rate.
 	entries, err := os.ReadDir(unpackDir)
 	if err != nil {
 		t.Fatal(err)
@@ -781,12 +760,11 @@ func TestFZFMidiEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	fzfPath := filepath.Join(dir, "junglism.fzf")
 
-	// Step 1: convert at 9kHz (fits on one disk).
+	// 9kHz fits on one disk.
 	if err := sfzconvert.Convert(context.Background(), junglismSFZ, fzfPath, 9000, false); err != nil {
 		t.Fatalf("Convert: %v", err)
 	}
 
-	// Step 2: set REESE to channel 2.
 	res, err := fzfmidi.Set(fzfPath, []string{"REESE"}, false, 2)
 	if err != nil {
 		t.Fatalf("Set: %v", err)
@@ -798,12 +776,11 @@ func TestFZFMidiEndToEnd(t *testing.T) {
 		t.Errorf("unexpected update: %+v", res.Updated[0])
 	}
 
-	// Step 3: verify the raw byte in the FZF.
+	// The raw byte in the FZF, at the slot found by scanning names.
 	data, err := os.ReadFile(fzfPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Find REESE voice index by scanning names.
 	reeseIdx := -1
 	nBankSectors := 1
 	nvoice := int(binary.LittleEndian.Uint16(data[0:2]))
@@ -826,7 +803,7 @@ func TestFZFMidiEndToEnd(t *testing.T) {
 		t.Errorf("REESE raw MIDI channel byte: got %d, want 1 (channel 2)", rawChan)
 	}
 
-	// Step 4: fzf info should show Chan column with * on the REESE row.
+	// fzf info shows the Chan column with * on the REESE row.
 	var buf bytes.Buffer
 	highlighted := map[int]bool{res.Updated[0].Index: true}
 	if err := fzfinfo.Info(fzfPath, &buf, highlighted); err != nil {
@@ -843,7 +820,7 @@ func TestFZFMidiEndToEnd(t *testing.T) {
 		t.Errorf("Channel 2 should appear in output:\n%s", out)
 	}
 
-	// Step 5: resetting all to channel 1 removes the Chan column.
+	// Resetting all to channel 1 removes the Chan column.
 	if _, err := fzfmidi.Set(fzfPath, nil, true, 1); err != nil {
 		t.Fatal(err)
 	}
@@ -856,12 +833,11 @@ func TestFZFMidiEndToEnd(t *testing.T) {
 	}
 }
 
-// TestMultiDiskBankSectorInvariant is the critical integration test for the
-// multi-disk split format. It verifies the exact byte-level properties that
-// make the FZ-10M prompt for disk 2 after loading disk 1.
-// ConvertMultiDisk now produces .img files directly. Disk 1 contains a full
-// FZF (bank + voices + partial audio). Disk 2 is pure audio continuation
-// (no bank sector, no voice headers).
+// TestMultiDiskBankSectorInvariant pins the byte-level properties of the
+// split format that make the FZ-10M prompt for disk 2 after loading disk
+// 1. ConvertMultiDisk writes .img files directly: disk 1 holds a full FZF
+// (bank, voices, and partial audio), and disk 2 is pure audio
+// continuation with no bank sector and no voice headers.
 func TestMultiDiskBankSectorInvariant(t *testing.T) {
 	skipShort(t)
 	t.Parallel()
@@ -914,9 +890,9 @@ func TestMultiDiskBankSectorInvariant(t *testing.T) {
 			totalWave, localWaveSectors)
 	}
 
-	// INVARIANT 4: disk 1 voice area covers all voices (not just disk 1 voices).
-	// The sampler reads voice parameters (envelopes, loops) from disk 1 for
-	// the full instrument.
+	// INVARIANT 4: disk 1's voice area covers every voice, not just disk
+	// 1's. The sampler reads envelopes and loops for the full instrument
+	// from disk 1.
 	expectedVoiceAreaSize := disk.VoiceAreaSectors(d1NVoice) * disk.SectorSize
 	voiceAreaStart := disk.SectorSize
 	if len(d1) < voiceAreaStart+expectedVoiceAreaSize {
@@ -950,9 +926,9 @@ func TestMultiDiskBankSectorInvariant(t *testing.T) {
 	t.Logf("disk 2: %d allocated data sectors", d2AllocatedSectors)
 }
 
-// TestMultiDiskUnpackBothDisks verifies that unpacking disk 1 produces voices
-// and that disk 2 (pure audio continuation) has no FZF structure to unpack.
-// ConvertMultiDisk now produces .img files directly.
+// TestMultiDiskUnpackBothDisks checks that unpacking disk 1 yields voices
+// and that disk 2, pure audio continuation, has no FZF structure to
+// unpack.
 func TestMultiDiskUnpackBothDisks(t *testing.T) {
 	skipShort(t)
 	t.Parallel()
@@ -995,10 +971,8 @@ func TestMultiDiskUnpackBothDisks(t *testing.T) {
 		}
 	}
 
-	// Disk 2: pure audio continuation with no FZF structure.
-	// Extracting FZF from disk 2 should still yield a file (the disk has a
-	// FULL-DATA-FZ entry), but unpacking it should produce 0 voices because
-	// there are no voice headers.
+	// Disk 2 carries a FULL-DATA-FZ entry, so extracting still yields a
+	// file, but it holds no voice headers and unpacks to 0 voices.
 	fzf2Path := filepath.Join(dir, "d2.fzf")
 	err = diskget.Get(img2, "FULL-DATA-FZ", fzf2Path)
 	if err != nil {
@@ -1049,11 +1023,10 @@ func fileSHA256(t *testing.T, path string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// TestJUNGLISMGoldenChecksums verifies that the JUNGLISM SFZ conversion
-// pipeline produces byte-for-byte identical FZF and disk image outputs.
-// These golden checksums protect against accidental changes to the output
-// format: any drift in resampling, bank layout, voice packing, sector
-// allocation, or disk formatting will cause a failure here.
+// TestJUNGLISMGoldenChecksums pins the JUNGLISM SFZ conversion to
+// byte-identical FZF and disk image outputs. Any drift in resampling,
+// bank layout, voice packing, sector allocation, or disk formatting
+// fails here.
 //
 // To update after an intentional format change, run the test with -v,
 // copy the "got" checksums, and replace the expected values below.

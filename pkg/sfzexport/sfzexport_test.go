@@ -99,11 +99,10 @@ func TestExportCreatesFiles(t *testing.T) {
 	}
 }
 
-// TestExportAtomicNoTempLeftovers verifies that Export uses atomic writes:
-// the output directory contains only the final SFZ + WAV files, with no
-// fizzle-* temp files left behind. This guards against a regression to
-// plain os.WriteFile, which would leave a half-written file on disk if a
-// write were interrupted partway through.
+// TestExportAtomicNoTempLeftovers verifies Export writes atomically: the
+// output directory holds only the final SFZ and WAV files, no fizzle-*
+// temp files. Plain os.WriteFile would leave a half-written file behind
+// when a write is interrupted.
 func TestExportAtomicNoTempLeftovers(t *testing.T) {
 	t.Parallel()
 	_, fzfPath := buildFZF(t, []string{testVoiceKick, testVoiceSnare})
@@ -335,11 +334,10 @@ func TestExportLoopPoints(t *testing.T) {
 	}
 }
 
-// TestExportLoopPointsUsesLoopSusIndex pins the fix for the bug where
-// the SFZ exporter (and its WAV-side loop write) always read
-// loopst[0]/looped[0] regardless of loop_sus. Voices whose active loop
-// pair was not the first would otherwise carry the wrong sample
-// addresses (and "has loop" decision) into both the SFZ and the WAV.
+// TestExportLoopPointsUsesLoopSusIndex pins the exporter, and its WAV-side
+// loop write, to loop_sus. Reading loopst[0] and looped[0] instead carries
+// the wrong sample addresses, and the wrong "has loop" decision, into both
+// the SFZ and the WAV. That happens whenever the active pair isn't first.
 func TestExportLoopPointsUsesLoopSusIndex(t *testing.T) {
 	t.Parallel()
 	// Each test voice from fzfbuilder.MakeTestFZF carries 512 audio
@@ -571,10 +569,9 @@ func TestExportLFOComment(t *testing.T) {
 	}
 }
 
-// TestExportLFODelayWidth guards against the regression where lfo_delay was
-// read as a single byte rather than the 2-byte little-endian field declared in
-// spec §2-1 (range 0..65535). A 1-byte read silently truncates the high byte
-// so e.g. delay=1234 (0x04D2) becomes delay=210 (0xD2).
+// TestExportLFODelayWidth pins lfo_delay to the 2-byte little-endian field
+// spec §2-1 declares (range 0..65535). A 1-byte read truncates the high
+// byte, so delay=1234 (0x04D2) becomes delay=210 (0xD2).
 func TestExportLFODelayWidth(t *testing.T) {
 	t.Parallel()
 	data, _ := buildFZF(t, []string{testVoicePad})
@@ -617,9 +614,9 @@ func TestExportDefaultName(t *testing.T) {
 	}
 }
 
-// TestExportRoundTripContent goes SFZ -> FZF -> SFZ and asserts the per-region
-// content (not just counts) survives. The original SFZ source-of-truth has
-// known voice names and key ranges; both must round-trip intact.
+// TestExportRoundTripContent goes SFZ to FZF and back, asserting the
+// per-region content survives, not just the counts. The original SFZ has
+// known voice names and key ranges; both must come back intact.
 func TestExportRoundTripContent(t *testing.T) {
 	t.Parallel()
 	sfzPath := filepath.Join("..", "..", "testdata", "synthetic", "JUNGLISM.sfz")
@@ -650,10 +647,9 @@ func TestExportRoundTripContent(t *testing.T) {
 	}
 }
 
-// TestExportSlotOrderAlignment is a regression test for a bug where the
-// exporter iterated voices by os.ReadDir (alphabetical) and indexed bank
-// metadata by directory position, scrambling per-voice fields when slot
-// order differed from alphabetical name order.
+// TestExportSlotOrderAlignment pins per-voice fields to voice-slot order.
+// Iterating by os.ReadDir and indexing bank metadata by directory position
+// scrambles them whenever slot order differs from alphabetical order.
 func TestExportSlotOrderAlignment(t *testing.T) {
 	t.Parallel()
 	data, _ := buildFZF(t, []string{"ZOO", "AARDVARK"})
@@ -911,7 +907,7 @@ func TestExportPreservesZeroVelocity(t *testing.T) {
 // than emitting an out-of-range tune opcode.
 func TestExportCentsCarriesToSemitones(t *testing.T) {
 	t.Parallel()
-	// dcp=255 rounds to 100 cents under the naive split; the fix should
+	// dcp=255 rounds to 100 cents under a naive split, so the export must
 	// emit transpose=1 and no tune opcode.
 	data, _ := buildFZF(t, []string{"BORDER"})
 	patchVoiceHeaderU16(data, 0, disk.VoiceDCPOffset, uint16(255))
@@ -929,12 +925,11 @@ func TestExportCentsCarriesToSemitones(t *testing.T) {
 	}
 }
 
-// TestExportDeduplicatesDuplicateVoiceNames is a regression test for a bug
-// where the duplicate-name suffixer incremented its counter on the
-// already-suffixed stem instead of the original. With N voices sharing one
-// name, voices 2..N all resolved to "<name>-1" and overwrote each other, so
-// only two unique WAVs survived (e.g. CASIO072.FZF's 59 UNTITLED SAM voices
-// produced just 4 WAVs). Verifies N voices yield N distinct WAVs.
+// TestExportDeduplicatesDuplicateVoiceNames pins the duplicate-name
+// suffixer to the original stem. Counting on the already-suffixed stem
+// resolves voices 2..N to "<name>-1", overwriting each other, so
+// CASIO072.FZF's 59 UNTITLED SAM voices yield just 4 WAVs. N voices must
+// yield N distinct WAVs.
 func TestExportDeduplicatesDuplicateVoiceNames(t *testing.T) {
 	t.Parallel()
 	const n = 5
@@ -987,11 +982,11 @@ func TestExportDeduplicatesDuplicateVoiceNames(t *testing.T) {
 	}
 }
 
-// TestExportSkipsVoiceWithCorruptWaveEnd is a regression test for a UX bug
-// where a single voice header with an inflated waveEnd pointer (observed in
-// real-world FZFs from the factory disk corpus) aborted the entire export
-// with a single cryptic error and zero output. The export should now log a
-// WARN for the bad voice, skip it, and emit all the well-formed voices.
+// TestExportSkipsVoiceWithCorruptWaveEnd holds the export open against one
+// bad header: an inflated waveEnd pointer (seen in real-world FZFs from the
+// factory disk corpus) once aborted the whole run with a cryptic error and
+// zero output. The export logs a WARN, skips that voice, and emits every
+// well-formed one.
 func TestExportSkipsVoiceWithCorruptWaveEnd(t *testing.T) {
 	buf := testutil.CaptureLog(t)
 	data, _ := buildFZF(t, []string{testVoiceKick, testVoiceSnare, testVoicePad})
@@ -1113,9 +1108,8 @@ func TestExportWarnsOnMultiBitGCHN(t *testing.T) {
 // TestExportTechnoMultiBankRegionCount is the regression test for F4: on
 // a real-hardware multi-bank dump like TECHNO.img every audible slot (32
 // in this case) must produce one SFZ region with its bank-correct key
-// range. The previous implementation read every region's key range from
-// bank 0; slots 11-31 fell past bank 0's bstep=11 and ended up with
-// zero/garbage key ranges.
+// range. Reading every key range from bank 0 leaves slots 11-31, which
+// fall past bank 0's bstep=11, with zero or garbage key ranges.
 func TestExportTechnoMultiBankRegionCount(t *testing.T) {
 	t.Parallel()
 	const technoImg = "../../testdata/synthetic/TECHNO.img"
@@ -1140,11 +1134,11 @@ func TestExportTechnoMultiBankRegionCount(t *testing.T) {
 	}
 }
 
-// TestExportLeadingNoSoundSlot is the regression test for F6. The previous
-// loop indexed bank arrays and storedNames by the *compacted* FZV slice
-// position (NoSound slots dropped). With a leading NoSound slot, voice 0
-// in the SFZ region list took its name/key/output from bank slot 0 (the
-// NoSound placeholder) instead of from the first audible slot.
+// TestExportLeadingNoSoundSlot is the regression test for F6. The
+// compacted FZV slice drops NoSound slots, so indexing bank arrays and
+// storedNames by that position misreads voice 0. It takes its name, key
+// range, and output from the NoSound placeholder at slot 0, not from the
+// first audible slot.
 func TestExportLeadingNoSoundSlot(t *testing.T) {
 	t.Parallel()
 	// Build a 3-voice FZF then patch slot 0 into a NoSound placeholder so
@@ -1208,9 +1202,8 @@ func TestExportWarnsOnSharedVoicePointer(t *testing.T) {
 }
 
 // FuzzExport feeds arbitrary FZF bytes to Export and asserts that any
-// success path produces an SFZ that the converter can re-parse, with one
-// region per voice slot the original FZF declared. Tightens the surface
-// where the slot-order alignment bug lived.
+// success path produces an SFZ the converter can re-parse, with one region
+// per voice slot the original FZF declared.
 func FuzzExport(f *testing.F) {
 	for _, names := range [][]string{
 		{"A"},

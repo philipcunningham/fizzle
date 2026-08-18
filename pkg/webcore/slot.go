@@ -102,10 +102,9 @@ func (s *Session) SetSlotParamOption(slot int, fieldID, option string) (Snapshot
 
 // SetSlotGeneration sets an instrument voice slot's generation window
 // (R14's generation start and end) in voice-relative frames, clamped to
-// the slot's own frame count. The cells hold absolute sample addresses
-// into the shared audio area, so the write rebases exactly as
-// SetSlotLoop does; without the rebase a window written as frames would
-// address another voice's samples.
+// the slot's own frame count. The cells hold absolute addresses, so the
+// write rebases; without that a window written as frames would address
+// another voice's samples.
 func (s *Session) SetSlotGeneration(slot, startFrame, endFrame int) (Snapshot, *Error) {
 	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Patch, error) {
 		base, waveEnd := slotWaveBounds(hdr)

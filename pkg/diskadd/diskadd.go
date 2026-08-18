@@ -56,8 +56,7 @@ func Add(imagePath, filePath string, diskNum uint8) error {
 		return fmt.Errorf("diskadd: %w", err)
 	}
 
-	// Program files have no embedded name field; derive it from the host
-	// filepath basename (strip extension, uppercase, truncate to 12).
+	// Program files carry no name field; derive it from the host filepath.
 	if fi.fileType == disk.TypeProgram {
 		fi.name = programNameFromPath(filePath)
 	}
@@ -134,10 +133,9 @@ func addToImage(img *disk.Image, fileData []byte, name [disk.LabelSize]byte, fil
 	}
 
 	// Reserve the directory slot before allocating any sectors or mutating
-	// the CAT. If the directory is full, returning ErrDirFull now leaves the
-	// in-memory image untouched; if the check came after AllocateSectors and
-	// SetSector, the CAT and data sectors would already be dirty even though
-	// no directory entry could be written.
+	// the CAT, so ErrDirFull leaves the in-memory image untouched. After
+	// AllocateSectors and SetSector, the CAT and data sectors would already
+	// be dirty with no directory entry to point at them.
 	dirOff, err := img.NextFreeDirSlot()
 	if err != nil {
 		return fmt.Errorf("diskadd: %w", err)
@@ -198,17 +196,15 @@ func ReplaceOnImage(imagePath string, oldName string, fileData []byte, diskNum u
 // writing to disk. This allows the caller to batch multiple replacements
 // before writing, enabling transactional semantics across multiple images.
 //
-// The image is mutated transactionally: if any step fails (file not found,
-// detect failure, disk full, directory full, etc.) the image bytes are
-// restored to their pre-call state. This means callers may safely continue
-// using the *Image value after an error, e.g. to attempt a different
-// replacement or to write a sibling image without inheriting a half-modified
-// CAT/directory.
+// The mutation is transactional: if any step fails (file not found, detect
+// failure, disk full, directory full) the image bytes are restored to their
+// pre-call state, so callers can keep using the *Image after an error, say
+// to try a different replacement or write a sibling image, without
+// inheriting a half-modified CAT or directory.
 func ReplaceInMemory(img *disk.Image, oldName string, fileData []byte, diskNum uint8) (retErr error) {
-	// Snapshot the full image so we can roll back any partial mutation on
-	// error. Image is 1.25 MiB so the allocation is cheap relative to the
-	// rest of the work, and using copy() restores in-place without
-	// reallocating the caller's *Image.
+	// Snapshot the full image to roll back a partial mutation on error. At
+	// 1.25 MiB the allocation is cheap next to the rest of the work, and
+	// copy() restores in place without reallocating the caller's *Image.
 	snapshot := append([]byte(nil), img.Bytes()...)
 	defer func() {
 		if retErr != nil {
@@ -236,8 +232,7 @@ func buildDIS(disSector int, sectors []int, nbank, nvoice, nwave int) disk.DisSe
 		return dis
 	}
 
-	// Prepend the DIS sector to form the first extent: the FZ-1 expects
-	// ss0 to point at the DIS sector itself, with data starting at ss0+1.
+	// Prepend the DIS sector so it becomes ss0 of the first extent.
 	allSectors := append([]int{disSector}, sectors...)
 
 	start := allSectors[0]
@@ -288,17 +283,15 @@ func sumBankBSteps(fileData []byte, nbank int) int {
 	return total
 }
 
-// hasMultiDiskBoundaryVoice reports whether the voice area in fileData
-// contains at least one plausible voice slot whose wavst (cumulative sample
-// address) points past the locally-present audio area. Such a slot is the
-// corroborating evidence that the bank sector's BankTotalWaveOffset marker
-// reflects a real disk-1-of-2 split rather than garbage.
+// hasMultiDiskBoundaryVoice reports whether the voice area in fileData holds
+// at least one plausible voice slot whose wavst (cumulative sample address)
+// points past the local audio area. Such a slot corroborates the bank
+// sector's BankTotalWaveOffset marker as a real disk-1-of-2 split rather
+// than garbage.
 //
-// The walk mirrors fzfinfo.Parse: only IsPlausibleVoiceSlot candidates are
-// considered (NoSound placeholders and audio-bytes-that-happen-to-look-like-a-
-// slot are skipped), and the comparison is wavst * BytesPerSample >=
-// localAudioBytes; the slot's first sample lives at or beyond the end of
-// the audio area present on this disk, so its audio must be on disk 2.
+// The walk mirrors fzfinfo.Parse: only IsPlausibleVoiceSlot candidates count,
+// and wavst * BytesPerSample >= localAudioBytes means the slot's first sample
+// sits at or past the end of this disk's audio, so its audio is on disk 2.
 func hasMultiDiskBoundaryVoice(fileData []byte, voiceAreaStart, localAudioBytes, nvoice int) bool {
 	for i := range nvoice {
 		off := disk.VoiceSlotOffset(voiceAreaStart, i)
@@ -320,9 +313,8 @@ func hasMultiDiskBoundaryVoice(fileData []byte, voiceAreaStart, localAudioBytes,
 // programNameFromPath derives the 12-byte on-disk directory name for a
 // Type-5 "Program" file from its host filepath. Programs carry no name
 // field in the file itself, so the on-disk name comes from the input file:
-// take the basename, strip the extension, uppercase it, truncate to 12,
-// and space-pad. e.g. "DEMO.bin" -> "DEMO", "verylongname.bin" ->
-// "VERYLONGNAME", "evenlongername.bin" -> "EVENLONGERNA".
+// take the basename, strip the extension, uppercase it, truncate to 12, and
+// space-pad, so "evenlongername.bin" becomes "EVENLONGERNA".
 func programNameFromPath(filePath string) [disk.LabelSize]byte {
 	base := filepath.Base(filePath)
 	base = strings.TrimSuffix(base, filepath.Ext(base))
@@ -352,16 +344,15 @@ func detectFile(fileData []byte) (fileInfo, error) {
 	// A Type-5 "Program" file (FZ-1 expanded software, loaded at 0:6000h)
 	// starts with a fixed 14-byte preamble: near-CALL to main, RETF back to
 	// the firmware, plus a BRK 3 / INT 3 trampoline for ROM-call dispatch.
-	// IsPlausibleProgramHeader checks the signature. The on-disk name is
-	// not stored in the file itself, so detectFile leaves it zero. Add()
-	// fills it from the host filepath basename. AddBytes callers pass an
-	// explicit name and bypass detection entirely.
+	// The file stores no name, so detectFile leaves it zero and Add fills it
+	// from the host filepath basename. AddBytes callers pass an explicit
+	// name and skip detection entirely.
 	if disk.IsPlausibleProgramHeader(fileData) {
 		return fileInfo{fileType: disk.TypeProgram}, nil
 	}
 
-	// A voice file has a printable 12-byte name at offset 0xb2 and a valid
-	// sample rate index (0, 1, or 2) at offset 0xb1.
+	// A voice file has a printable 12-byte name at 0xb2 and a valid sample
+	// rate index at 0xb1.
 	if disk.IsPlausibleVoiceHeader(fileData) {
 		var fi fileInfo
 		copy(fi.name[:], fileData[disk.VoiceNameOffset:disk.VoiceNameOffset+disk.LabelSize])
@@ -371,7 +362,6 @@ func detectFile(fileData []byte) (fileInfo, error) {
 		return fi, nil
 	}
 
-	// Fall back to full dump.
 	fi := fileInfo{
 		fileType: disk.TypeFullDump,
 		name:     disk.PadLabel(disk.FullDumpName),
@@ -384,12 +374,11 @@ func detectFile(fileData []byte) (fileInfo, error) {
 	if len(fileData) >= disk.SectorSize {
 		bstep0 := int(binary.LittleEndian.Uint16(fileData[disk.BankVoiceCountOffset : disk.BankVoiceCountOffset+2]))
 		if bstep0 > 0 && bstep0 <= disk.MaxVoices {
-			// Real-world FZFs can carry up to 8 bank sectors (e.g. the
-			// factory Clarinet.fzf has 4). Walking the bank-sector chain
-			// gives the correct bn for the DIS tail; hardcoding 1 would
-			// leave the firmware reading only bank 0 of a multi-bank dump.
-			// nvoice is the total across banks (each bank's bstep), since
-			// the voice area holds one slot per bstep entry per bank.
+			// Real-world FZFs carry up to 8 bank sectors (the factory
+			// Clarinet.fzf has 4), so walk the chain: a hardcoded bn of 1
+			// leaves the firmware reading only bank 0 of a multi-bank dump.
+			// nvoice sums each bank's bstep, since the voice area holds one
+			// slot per bstep entry per bank.
 			fi.nbank = fzutil.CountBankSectors(fileData)
 			fi.nvoice = sumBankBSteps(fileData, fi.nbank)
 			voiceSectors := disk.VoiceAreaSectors(fi.nvoice)
@@ -423,12 +412,10 @@ func detectFile(fileData []byte) (fileInfo, error) {
 // at this offset so disk 1's DIS tail wn reflects total instrument size and
 // the sampler prompts for disk 2.
 //
-// The FZ-1 firmware does not always write BankTotalWaveOffset, so this field
+// The FZ-1 firmware doesn't always write BankTotalWaveOffset, so the field
 // is frequently garbage in real-world FZFs. The corroboration rule mirrors
-// fzfinfo.Parse; see llm-wiki/topics/multi-disk-dumps.md.
-//
-// Idempotent: a no-op when no marker is present, when the marker doesn't
-// exceed the local wave count, or when no boundary voice corroborates it.
+// fzfinfo.Parse; see llm-wiki/topics/multi-disk-dumps.md. Both detection
+// paths call this, so it is a no-op whenever the evidence falls short.
 func applyMultiDiskMarker(fileData []byte, fi *fileInfo) {
 	if fi.nbank == 0 || fi.nvoice == 0 {
 		return
@@ -463,18 +450,15 @@ func applyMultiDiskMarker(fileData []byte, fi *fileInfo) {
 
 // heuristicDetectFile scans sector-by-sector through an FZF file to
 // reconstruct its layout (bank count, voice count, wave count) from content
-// signatures. This is needed for legacy FZF files found on the internet
-// where the bstep field is zeroed or corrupt.
+// signatures, for legacy FZF files found on the internet whose bstep field
+// is zeroed or corrupt.
 //
-// The FZF physical layout is always: [banks...] [voices...] [audio...].
-// The scan is a three-phase state machine that advances through these
-// regions in order: once we see a voice sector, we stop counting banks;
-// once we see an audio sector, we stop counting voices.
-//
-// Bank sectors are identified by a printable 12-byte name at BankNameOffset.
-// Voice sectors contain up to 4 packed 256-byte voice headers; we check
-// the first slot's name at VoiceNameOffset. Audio sectors are everything
-// after the voice region ends.
+// The FZF physical layout is always banks, then voices, then audio, so the
+// scan is a three-phase state machine: the first voice sector stops the bank
+// count, and the first audio sector stops the voice count. A bank sector
+// carries a printable 12-byte name at BankNameOffset; a voice sector packs
+// up to 4 256-byte voice headers, checked via the first slot's name at
+// VoiceNameOffset; everything after the voice region is audio.
 func heuristicDetectFile(data []byte, fi fileInfo) fileInfo {
 	const (
 		phaseBanks  = iota // scanning bank sectors
@@ -501,11 +485,10 @@ func heuristicDetectFile(data []byte, fi fileInfo) fileInfo {
 
 		case phaseVoices:
 			if isVoiceSector(sec) {
-				// countVoicesInSector can add up to VoicesPerSector (4),
-				// so guard against overshooting disk.MaxVoices (64): a
-				// pre-add guard of `nvoice < MaxVoices` would allow
-				// 63 -> 67. Transition to phaseAudio once the next
-				// sector would exceed the cap.
+				// countVoicesInSector adds up to VoicesPerSector (4) at a
+				// time, so the cap has to be checked post-add: a pre-add
+				// `nvoice < MaxVoices` guard lets 63 climb to 67. Move to
+				// phaseAudio once the next sector would exceed the cap.
 				if fi.nvoice+countVoicesInSector(sec) <= disk.MaxVoices {
 					fi.nvoice += countVoicesInSector(sec)
 					continue

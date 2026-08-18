@@ -329,13 +329,11 @@ func TestFreeSectors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Fresh unformatted image: all sectors free.
 	initial := img.FreeSectors()
 	if initial != SectorCount-2 {
 		t.Errorf("initial free sectors: got %d, want %d", initial, SectorCount-2)
 	}
 
-	// Allocate 5 sectors; free count should drop by 5.
 	if _, err := img.AllocateSectors(5); err != nil {
 		t.Fatal(err)
 	}
@@ -352,13 +350,11 @@ func TestAllocateSectorsDiskFull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Allocate all available sectors.
 	free := img.FreeSectors()
 	_, err = img.AllocateSectors(free)
 	if err != nil {
 		t.Fatalf("allocating all %d sectors: %v", free, err)
 	}
-	// One more should fail.
 	_, err = img.AllocateSectors(1)
 	if err == nil {
 		t.Error("expected error when disk is full")
@@ -372,7 +368,6 @@ func TestDirectoryFull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Fill all 64 directory slots.
 	for i := range MaxDirEntries {
 		slot, err := img.NextFreeDirSlot()
 		if err != nil {
@@ -382,7 +377,6 @@ func TestDirectoryFull(t *testing.T) {
 		entry := DirEntry{Name: name, FileType: TypeVoice, DisSector: uint16(i + 2)}
 		copy(img.Bytes()[slot:], EncodeDirEntry(entry))
 	}
-	// 65th should fail.
 	_, err = img.NextFreeDirSlot()
 	if err == nil {
 		t.Error("expected error when directory is full")

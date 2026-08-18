@@ -59,8 +59,7 @@ func benchSession(b *testing.B, voices [][]byte, groups []voicebuild.Keygroup) *
 // BenchmarkSlotEditFullInstrument measures one scalar edit inside a
 // gesture on a 64 voice instrument that nearly fills the disk: the knob
 // drag hot path, where the UI fires an edit per pointer move. Each edit
-// copies the image and rebuilds the snapshot, so this is the cost the
-// review flagged.
+// copies the image and rebuilds the snapshot.
 func BenchmarkSlotEditFullInstrument(b *testing.B) {
 	voices, groups := benchVoices(b, 64, 7000)
 	s := benchSession(b, voices, groups)
