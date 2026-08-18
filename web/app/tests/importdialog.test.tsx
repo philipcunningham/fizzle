@@ -356,3 +356,16 @@ describe("imports reveal what arrived", () => {
     });
   });
 });
+
+// Initial focus in a confirm dialog belongs to the safe action: a
+// habitual Enter must never be the destructive one.
+describe("confirm dialogs focus the safe action", () => {
+  it("the delete confirmation arrives focused on Cancel", async () => {
+    await openInstrumentDisk();
+    fireEvent.contextMenu(screen.getByRole("button", { name: /full/ }));
+    await screen.findByText("Delete the instrument?");
+    await waitFor(() => {
+      expect(document.activeElement?.textContent).toBe("Cancel");
+    });
+  });
+});
