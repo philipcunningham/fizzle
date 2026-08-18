@@ -28,12 +28,22 @@ import (
 type Error struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// Item names the offending file, voice, or field where one
+	// exists, the way the spec's contract section promises.
+	Item string `json:"item,omitempty"`
 }
 
 func (e *Error) Error() string { return e.Code + ": " + e.Message }
 
 func errf(code, format string, args ...any) *Error {
 	return &Error{Code: code, Message: fmt.Sprintf(format, args...)}
+}
+
+// errItemf is errf with the offending item named.
+func errItemf(code, item, format string, args ...any) *Error {
+	e := errf(code, format, args...)
+	e.Item = item
+	return e
 }
 
 // Envelope codes shared across calls; the TypeScript boundary matches
@@ -268,7 +278,7 @@ func voiceParams(vp *fzvinfo.VoiceParams, voiceBytes []byte) map[string]any {
 func (s *Session) SetParamNumber(fileName, fieldID string, value int) (Snapshot, *Error) {
 	field, ok := schemaField(fieldID)
 	if !ok || field.Kind == kindSelect {
-		return s.Snapshot(), errf("invalid-field", "%q is not a numeric schema field", fieldID)
+		return s.Snapshot(), errItemf("invalid-field", fieldID, "%q is not a numeric schema field", fieldID)
 	}
 	if value < field.Min {
 		value = field.Min
@@ -285,7 +295,7 @@ func (s *Session) SetParamNumber(fileName, fieldID string, value int) (Snapshot,
 func (s *Session) SetParamOption(fileName, fieldID, option string) (Snapshot, *Error) {
 	field, ok := schemaField(fieldID)
 	if !ok || field.Kind != kindSelect {
-		return s.Snapshot(), errf("invalid-field", "%q is not a select schema field", fieldID)
+		return s.Snapshot(), errItemf("invalid-field", fieldID, "%q is not a select schema field", fieldID)
 	}
 	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Patch, error) {
 		return optionPatches(fieldID, option, voiceBytes)

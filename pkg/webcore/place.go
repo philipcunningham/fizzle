@@ -408,7 +408,7 @@ func convertWAV(filename string, wavData []byte, rate uint32, channel string) ([
 	}
 	voice, err := voiceimport.ImportBytes(wavData, fzutil.VoiceName(filename), rate, ch)
 	if err != nil {
-		return nil, errf("invalid-wav", "%v", err)
+		return nil, errItemf("invalid-wav", filename, "%v", err)
 	}
 	return voice, nil
 }

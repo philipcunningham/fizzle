@@ -20,11 +20,6 @@ import type {
   FolderPayload,
   ImportWavPayload,
   PairPayload,
-  PeaksPayload,
-  SetEnvelopePayload,
-  SetGenerationPayload,
-  SetLoopPayload,
-  SetLoopSelectPayload,
   WorkerRequest,
   WorkerResponse,
 } from "./worker";
@@ -127,62 +122,14 @@ export function createWasmCore(): Core {
     snapshot: () => call<Snapshot>("snapshot"),
     newDisk: (label) => call<Snapshot>("newDisk", label),
     openImage: (bytes) => {
-      const buffer = bytes.buffer as ArrayBuffer;
+      const buffer = wholeBytes(bytes);
       return call<Snapshot>("openImage", buffer, [buffer]);
     },
-    importWav: (filename, bytes, rate, channel) => {
-      const payload: ImportWavPayload = {
-        filename,
-        buffer: bytes.buffer as ArrayBuffer,
-        rate,
-        channel,
-      };
-      return call<Snapshot>("importWav", payload, [payload.buffer]);
-    },
     schema: () => call<SchemaField[]>("schema"),
-    setParamNumber: (file, field, value) =>
-      call<Snapshot>("setParamNumber", { file, field, value }),
-    setParamOption: (file, field, option) =>
-      call<Snapshot>("setParamOption", { file, field, option }),
     undo: () => call<Snapshot>("undo"),
     redo: () => call<Snapshot>("redo"),
     beginGesture: () => call<Snapshot>("beginGesture"),
     commitGesture: () => call<Snapshot>("commitGesture"),
-    peaks: (file, start, end, buckets) => {
-      const payload: PeaksPayload = { file, start, end, buckets };
-      // The worker sends the raw bytes; wrap them as int16 pairs here.
-      return call<{ buffer: ArrayBuffer; byteOffset: number; byteLength: number }>(
-        "peaks",
-        payload,
-      ).then((result) =>
-        result.ok
-          ? {
-              ok: true as const,
-              value: new Int16Array(
-                result.value.buffer,
-                result.value.byteOffset,
-                result.value.byteLength / 2,
-              ),
-            }
-          : result,
-      );
-    },
-    setLoop: (file, index, start, end) => {
-      const payload: SetLoopPayload = { file, index, start, end };
-      return call<Snapshot>("setLoop", payload);
-    },
-    setGeneration: (file, start, end) => {
-      const payload: SetGenerationPayload = { file, start, end };
-      return call<Snapshot>("setGeneration", payload);
-    },
-    setLoopSelect: (file, sustain, release) => {
-      const payload: SetLoopSelectPayload = { file, sustain, release };
-      return call<Snapshot>("setLoopSelect", payload);
-    },
-    setEnvelope: (file, which, sustain, end, rates, stops) => {
-      const payload: SetEnvelopePayload = { file, which, sustain, end, rates, stops };
-      return call<Snapshot>("setEnvelope", payload);
-    },
     setAreaField: (bank, area, field, value) =>
       call<Snapshot>("setAreaField", { bank, area, field, value }),
     renameBank: (bank, name) => call<Snapshot>("renameBank", { bank, name }),
@@ -194,7 +141,6 @@ export function createWasmCore(): Core {
     setEffectCell: (controller, target, value) =>
       call<Snapshot>("setEffectCell", [controller, target, value]),
     setBendRange: (value) => call<Snapshot>("setBendRange", [value]),
-    auditionPCM: (file) => auditionCall("auditionPCM", file),
     auditionSlot: (slot) => auditionCall("auditionSlot", [slot]),
     exportImage: () => {
       return call<{ [index: number]: number; length: number }>("exportImage").then((result) =>
@@ -215,7 +161,7 @@ export function createWasmCore(): Core {
       return call<Snapshot>("addVoice", payload, [payload.buffer]);
     },
     addBank: (bytes, slot) => {
-      const payload: AddBankPayload = { buffer: bytes.buffer as ArrayBuffer, slot };
+      const payload: AddBankPayload = { buffer: wholeBytes(bytes), slot };
       return call<Snapshot>("addBank", payload, [payload.buffer]);
     },
     importWavToInstrument: (filename, bytes, rate, channel) => {
@@ -231,7 +177,7 @@ export function createWasmCore(): Core {
       return call<Snapshot>("importWavToInstrument", payload, [payload.buffer]);
     },
     openImagePair: (a, b) => {
-      const payload: PairPayload = { a: a.buffer as ArrayBuffer, b: b.buffer as ArrayBuffer };
+      const payload: PairPayload = { a: wholeBytes(a), b: wholeBytes(b) };
       return call<Snapshot>("openImagePair", payload, [payload.a, payload.b]);
     },
     importSfz: (files, sfzPath, rate, fitToDisk, split, channel) => {
@@ -329,6 +275,15 @@ function folderPayload(
     buffers[name] = bytes.slice().buffer;
   }
   return { files: buffers, sfzPath, rate, fitToDisk, split, channel };
+}
+
+// A view narrower than its backing buffer must send only its own
+// bytes: posting the raw buffer would ship unrelated data and the
+// wrong length.
+function wholeBytes(bytes: Uint8Array): ArrayBuffer {
+  return bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+    ? (bytes.buffer as ArrayBuffer)
+    : bytes.slice().buffer;
 }
 
 // Structured clone hands the transferred buffer back as a Uint8Array,

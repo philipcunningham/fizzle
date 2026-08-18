@@ -148,11 +148,19 @@ describe("core boundary, main thread half", () => {
       payload: [2, 100, 900],
     });
 
-    void core.setGeneration("KICK", 40, 200);
-    expect(lastRequest(worker)).toMatchObject({
-      method: "setGeneration",
-      payload: { file: "KICK", start: 40, end: 200 },
-    });
+  });
+
+  // A subarray view must send only its own bytes: posting the backing
+  // buffer would ship unrelated data and the wrong image length.
+  it("normalises subarray views to their own bytes", () => {
+    const core = newCore();
+    const worker = activeWorker();
+    const backing = new Uint8Array(64);
+    const view = backing.subarray(8, 24);
+
+    void core.openImage(view);
+    const posted = lastRequest(worker).payload as ArrayBuffer;
+    expect(posted.byteLength).toBe(16);
   });
 
   // The dialog re-estimates on every radio change and then converts
@@ -226,10 +234,16 @@ describe("core worker", () => {
   it("answers core-unavailable when a call comes back empty", async () => {
     // A Go fatal error, an exhausted heap on a big import say, unwinds
     // the exported function and leaves it returning nothing.
-    const posted = await bootedWorker({ importWav: () => undefined });
+    const posted = await bootedWorker({ importWavToInstrument: () => undefined });
     const onmessage = self.onmessage as unknown as (event: { data: unknown }) => void;
 
-    onmessage({ data: { id: 11, method: "importWav", payload: { filename: "a.wav" } } });
+    onmessage({
+      data: {
+        id: 11,
+        method: "importWavToInstrument",
+        payload: { filename: "a.wav", buffer: new ArrayBuffer(4), rate: 18000, channel: "mix" },
+      },
+    });
 
     await vi.waitFor(() => {
       expect(posted).toHaveLength(1);
@@ -261,23 +275,16 @@ describe("core worker", () => {
         return { ok: true, value: null };
       };
     const posted = await bootedWorker({
-      setGeneration: record("setGeneration"),
       setSlotGeneration: record("setSlotGeneration"),
     });
     const onmessage = self.onmessage as unknown as (event: { data: unknown }) => void;
 
-    onmessage({
-      data: { id: 21, method: "setGeneration", payload: { file: "KICK", start: 40, end: 200 } },
-    });
     onmessage({ data: { id: 22, method: "setSlotGeneration", payload: [2, 100, 900] } });
 
     await vi.waitFor(() => {
-      expect(posted).toHaveLength(2);
+      expect(posted).toHaveLength(1);
     });
-    expect(calls).toEqual([
-      ["setGeneration", "KICK", 40, 200],
-      ["setSlotGeneration", 2, 100, 900],
-    ]);
+    expect(calls).toEqual([["setSlotGeneration", 2, 100, 900]]);
   });
 });
 
