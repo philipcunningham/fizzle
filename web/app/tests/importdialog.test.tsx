@@ -366,3 +366,23 @@ describe("confirm dialogs focus the safe action", () => {
     });
   });
 });
+
+// A refusal reads as a sentence, not a machine code plus a Go chain.
+describe("refusals read as words", () => {
+  it("shows the message alone, without the envelope code", async () => {
+    const inner = createFakeCore();
+    const core: Core = {
+      ...inner,
+      importWavToInstrument: () =>
+        Promise.resolve(err<Snapshot>("invalid-wav", "kick.wav holds no audio")),
+    };
+    await openDisk(core);
+    pickFiles([wavFile("kick.wav", 1, 18000, 500)]);
+    await screen.findByText("Import 1 WAV");
+    fireEvent.click(convertButton());
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("kick.wav holds no audio");
+    expect(alert.textContent).not.toContain("invalid-wav:");
+  });
+});

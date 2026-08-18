@@ -474,7 +474,9 @@ function Shell({ core }: { core: Core }) {
    */
   const report = (error: CoreError) => {
     if (isCoreCrash(error)) setFatal(error);
-    else fail(`${error.code}: ${error.message}`);
+    // The message is written for the user; the machine code is for
+    // the console and a bug report, not the status bar.
+    else fail(error.message);
   };
 
   const apply = (result: CoreResult<Snapshot>) => {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
@@ -518,5 +519,29 @@ func TestErrorEnvelopeNamesTheItem(t *testing.T) {
 	_, cerr = s.ImportWAVToInstrument("noise.wav", []byte{9, 9}, 18000, ChannelMix)
 	if cerr == nil || cerr.Item != "noise.wav" {
 		t.Errorf("import error item = %v, want noise.wav", cerr)
+	}
+}
+
+// A refusal a musician reads: no package prefixes, no format jargon,
+// and the way out named where one exists.
+func TestWAVRefusalsSpeakPlainly(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("PLAIN"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	_, cerr := s.ImportWAVToInstrument("junk.wav", []byte("not audio at all"), 18000, ChannelMix)
+	if cerr == nil {
+		t.Fatal("garbage bytes were accepted")
+	}
+	for _, leak := range []string{"voiceimport:", "wav:", "RIFF", "fzutil:"} {
+		if strings.Contains(cerr.Message, leak) {
+			t.Errorf("message %q leaks %q", cerr.Message, leak)
+		}
+	}
+	if !strings.Contains(cerr.Message, "junk.wav") {
+		t.Errorf("message %q does not name the file", cerr.Message)
+	}
+	if !strings.Contains(cerr.Message, "WAV") {
+		t.Errorf("message %q does not say what fizzle wanted", cerr.Message)
 	}
 }

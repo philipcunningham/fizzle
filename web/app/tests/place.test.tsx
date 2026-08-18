@@ -568,3 +568,15 @@ describe("a lone .sfz asks for its samples", () => {
     expect(screen.queryByText("SFZ conversion")).toBeNull();
   });
 });
+
+// The prompt asks for one thing, in one sentence: the copy the owner
+// settled on.
+describe("the sfz prompt's wording", () => {
+  it("asks for the samples folder and nothing else", async () => {
+    await openDisk();
+    pickFiles([new File(["<region> sample=x/y.wav\n"], "LEAD.sfz")]);
+    const copy = await screen.findByText(/lists samples fizzle cannot see yet/);
+    expect(copy.textContent).toContain("Pick the instrument's samples folder.");
+    expect(copy.textContent).not.toContain("or its");
+  });
+});

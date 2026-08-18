@@ -41,7 +41,7 @@ describe("a refused dialog action (E1)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-    await screen.findByText(/invalid-label/);
+    await screen.findByText(/ASCII only/);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -56,7 +56,7 @@ describe("a refused dialog action (E1)", () => {
     fireEvent.contextMenu(screen.getByRole("button", { name: /full/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
 
-    await screen.findByText(/in-use/);
+    await screen.findByText(/open elsewhere/);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -72,7 +72,7 @@ describe("a refused dialog action (E1)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Eject" }));
     fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
 
-    await screen.findByText(/busy/);
+    await screen.findByText(/conversion is still running/);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -96,7 +96,7 @@ describe("a refused dialog action (E1)", () => {
     pickFiles([new File([new Uint8Array(IMAGE_SIZE)], "OTHER.img")]);
     fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
 
-    await screen.findByText(/invalid-image/);
+    await screen.findByText(/not an FZ disk/);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

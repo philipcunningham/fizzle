@@ -15,6 +15,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/model"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
+	"github.com/philipcunningham/fizzle/pkg/wav"
 )
 
 // defaultLabel names disks the placement matrix creates implicitly
@@ -396,6 +397,35 @@ func placeholderSlot(d *dumpState) bool {
 	return d.header.NVoice == 1 && len(d.fzf) == d.audioStart && slotIsPlaceholder(d, 0)
 }
 
+// wavRefusal turns a WAV read failure into words a musician reads:
+// the file that failed, what fizzle wanted, and the way out where one
+// exists. The Go chain rides along in the envelope's detail for a bug
+// report, never in the message (the spec's contract section).
+func wavRefusal(filename string, err error) *Error {
+	say := func(format string, args ...any) *Error {
+		e := errItemf("invalid-wav", filename, format, args...)
+		e.Detail = err.Error()
+		return e
+	}
+	switch {
+	case errors.Is(err, wav.ErrNotRIFF), errors.Is(err, wav.ErrNotWAVE),
+		errors.Is(err, wav.ErrMissingFmt), errors.Is(err, wav.ErrDataBeforeFmt):
+		return say("%s is not a WAV file fizzle can read; export it as a WAV and try again", filename)
+	case errors.Is(err, wav.ErrMissingData), errors.Is(err, wav.ErrNoSamples):
+		return say("%s holds no audio", filename)
+	case errors.Is(err, wav.ErrUnsupportedPCM), errors.Is(err, wav.ErrBitDepth):
+		return say("%s is not 16 bit PCM; export it as a 16 bit WAV and try again", filename)
+	case errors.Is(err, wav.ErrChannelCount):
+		return say("%s carries more than two channels; export it as mono or stereo", filename)
+	case errors.Is(err, wav.ErrSampleRate):
+		return say("%s declares a sample rate fizzle cannot read", filename)
+	case errors.Is(err, wav.ErrTooManySamples), errors.Is(err, wav.ErrDataTooLarge):
+		return say("%s is too large to load", filename)
+	default:
+		return say("%s could not be read as a WAV", filename)
+	}
+}
+
 // convertWAV maps the boundary channel name and runs the CLI's WAV to
 // voice conversion; shared by ImportWAV and ImportWAVToInstrument.
 func convertWAV(filename string, wavData []byte, rate uint32, channel string) ([]byte, *Error) {
@@ -408,7 +438,7 @@ func convertWAV(filename string, wavData []byte, rate uint32, channel string) ([
 	}
 	voice, err := voiceimport.ImportBytes(wavData, fzutil.VoiceName(filename), rate, ch)
 	if err != nil {
-		return nil, errItemf("invalid-wav", filename, "%v", err)
+		return nil, wavRefusal(filename, err)
 	}
 	return voice, nil
 }
