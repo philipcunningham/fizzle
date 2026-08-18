@@ -100,8 +100,7 @@ func (m *Model) Undo() error {
 	}
 	top := m.undo[len(m.undo)-1]
 	m.undo = m.undo[:len(m.undo)-1]
-	// Reverse the patches in reverse order: each patch's Old is written
-	// back to where its New had landed.
+	// Walk backwards, writing each patch's Old back where its New landed.
 	for i := len(top) - 1; i >= 0; i-- {
 		p := top[i]
 		copy(m.bytes[p.Offset:p.Offset+len(p.Old)], p.Old)
@@ -128,10 +127,10 @@ func (m *Model) Redo() error {
 	return nil
 }
 
-// ClearHistory empties the undo/redo stacks and clears the dirty
-// flag. Used by callers that wrote the buffer to disk via a path
-// the Model itself doesn't know about (e.g., the App's .img-aware
-// save path that has to splice m.bytes into a disk image first).
+// ClearHistory empties the undo and redo stacks and clears the dirty
+// flag. Callers use it after writing the buffer to disk by a path the
+// Model doesn't know about, such as an .img-aware save that splices
+// m.bytes into a disk image first.
 func (m *Model) ClearHistory() {
 	m.undo = nil
 	m.redo = nil
@@ -144,11 +143,10 @@ func (m *Model) ClearHistory() {
 // stack, and a cancelled edit must not be re-applied by a later Redo.
 func (m *Model) ClearRedo() { m.redo = nil }
 
-// Replace swaps the model's bytes for an entirely new buffer. Used
-// when an operation cannot be expressed as a fixed-size patch (e.g.,
-// growing the container to append PCM for a newly assigned voice).
-// Clears the undo and redo stacks because patch offsets no longer
-// map onto the new buffer, and marks the model dirty.
+// Replace swaps the model's bytes for a new buffer, for operations no
+// fixed-size patch can express, such as growing the container to append
+// PCM for a newly assigned voice. It clears both stacks, since patch
+// offsets no longer map onto the new buffer, and marks the model dirty.
 func (m *Model) Replace(newBytes []byte) {
 	m.bytes = newBytes
 	m.undo = nil
@@ -156,10 +154,9 @@ func (m *Model) Replace(newBytes []byte) {
 	m.dirty = true
 }
 
-// Save writes the current bytes to the given path atomically (writes
-// to path+".tmp" then renames). On success clears both stacks and
-// the dirty flag, and updates the model's path. Returns an error if
-// the write fails.
+// Save writes the current bytes to path atomically, through path+".tmp"
+// and a rename. On success it clears both stacks and the dirty flag, and
+// updates the model's path.
 func (m *Model) Save(path string) error {
 	if path == "" {
 		return errors.New("model: Save: path must not be empty")

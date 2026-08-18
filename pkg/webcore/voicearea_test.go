@@ -87,7 +87,7 @@ func assertDocumentUntouched(t *testing.T, s *Session, before []byte) {
 	}
 }
 
-// B1. Replacing a bank with one holding fewer areas lowers the summed
+// Replacing a bank with one holding fewer areas lowers the summed
 // bstep values, so the voice area has to give its sectors back with
 // them. Without that the walked count collapses, the audio start moves
 // back a sector, and the other banks' vp[] entries dangle past the new
@@ -146,10 +146,9 @@ func TestAddBankReplacingALargerBankGivesTheSlotsBack(t *testing.T) {
 	assertNoDanglingAreas(t, s)
 }
 
-// B1b. The plural reserve dropped the equality guard its singular
-// sibling has, so on a dump whose summed bsteps already run above the
-// walked count it cleared slots anyway, turning the bytes that were
-// stopping the walk into countable empty slots.
+// A bank landing on a dump whose summed bsteps already run above the
+// walked count must reserve no slots: clearing them turns the bytes
+// that were stopping the walk into countable empty slots.
 func TestAddBankOnASharedVoiceDumpKeepsTheAudioWhereItIs(t *testing.T) {
 	s := sharedVoiceSession(t)
 	before := readDumpGeometry(t, s)
@@ -167,9 +166,9 @@ func TestAddBankOnASharedVoiceDumpKeepsTheAudioWhereItIs(t *testing.T) {
 	assertVoiceAreaInvariant(t, before, after, nil)
 }
 
-// B1c. A fresh instrument's placeholder slot carries root 0, and the
-// guard on the voice's own root only caught values above the MIDI
-// range, so it never fired. Every note then pitches from C-1.
+// A fresh instrument's placeholder slot carries root 0, which the guard
+// on the voice's own root has to catch as well as roots above the MIDI
+// range. Taken at face value it pitches every note from C-1.
 func TestAddAreaOnAFreshInstrumentPitchesFromMiddleC(t *testing.T) {
 	s := NewSession()
 	if _, cerr := s.NewInstrument("EMPTY"); cerr != nil {
@@ -195,10 +194,10 @@ func TestAddAreaOnAFreshInstrumentPitchesFromMiddleC(t *testing.T) {
 	}
 }
 
-// B1d. When the slot the deleted area gave up is still played by
-// another area, the shrink used to compact the highest unreferenced
-// slot instead, which is a real named voice the UI lists as
-// unreferenced and R13's Map button exists to rescue.
+// When the slot the deleted area gave up is still played by another
+// area, the shrink must not compact the highest unreferenced slot
+// instead: that is a real named voice the UI lists as unreferenced and
+// R13's Map button exists to rescue.
 func TestDeleteAreaDoesNotDropAnUnrelatedVoice(t *testing.T) {
 	s, names := nVoiceSession(t, 4)
 	// Point area 1 at slot 3, which leaves slot 1's voice referenced by
@@ -224,10 +223,10 @@ func TestDeleteAreaDoesNotDropAnUnrelatedVoice(t *testing.T) {
 	assertVoiceAreaInvariant(t, before, after, []string{names[0], names[2], names[3]})
 }
 
-// B1e. Duplicate clones a voice header into a fresh slot, so it moves
-// the walked count and has to go through the same helper. On a dump
-// whose bytes are what stop the walk, the clone lands on the bytes
-// that were stopping it and the reader walks on into the audio.
+// Duplicate clones a voice header into a fresh slot, so it moves the
+// walked count and has to go through the same helper. On a dump whose
+// bytes are what stop the walk, the clone lands on those bytes and the
+// reader walks on into the audio.
 func TestDuplicateAreaOnASharedVoiceDumpKeepsTheAudioWhereItIs(t *testing.T) {
 	s := sharedVoiceSession(t)
 	before := readDumpGeometry(t, s)

@@ -39,17 +39,15 @@ const (
 	outputBytesPerSample = 2
 	maxWAVSamples        = math.MaxInt32 / outputBytesPerSample
 
-	// wavHeaderSize is the RIFF file size field value for a headeronly WAV
-	// (no audio data): total header bytes (44) minus the 8-byte RIFF preamble.
-	// Used to compute the FileSize field: wavHeaderSize + dataSize + smplChunkSize.
+	// wavHeaderSize is the RIFF file size field for a WAV with no audio data:
+	// the 44 header bytes minus the 8-byte RIFF preamble. FileSize is
+	// wavHeaderSize + dataSize + smplChunkSize.
 	wavHeaderSize = 36
 
-	// signBit24 is the sign bit position for 24-bit PCM samples,
-	// used during sign extension when decoding 24-bit audio to int16.
+	// signBit24 is the sign bit of a 24-bit PCM sample.
 	signBit24 = 0x800000
 
-	// mask24 is the 24-bit bitmask used for sign extension
-	// when decoding 24-bit PCM audio to int16.
+	// mask24 covers the value bits when sign-extending 24-bit PCM to int16.
 	mask24 = 0xFFFFFF
 
 	nanosPerSecond      = 1_000_000_000
@@ -60,8 +58,7 @@ const (
 	loopRecEndOffset    = 12
 )
 
-// Sentinel errors. Wrap with %w; callers should use errors.Is to identify
-// a specific failure mode rather than matching error message substrings.
+// Sentinel errors. Wrap with %w; match with errors.Is, not on message text.
 var (
 	ErrNotRIFF        = errors.New("wav: not a RIFF file")
 	ErrNotWAVE        = errors.New("wav: not a WAVE file")
@@ -145,12 +142,10 @@ func (f *File) Duration() float64 {
 	return float64(len(f.Samples)) / float64(f.SampleRate)
 }
 
-// Read decodes a WAV file from r. Supported formats: 16, 24, and 32-bit
-// mono OR stereo PCM; all are decoded to int16. For stereo input, the
-// returned File holds interleaved frames in Samples and Channels=2;
-// callers select / mix channels via ExtractChannel / MixChannels.
-// The reader is limited to 256 MB to prevent unbounded memory
-// allocation on untrusted input.
+// Read decodes a WAV file from r. Supported formats: 16, 24, and 32-bit mono
+// or stereo PCM, all decoded to int16. Stereo comes back as interleaved
+// frames with Channels=2 (see File). The reader is limited to 256 MB so
+// untrusted input can't drive an unbounded allocation.
 func Read(r io.Reader) (*File, error) {
 	lr := &io.LimitedReader{R: r, N: limits.MaxRead}
 
@@ -184,11 +179,10 @@ func Read(r io.Reader) (*File, error) {
 		}
 		id := string(chunkHdr[0:4])
 		size := binary.LittleEndian.Uint32(chunkHdr[4:8])
-		// Reject pathological chunk sizes up-front: the LimitedReader caps us
-		// at 256 MB anyway, and anything larger guarantees we cannot satisfy
-		// the chunk. Returning a clean error here also avoids uint32 overflow
-		// when computing the padded length below (0xFFFFFFFF + 1 wraps to 0
-		// and causes misaligned parsing of subsequent chunks).
+		// Reject pathological chunk sizes up front: the LimitedReader caps
+		// reads at 256 MB, so a larger chunk can never be satisfied. It also
+		// avoids uint32 overflow in the padded length below, where
+		// 0xFFFFFFFF + 1 wraps to 0 and misaligns every later chunk.
 		if size > limits.MaxRead {
 			return nil, fmt.Errorf("%w: chunk %q size %d exceeds limit", ErrChunkSize, id, size)
 		}
@@ -271,12 +265,10 @@ func Read(r io.Reader) (*File, error) {
 	if len(samples) == 0 {
 		return nil, ErrNoSamples
 	}
-	// Validate SMPL loop points against the actual sample count. A bad
-	// loop record should not break the whole import: clear the fields and
-	// log a warning so callers see a clean (LoopStart, LoopEnd) = (-1, -1)
-	// instead of out-of-range indices that downstream code must each guard
-	// against. parseSmplChunk has already normalised inverted or zero-length
-	// loops to (-1, -1); we only need to check the upper bound here.
+	// A bad loop record shouldn't fail the whole read: clear the fields and
+	// warn, so callers see (-1, -1) rather than out-of-range indices every
+	// downstream site would have to guard. parseSmplChunk already normalised
+	// inverted and zero-length loops, so only the upper bound is left.
 	if loopStart >= 0 && loopEnd >= 0 {
 		if loopStart >= len(samples) || loopEnd > len(samples) || loopStart >= loopEnd {
 			log.Warn().
@@ -414,12 +406,9 @@ func Write(w io.Writer, f *File) error {
 	if len(f.Samples) > maxWAVSamples {
 		return ErrTooManySamples
 	}
-	// Stereo write is intentionally rejected. Read accepts stereo
-	// and exposes ExtractChannel / MixChannels for callers to
-	// reduce to mono; Write writes a mono RIFF header, so passing
-	// a stereo File here would produce a malformed WAV (mono
-	// header with 2x sample data). Callers must explicitly pick
-	// or mix channels before calling Write.
+	// Write emits a mono RIFF header, so a stereo File here would produce
+	// a malformed WAV: mono header, twice the sample data. Read accepts
+	// stereo, and callers reduce it with ExtractChannel or MixChannels.
 	if f.Channels >= stereoChannels {
 		return fmt.Errorf("%w: Write does not support stereo (channels=%d); use ExtractChannel or MixChannels first",
 			ErrChannelCount, f.Channels)
@@ -481,13 +470,11 @@ func writeSmplChunk(w io.Writer, f *File, hasLoop bool) error {
 	smplHdr := make([]byte, smplHeaderSize)
 	period := nanosPerSecond / f.SampleRate
 	binary.LittleEndian.PutUint32(smplHdr[smplPeriodOffset:smplPeriodOffset+4], period)
-	// MIDIUnityNote=0 is the "unset" sentinel; fall back to middle C (60)
-	// for back-compat with callers that haven't been updated to thread
-	// the voice's root note. Note 0 (C-1) is a valid MIDI value but is so
-	// unusual for a sampler root that conflating it with "unset" is
-	// safer than emitting it silently. Note: when hasLoop is false we
-	// only reach here because MIDIUnityNote != 0, so the sentinel branch
-	// is unreachable in the no-loop path.
+	// MIDIUnityNote=0 is the "unset" sentinel: fall back to middle C (60)
+	// for callers that don't thread the voice's root note through. Note 0
+	// (C-1) is legal MIDI but so unusual as a sampler root that conflating
+	// it with "unset" beats emitting it silently. Without a loop we only
+	// reach here because MIDIUnityNote != 0, so that path never falls back.
 	unityNote := uint32(f.MIDIUnityNote)
 	if unityNote == 0 {
 		unityNote = smplUnityNote

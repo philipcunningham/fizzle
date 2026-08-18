@@ -76,11 +76,10 @@ func FromImage(img *disk.Image, name string) ([]byte, error) {
 		return nil, fmt.Errorf("diskget: %q has no extents", name)
 	}
 
-	// FZ disks (whether written by the original sampler or by fizzle's
-	// diskadd.buildDIS) place the DIS sector itself as ss0 of the first
-	// extent, with the actual file payload starting at ss0+1. If we ever
-	// encounter a disk where the DIS sector is stored outside the first
-	// extent, extractFileBytes simply copies every extent byte (no skip).
+	// FZ disks, whether written by the sampler or by diskadd.buildDIS, put
+	// the DIS sector itself at ss0 of the first extent, with the payload
+	// starting at ss0+1. On a disk that stores the DIS outside the first
+	// extent, extractFileBytes copies every extent byte and skips nothing.
 	raw, err := extractFileBytes(img, dis, int(match.DisSector))
 	if err != nil {
 		return nil, fmt.Errorf("diskget: %w", err)
@@ -89,10 +88,9 @@ func FromImage(img *disk.Image, name string) ([]byte, error) {
 }
 
 func extractFileBytes(img *disk.Image, dis disk.DisSector, disSectorLoc int) ([]byte, error) {
-	// Walk the extent list once to compute the exact final byte count so the
-	// output buffer is allocated once. Then copy each sector via the no-copy
-	// SectorRef view: the bytes are still copied into raw, but the temporary
-	// 1024-byte per-sector allocation is eliminated.
+	// Walk the extents once for the exact final byte count so raw is
+	// allocated once, then copy through SectorRef to avoid a temporary
+	// 1024-byte allocation per sector.
 	total := 0
 	for i, ext := range dis.Extents {
 		start := int(ext[0])

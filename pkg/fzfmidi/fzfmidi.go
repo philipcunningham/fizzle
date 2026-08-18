@@ -10,9 +10,9 @@
 // affect only the voices on the matching channel. The FZ-1 documentation
 // calls this Area Mode.
 //
-// Set is the in-memory equivalent of one front-panel edit cycle for the
-// mchn array: validate names, mutate the bank-sector bytes, write atomically.
-// The hardware reads the same bytes at load time.
+// Set is one front-panel edit cycle over the mchn array done in memory:
+// validate names, mutate the bank-sector bytes, and write atomically. The
+// hardware reads the same bytes at load time.
 package fzfmidi
 
 import (
@@ -59,33 +59,30 @@ func Set(path string, voices []string, all bool, channel uint8) (Result, error) 
 		return Result{}, fmt.Errorf("fzfmidi: %w", err)
 	}
 
-	// Apply changes and collect results.
-	//
-	// Multi-bank dumps fan a single voice slot across several (bank, split)
-	// sites; the per-voice mchn byte the FZ-1 reads at note-on time lives in
-	// each bank's own sector, indexed by key-split position (spec §2-2,
-	// `mchn[64]`). Writing only data[BankMIDIRecvChanOffset+voiceSlot] would
-	// patch bank 0 alone and leave banks 1-7 on their old channels: silent
-	// failure mode for any voice that lives only in banks 1-7 (e.g. TECHNO's
-	// METAL-BELL referenced from bank 0 split 0 via vp[0]=11).
+	// Multi-bank dumps fan one voice slot across several (bank, split)
+	// sites, and the mchn byte the FZ-1 reads at note-on lives in each
+	// bank's own sector, indexed by key-split position (spec §2-2,
+	// `mchn[64]`). Writing only data[BankMIDIRecvChanOffset+voiceSlot]
+	// patches bank 0 and leaves banks 1 to 7 on their old channels, which
+	// fails silently for any voice living only in those banks (TECHNO's
+	// METAL-BELL, referenced from bank 0 split 0 via vp[0]=11).
 	chanByte := channel - 1 // stored 0-indexed
 	var result Result
 	for _, i := range targets {
 		sites := fzutil.FindBankSitesForVoice(data, hdr, i)
 		if len(sites) == 0 {
 			// Orphan voice header: no bank references the slot. fizzle's
-			// voicebuild never produces such a dump; hardware files might
-			// (or the file may be corrupt). Skip the write so we don't
-			// silently rewrite an unrelated byte.
+			// voicebuild never writes one, but hardware or corrupt files
+			// can. Skipping avoids rewriting an unrelated byte.
 			logger.Warn().
 				Int("voice", i+1).
 				Str("name", storedNames[i]).
 				Msg("fzfmidi: voice has no bank reference; skipping MIDI-channel write")
 			continue
 		}
-		// Old-channel report uses the first site (the deterministic owner).
-		// Different sites can carry different mchn bytes when the user
-		// hand-edited the dump; the rendered "from X" is the first one.
+		// Report the old channel from the first site, the deterministic
+		// owner. A hand-edited dump can carry a different mchn byte at
+		// each site.
 		firstOff := sites[0].BankIdx*disk.SectorSize + disk.BankMIDIRecvChanOffset + sites[0].SplitIdx
 		oldChan := data[firstOff] + 1
 		anyChange := false

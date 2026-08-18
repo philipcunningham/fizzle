@@ -14,10 +14,7 @@ export interface CoreError {
   detail?: string;
   /** The offending file, voice, or field, where one exists. */
   item?: string;
-  /**
-   * Set when the core can no longer answer. Nothing the user does in
-   * the page recovers it, so the only way on is a reload (E5).
-   */
+  /** Set when the core can no longer answer; only a reload moves on (E5). */
   fatal?: boolean;
 }
 
@@ -46,10 +43,7 @@ export const CALL_FAILED = "call-failed";
 export const CORE_CRASH_MESSAGE =
   "The core stopped responding, so the editor can't reach your document. Reload the page to start again.";
 
-/**
- * The error for a core that can no longer answer. The user reads the
- * sentence above; the reason rides along in detail (E5).
- */
+/** A core that can no longer answer; the reason rides in detail (E5). */
 export function coreCrashError(detail: string): CoreError {
   return { code: CORE_UNAVAILABLE, message: CORE_CRASH_MESSAGE, detail, fatal: true };
 }
@@ -97,12 +91,10 @@ export interface EnvelopeSnapshot {
 
 /**
  * The bespoke-editor surface of a voice: waveform extent, the
- * generation window, loops, envelopes.
- *
- * genStart and genEnd are R14's generation start and end, in
- * voice-relative sample frames like every other position here. They sit
- * outside the schema because their bounds are this voice's own frame
- * count, and a schema field declares one static range for every voice.
+ * generation window, loops, envelopes. Positions are voice-relative
+ * sample frames. genStart and genEnd are R14's generation window; they
+ * sit outside the schema because their bounds are this voice's own
+ * frame count, while a schema field declares one range for all voices.
  */
 export interface VoiceDetail {
   frames: number;
@@ -174,8 +166,8 @@ export interface InstrumentVoice {
   sharesAudio?: boolean;
   /**
    * Identifies the samples this slot plays. It changes only when the
-   * audio does, so decoded PCM and peaks can be cached against it
-   * rather than re-fetched on every parameter edit.
+   * audio does, so decoded PCM and peaks cache against it instead of
+   * re-fetching on every parameter edit.
    */
   audioKey?: string;
 }
@@ -231,17 +223,16 @@ export interface Snapshot {
   canUndo: boolean;
   canRedo: boolean;
   /**
-   * Set by commitGesture: whether the gesture landed a history entry.
-   * A press and release with no movement lands none, and must not mark
+   * Set by commitGesture: whether the gesture landed a history entry. A
+   * press and release with no movement lands none, so it must not mark
    * the document dirty.
    */
   gestureLanded?: boolean;
 }
 
 /**
- * The coarse boundary. Grows one slice at a time; every method
- * resolves to a CoreResult and never rejects, so a panic in the core
- * can't take the UI down with it.
+ * The coarse boundary. Every method resolves to a CoreResult and never
+ * rejects, so a panic in the core can't take the UI down with it.
  */
 export interface Core {
   snapshot(): Promise<CoreResult<Snapshot>>;
@@ -286,10 +277,9 @@ export interface Core {
   /** Both images of a split pair, in either order (R5). */
   openImagePair(a: Uint8Array, b: Uint8Array): Promise<CoreResult<Snapshot>>;
   /**
-   * SFZ conversion (R9): fit to disk or the two disk split. One
-   * channel answer covers the instrument, as it does for a WAV folder:
-   * it decides which side of every stereo sample the SFZ references
-   * the FZ keeps.
+   * SFZ conversion (R9): fit to disk or the two disk split. One channel
+   * answer covers the instrument, deciding which side of every stereo
+   * sample the SFZ references the FZ keeps.
    */
   importSfz(
     files: Record<string, Uint8Array>,
@@ -300,9 +290,9 @@ export interface Core {
     channel: Channel,
   ): Promise<CoreResult<SFZImportResult>>;
   /**
-   * A folder of WAVs maps sequentially up the keyboard (R8). One
-   * channel answer covers the whole batch: it decides which side of
-   * every stereo file in the folder the FZ keeps.
+   * A folder of WAVs maps sequentially up the keyboard (R8). One channel
+   * answer covers the batch, deciding which side of every stereo file
+   * the FZ keeps.
    */
   importWavFolder(
     files: Record<string, Uint8Array>,
@@ -311,10 +301,10 @@ export interface Core {
     channel: Channel,
   ): Promise<CoreResult<SFZImportResult>>;
   /**
-   * Pre-flight for the WAV import dialog: what the batch becomes at
-   * the rate and whether it lands (R6). Read only, and re-queried on
-   * every rate or channel change, so the caller's buffers must stay
-   * usable: implementations copy rather than transfer them.
+   * Pre-flight for the WAV import dialog: what the batch becomes at the
+   * rate, and whether it lands (R6). Re-queried on every rate or channel
+   * change, so implementations copy the caller's buffers rather than
+   * transfer them.
    */
   estimateImport(
     files: Record<string, Uint8Array>,
@@ -388,10 +378,9 @@ export interface SFZImportResult {
 }
 
 /**
- * The import dialog's pre-flight answer, computed by the core with
- * the conversion's own arithmetic. verdict names what the matching
- * import call would do; reason narrows a "wont-fit" to the
- * constraint that bites first.
+ * The import dialog's pre-flight answer, computed with the conversion's
+ * own arithmetic. verdict names what the matching import call would do;
+ * reason narrows a "wont-fit" to the constraint that bites first.
  */
 export interface ImportEstimate {
   /** Document growth in bytes: audio plus the headers around it. */
@@ -399,9 +388,8 @@ export interface ImportEstimate {
   /** The batch's play time at the target rate. */
   seconds: number;
   /**
-   * Play time the document still holds at the target rate, within
-   * its current disk count; a larger import may still land by
-   * splitting, which the verdict reports.
+   * Play time the document still holds at the target rate within its
+   * current disk count; a larger import may still land by splitting.
    */
   roomSeconds: number;
   verdict: "fits" | "splits" | "wont-fit";

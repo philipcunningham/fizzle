@@ -107,17 +107,13 @@ func decodeHeader(t *testing.T, data []byte) voiceHeader {
 	return hdr
 }
 
-// TestVoiceHeaderBinarySizeMatchesSpec mechanically enforces the invariant
-// that Encode's binary.Write panic guards rely on: voiceHeader's binary
-// footprint must equal the spec's documented voicedata size (0xC0 = 192
-// bytes, spec §2-1) and must be statically determinable.
-//
-// binary.Size returns -1 for any type that contains a variable-length field
-// (slice, string, interface) and returns the byte count of the fixed-size
-// representation otherwise. If a future struct change either grows the
-// layout or introduces a non-marshallable field, binary.Write would panic
-// at runtime on every Encode call. This test catches the regression at
-// build time instead.
+// TestVoiceHeaderBinarySizeMatchesSpec enforces the invariant Encode's
+// binary.Write panic relies on: voiceHeader's binary footprint equals the
+// spec's voicedata size (0xC0 = 192 bytes, spec §2-1) and stays statically
+// determinable. binary.Size returns -1 for a type holding a variable-length
+// field (slice, string, interface), so a struct change that grows the layout
+// or adds a non-marshallable field fails here rather than panicking inside
+// every Encode call.
 func TestVoiceHeaderBinarySizeMatchesSpec(t *testing.T) {
 	t.Parallel()
 	got := binary.Size(voiceHeader{})
@@ -233,10 +229,9 @@ func TestEncodeTranspose(t *testing.T) {
 }
 
 // TestEncodeTransposeClamped guards against silent int16 wrap when a caller
-// passes a transpose value outside the FZ-1 dcp field's representable range.
-// Without the defensive clamp in Encode, transpose=200 would write
-// uint16(200*256) = 51200, which reinterpreted as int16 yields -14336: i.e.
-// a wildly wrong negative pitch instead of the intended upward transpose.
+// passes a transpose outside the FZ-1 dcp field's range. Unclamped,
+// transpose=200 writes uint16(200*256) = 51200, which reads back as int16
+// -14336: a steep downward pitch where the caller asked for an upward one.
 func TestEncodeTransposeClamped(t *testing.T) {
 	t.Parallel()
 	data := Encode([]int16{1, 2, 3}, 0, "X", 200, NoLoop())
@@ -283,9 +278,8 @@ func TestBaseName(t *testing.T) {
 func TestImportWarnsSizeExceedsDisk(t *testing.T) {
 	buf := testutil.CaptureLog(t)
 
-	// Create a WAV with enough samples to exceed disk.UsableDataSize after encoding.
-	// UsableDataSize ≈ 1,308,672 bytes; at 36kHz that's ~654,336 samples.
-	// Use 700,000 samples to be safely over.
+	// UsableDataSize ≈ 1,308,672 bytes, so ~654,336 samples at 36 kHz.
+	// 700,000 puts the encoded voice safely over.
 	nSamples := 700000
 	samples := make([]int16, nSamples)
 	f := &wav.File{SampleRate: 36000, Samples: samples}
@@ -319,9 +313,9 @@ func TestImportWarnsSizeExceedsDisk(t *testing.T) {
 	}
 }
 
-// TestImportPreservesSMPLLoop is a regression guard for the documented
-// behaviour in docs/fizzle-manual.md: "Loops carried in WAV SMPL chunks are
-// imported automatically by fzv import."
+// TestImportPreservesSMPLLoop pins the behaviour docs/fizzle-manual.md
+// documents: "Loops carried in WAV SMPL chunks are imported automatically
+// by fzv import."
 func TestImportPreservesSMPLLoop(t *testing.T) {
 	t.Parallel()
 	const (
@@ -502,8 +496,7 @@ func rampSamples(n int, step int16) []int16 {
 	return out
 }
 
-// ImportBytes is the pure entry point the web core calls: identical
-// bytes to Import with no filesystem.
+// ImportBytes must produce the same bytes as Import.
 func TestImportBytesMatchesImport(t *testing.T) {
 	samples := rampSamples(2000, 3)
 	wavData := monoWAVBytes(t, samples, 18000)
@@ -613,9 +606,8 @@ func TestImportRejectsStereoNamingTheFile(t *testing.T) {
 	if !strings.Contains(err.Error(), "mono") {
 		t.Errorf("error should say the import writes mono only; got: %v", err)
 	}
-	// The remedy has to be one the user can actually take. This import
-	// path offers no channel choice, so the message must not point at
-	// an option that does not exist.
+	// This import path offers no channel choice, so the remedy must be one
+	// the user can take rather than an option that doesn't exist.
 	if !strings.Contains(err.Error(), "convert it to mono first") {
 		t.Errorf("error should give a remedy the user can take; got: %v", err)
 	}
@@ -655,9 +647,10 @@ func TestImportNamesThePathOnOpenFailure(t *testing.T) {
 	}
 }
 
-// B9: the io/fs refactor rewrote these two messages inside what was
-// meant to be a refactor. The shipped wording routes the reader to the
-// package that failed, so it is pinned here.
+// B9: the shipped wording routes the reader to the package that failed,
+// so it is pinned here against a refactor rewriting it. The io/fs
+// refactor rewrote these two messages once already, inside what was
+// meant to be a refactor.
 func TestImportKeepsTheShippedReadErrorWording(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -735,12 +728,11 @@ func TestImportDoesNotLogBeforeRejecting(t *testing.T) {
 	}
 }
 
-// The errors quote the path with %q, which escapes a backslash. A test
-// that looks for the raw path therefore passes on Unix and fails on
-// Windows, where every path carries backslashes: the message names the
-// file correctly and the assertion cannot see it. The path here is a
-// literal rather than a real file, because a backslash separates
-// directories on Windows and cannot appear in a name there.
+// The errors quote the path with %q, which escapes a backslash, so a test
+// looking for the raw path passes on Unix and fails on Windows: the message
+// names the file correctly and the assertion can't see it. The path is a
+// literal rather than a real file, because a backslash separates directories
+// on Windows and can't appear in a name there.
 func TestNamesPathSeesAQuotedPath(t *testing.T) {
 	t.Parallel()
 	const winPath = `C:\Users\RUNNER~1\AppData\Local\Temp\STEREO PAD.wav`
@@ -749,8 +741,8 @@ func TestNamesPathSeesAQuotedPath(t *testing.T) {
 	if !namesPath(err, winPath) {
 		t.Errorf("namesPath should see the quoted path; got: %v", err)
 	}
-	// The naive form is what shipped, and it cannot see the quoted
-	// path. Pinned so the helper stays load bearing.
+	// The naive form can't see the quoted path, pinned so the helper
+	// stays load bearing.
 	if strings.Contains(err.Error(), winPath) {
 		t.Error("the raw path matched, so this no longer reproduces the Windows shape")
 	}

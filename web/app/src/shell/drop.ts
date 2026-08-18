@@ -12,9 +12,9 @@ export interface DroppedFile {
 
 /**
  * Takes the drop's entries. Call this synchronously inside the drop
- * handler: the item list is empty by the time a promise resolves.
- * Returns an empty array where the entry API is absent, which leaves
- * the caller to fall back to dataTransfer.files.
+ * handler: the item list is empty by the time a promise resolves. An
+ * empty array means the entry API is absent, leaving the caller to fall
+ * back to dataTransfer.files.
  */
 export function dropEntries(dt: DataTransfer): FileSystemEntry[] {
   // The DOM types promise items; engines outside N4's scope may not.
@@ -45,8 +45,7 @@ function readFile(entry: FileSystemFileEntry): Promise<File> {
 
 /**
  * readEntries hands back at most 100 entries per call and signals the
- * end with an empty batch, so a directory needs reading until it dries
- * up.
+ * end with an empty batch, so a directory reads until it dries up.
  */
 async function readDir(entry: FileSystemDirectoryEntry): Promise<FileSystemEntry[]> {
   const reader = entry.createReader();
@@ -75,14 +74,14 @@ async function walk(entry: FileSystemEntry, prefix: string, out: DroppedFile[]):
 }
 
 /**
- * Walks the dropped entries depth first. A single dropped folder is
- * the root itself, so its own name is left out, matching the folder
- * picker: webkitRelativePath reads "MyKit/kick.wav" and the shell
- * strips the first segment; keeping the name would hide every WAV one
- * level below the root the conversion pipeline reads. A drop holding
- * several entries is rooted at the drop point instead, so each folder
- * keeps its name: an .sfz dropped beside its samples folder resolves
- * "samples/kick.wav" the way the .sfz references it.
+ * Walks the dropped entries depth first. A single dropped folder is the
+ * root itself, so its own name is left out, matching the folder picker:
+ * webkitRelativePath reads "MyKit/kick.wav" and the shell strips the
+ * first segment, so keeping the name would hide every WAV a level below
+ * the root the conversion pipeline reads. A drop of several entries is
+ * rooted at the drop point instead, so each folder keeps its name: an
+ * .sfz beside its samples folder resolves "samples/kick.wav" as
+ * referenced.
  */
 export async function walkEntries(entries: FileSystemEntry[]): Promise<DroppedFile[]> {
   const out: DroppedFile[] = [];

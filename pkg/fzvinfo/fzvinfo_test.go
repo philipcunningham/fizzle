@@ -80,8 +80,7 @@ func TestInfoShowsDuration(t *testing.T) {
 
 func TestInfoDefaultEnvelopeHidden(t *testing.T) {
 	t.Parallel()
-	// A standard one-shot voice has default envelopes. Those sections
-	// should not appear in the output to reduce noise.
+	// A standard one-shot voice carries default envelopes.
 	p := buildFZV(t, "KICK", 1000, 0)
 	var buf bytes.Buffer
 	if err := Info(p, &buf); err != nil {
@@ -98,7 +97,7 @@ func TestInfoDefaultEnvelopeHidden(t *testing.T) {
 
 func TestInfoDefaultFilterHidden(t *testing.T) {
 	t.Parallel()
-	// Default filter (cutoff=127, resonance=0) should not be shown.
+	// The default filter is cutoff=127, resonance=0.
 	p := buildFZV(t, "KICK", 1000, 0)
 	var buf bytes.Buffer
 	if err := Info(p, &buf); err != nil {
@@ -111,10 +110,9 @@ func TestInfoDefaultFilterHidden(t *testing.T) {
 
 func TestInfoNonDefaultEnvelopeShown(t *testing.T) {
 	t.Parallel()
-	// When the envelope is non-default it should appear.
 	samples := make([]int16, 1000)
 	data := voiceimport.Encode(samples, 0, "BELL", 0, voiceimport.NoLoop())
-	// Patch dca_sus to 1 (non-default).
+	// dca_sus = 1 makes the envelope non-default.
 	data[0x78] = 1
 	p := filepath.Join(t.TempDir(), "bell.fzv")
 	if err := os.WriteFile(p, data, 0644); err != nil {
@@ -193,7 +191,6 @@ func TestInfoLoopHiddenForOneShot(t *testing.T) {
 
 func TestInfoWrongFileType(t *testing.T) {
 	t.Parallel()
-	// Passing a non-FZV file should return a helpful error.
 	err := Info("../../testdata/synthetic/HOOVER.img", &bytes.Buffer{})
 	if err == nil {
 		t.Error("expected error for wrong file type")
@@ -243,10 +240,9 @@ func TestParseRejectsTextLikeFile(t *testing.T) {
 	}
 }
 
-// Both rejections name what they read: the path when the caller
-// passed one, the data when it passed bytes. The neighbouring "does
-// not look like a voice file" branch has always named the path, and a
-// short file is the other half of the same refusal.
+// Both rejections name what they read: the path when the caller passed
+// one, the data when it passed bytes. A short file and the neighbouring
+// "does not look like a voice file" branch are two halves of one refusal.
 func TestParseRejectionsNameWhatTheyRead(t *testing.T) {
 	t.Parallel()
 	p := filepath.Join(t.TempDir(), "stub.fzv")
@@ -335,17 +331,15 @@ func TestParseDuration(t *testing.T) {
 	}
 }
 
-// TestParseHeaderDurationUsesWaveSpan exercises the duration calculation
-// for a voice whose wave pointers are cumulative addresses in an FZF
-// audio area (i.e. waveStart > 0), mimicking the layout that
-// ParseVoiceInFZF feeds in. Duration must reflect waveEnd-waveStart, not
-// waveEnd alone; otherwise the value is inflated by waveStart/rate
-// (e.g. the second voice in a 36000 Hz FZF appears 1 s longer for every
-// 36000 samples that precede it).
+// TestParseHeaderDurationUsesWaveSpan covers duration for a voice whose
+// wave pointers are cumulative FZF audio-area addresses (waveStart > 0),
+// the layout ParseVoiceInFZF feeds in. Duration is waveEnd minus
+// waveStart; waveEnd alone inflates it by waveStart/rate, so the second
+// voice in a 36000 Hz FZF gains 1 s for every 36000 samples ahead of it.
 func TestParseHeaderDurationUsesWaveSpan(t *testing.T) {
 	t.Parallel()
-	// Mimic a voice unpacked from past position 0 in an FZF: waveStart at
-	// sample 72000 (== 2 s at 36 kHz), waveEnd at 90000 (== 0.5 s of audio).
+	// A voice sitting past position 0 in an FZF: waveStart 72000 (2 s at
+	// 36 kHz), waveEnd 90000 (0.5 s of audio).
 	hdr := make([]byte, disk.SectorSize)
 	binary.LittleEndian.PutUint32(hdr[disk.VoiceWaveStartOffset:], 72000)
 	binary.LittleEndian.PutUint32(hdr[disk.VoiceWaveEndOffset:], 90000)
@@ -364,16 +358,13 @@ func TestParseHeaderDurationUsesWaveSpan(t *testing.T) {
 	}
 }
 
-// TestParseHeaderSamplesUsesWaveSpan exercises the sample-count calculation
-// for a voice whose wave pointers are cumulative addresses in an FZF audio
-// area (i.e. waveStart > 0), mimicking the layout that ParseVoiceInFZF feeds
-// in. Samples must reflect waveEnd-waveStart, not waveEnd alone; otherwise
-// the value is inflated by waveStart (the cumulative position of every
-// preceding voice in the same FZF).
+// TestParseHeaderSamplesUsesWaveSpan covers the sample count for the same
+// cumulative-pointer layout as TestParseHeaderDurationUsesWaveSpan.
+// Samples is waveEnd minus waveStart; waveEnd alone inflates it by
+// waveStart, the cumulative position of every preceding voice.
 func TestParseHeaderSamplesUsesWaveSpan(t *testing.T) {
 	t.Parallel()
-	// Mimic a voice unpacked from past position 0 in an FZF: waveStart at
-	// sample 72000, waveEnd at 90000 (== 18000 samples of audio).
+	// waveStart 72000, waveEnd 90000: 18000 samples of audio.
 	hdr := make([]byte, disk.SectorSize)
 	binary.LittleEndian.PutUint32(hdr[disk.VoiceWaveStartOffset:], 72000)
 	binary.LittleEndian.PutUint32(hdr[disk.VoiceWaveEndOffset:], 90000)
@@ -392,16 +383,14 @@ func TestParseHeaderSamplesUsesWaveSpan(t *testing.T) {
 	}
 }
 
-// TestParseHeaderLocalisesGenAndWavePointers exercises the parallel fix
-// to F7: for a voice borrowed from an FZF audio area, the parsed
-// WaveEnd/GenStart/GenEnd pointers must be localised to voice-local
-// (0..N) addresses by subtracting waveStart, otherwise the rendered
-// "Gen range" line shows inflated cumulative addresses. Spec §2-1.
+// TestParseHeaderLocalisesGenAndWavePointers covers F7's sibling: for a
+// voice borrowed from an FZF audio area, WaveEnd, GenStart, and GenEnd
+// localise to 0..N by subtracting waveStart, or the rendered "Gen range"
+// line shows inflated cumulative addresses. Spec §2-1.
 func TestParseHeaderLocalisesGenAndWavePointers(t *testing.T) {
 	t.Parallel()
-	// Same setup as TestParseHeaderDurationUsesWaveSpan: waveStart=72000
-	// (== 2 s at 36 kHz into the FZF audio area), waveEnd=90000.
-	// gen range is 72100..89900, which is 100..17900 voice-local.
+	// Same setup as TestParseHeaderDurationUsesWaveSpan, plus a gen range
+	// of 72100..89900, which is 100..17900 voice-local.
 	hdr := make([]byte, disk.SectorSize)
 	binary.LittleEndian.PutUint32(hdr[disk.VoiceWaveStartOffset:], 72000)
 	binary.LittleEndian.PutUint32(hdr[disk.VoiceWaveEndOffset:], 90000)
@@ -459,9 +448,8 @@ func TestParseLoopDetection(t *testing.T) {
 	}
 }
 
-// TestParseLoopHonoursLoopSusIndex pins the fix for the bug where the
-// loop reader always read loopst[0]/looped[0] regardless of loop_sus. The
-// spec at §2-1 selects the active sustain-loop pair via loop_sus (0..7).
+// TestParseLoopHonoursLoopSusIndex pins the loop reader to the pair
+// loop_sus selects (0 to 7, spec §2-1), not loopst[0]/looped[0].
 func TestParseLoopHonoursLoopSusIndex(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -516,9 +504,8 @@ func TestParseLoopHonoursLoopSusIndex(t *testing.T) {
 	}
 }
 
-// TestParseLoopExposesReleaseAndTimings pins the new fields surfaced by
-// fzvinfo: loop_release (the 0x13 byte) and the loopxf[]/looptm[] entries
-// at index loop_sus.
+// TestParseLoopExposesReleaseAndTimings pins loop_release (the 0x13
+// byte) and the loopxf[]/looptm[] entries at index loop_sus.
 func TestParseLoopExposesReleaseAndTimings(t *testing.T) {
 	t.Parallel()
 	const (
@@ -584,18 +571,16 @@ func TestInfoRealHardwareVoice(t *testing.T) {
 		t.Fatalf("disk get: %v", err)
 	}
 
-	// Unpack to get a real hardware voice.
 	fzf, err := os.ReadFile(fzfPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Extract METAL-BELL voice manually (8 bank sectors + voice at offset 0).
+	// METAL-BELL by hand: 8 bank sectors, then the voice at offset 0.
 	bankSectors := 8
 	voiceOff := bankSectors * disk.SectorSize
 	vhdr := fzf[voiceOff : voiceOff+disk.VoiceHeaderUsed]
 	waveEnd := binary.LittleEndian.Uint32(vhdr[4:8])
-	// Find audio area.
 	voiceSectors := disk.VoiceAreaSectors(11)
 	audioStart := (bankSectors + voiceSectors) * disk.SectorSize
 	audio := fzf[audioStart : audioStart+int(waveEnd)*2]
@@ -766,11 +751,10 @@ func TestParseVoiceInFZFNotFoundListsAvailable(t *testing.T) {
 	}
 }
 
-// TestRenderJSONFieldNamesMatchEditFlags pins the JSON keys for the
-// fields that have CLI flag equivalents. The flags --cutoff, --resonance
-// and --root should write to fields with the same names in --json output
-// so users can script edit-then-verify workflows without consulting a
-// mapping table.
+// TestRenderJSONFieldNamesMatchEditFlags pins the JSON keys for fields
+// with CLI flag equivalents. The flags --cutoff, --resonance, and --root
+// write to identically named --json fields, so an edit-then-verify script
+// needs no mapping table.
 func TestRenderJSONFieldNamesMatchEditFlags(t *testing.T) {
 	t.Parallel()
 	fzvPath := buildFZV(t, "JSONKEYS", 100, 0)
@@ -827,10 +811,10 @@ func TestRenderJSONExcludesInternalFields(t *testing.T) {
 	}
 }
 
-// TestParseNormalVariantPlaybackMode verifies that voices with the
-// undocumented 0x0157 playback mode (observed in the factory Clarinet.fzf)
-// render as "normal_variant" via the unified disk.PlaybackModeName path,
-// not as "unknown (0x0157)". This is the Tier 2O cross-command unification.
+// TestParseNormalVariantPlaybackMode pins voices carrying the
+// undocumented 0x0157 playback mode (seen in the factory Clarinet.fzf) to
+// render as "normal_variant" through disk.PlaybackModeName, not as
+// "unknown (0x0157)".
 func TestParseNormalVariantPlaybackMode(t *testing.T) {
 	t.Parallel()
 	samples := make([]int16, 100)
@@ -848,8 +832,7 @@ func TestParseNormalVariantPlaybackMode(t *testing.T) {
 	if params.PlaybackMode != disk.PlaybackModeNameNormalVariant {
 		t.Errorf("PlaybackMode = %q, want %q", params.PlaybackMode, disk.PlaybackModeNameNormalVariant)
 	}
-	// And the rendered Info output should mention the variant rather than
-	// an "unknown (0x0157)" fallback.
+	// Info names the variant rather than falling back to "unknown".
 	var buf bytes.Buffer
 	if err := Info(p, &buf); err != nil {
 		t.Fatal(err)

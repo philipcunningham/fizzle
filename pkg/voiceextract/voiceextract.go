@@ -85,11 +85,10 @@ func ExtractPlayback(fzvPath, wavPath string, leadInMs int) error {
 	return nil
 }
 
-// wavOutputSize estimates the byte count wav.Write produces for f: 44-byte
-// RIFF/WAVE/fmt/data header + len(Samples)*2 PCM bytes + optional smpl chunk.
-// The smpl chunk is 8 (chunkID+size) + 36 (header) + 24 (loop record) when a
-// loop is present, or 8 + 36 when only the root note is set on a one-shot
-// voice. Used to pre-size the encoding buffer so wav.Write never grows it.
+// wavOutputSize is the byte count wav.Write produces for f: the 44-byte RIFF
+// header, the PCM samples, and the smpl chunk when a loop or a root note makes
+// wav.Write emit one (the loop record only comes with a loop). It pre-sizes
+// the encoding buffer so the write never grows it.
 func wavOutputSize(f *wav.File) int {
 	const wavHeaderBytes = 44
 	const smplHeaderBytes = 8 + 36
@@ -123,10 +122,9 @@ func decodeLoopPoints(data []byte) (loopStart, loopEnd int) {
 	if loopSus >= disk.NoSustainLoop {
 		return -1, -1
 	}
-	// loop_sus (0..7) selects which of the eight loopst/looped pairs is
-	// the active sustain loop; only that pair drives the WAV SMPL chunk
-	// loop. Earlier revisions hard-coded index 0, which exported wrong
-	// loop points for any voice whose sustain pair was not the first.
+	// loop_sus (0..7) selects which of the eight loopst/looped pairs is the
+	// active sustain loop, and only that pair drives the WAV SMPL chunk
+	// loop. Index 0 is not a safe assumption.
 	stOff := disk.VoiceLoopSt0Offset + int(loopSus)*4
 	edOff := disk.VoiceLoopEd0Offset + int(loopSus)*4
 	// Mask the loop-fine byte (upper 8 bits of loopst) and the skip flag

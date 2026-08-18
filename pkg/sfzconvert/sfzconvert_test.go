@@ -607,10 +607,9 @@ func TestConvertDirHappyPath(t *testing.T) {
 	}
 }
 
-// TestConvertDirLeavesFilterOpen guards against a regression where the
-// directory workflow's synthetic regions left Cutoff and Resonance at the
-// Go zero value (0), causing regionToFZVFromFile to slam the filter shut
-// on every voice.
+// TestConvertDirLeavesFilterOpen pins the directory workflow's synthetic
+// regions to the absent sentinel. Cutoff and Resonance left at the Go zero
+// value 0 make regionToFZVFromFile slam the filter shut on every voice.
 func TestConvertDirLeavesFilterOpen(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -810,9 +809,9 @@ func wantsStereoRefusal(t *testing.T, err error) {
 	}
 }
 
-// TestConvertRefusesStereo covers B2 on the CLI's single disk mode.
-// The command carries no channel answer, so it used to write a voice of
-// double length at half the pitch with the channels alternating.
+// TestConvertRefusesStereo covers B2 on the CLI's single disk mode. The
+// command carries no channel answer, and an accepted stereo file becomes a
+// voice of double length at half the pitch.
 func TestConvertRefusesStereo(t *testing.T) {
 	t.Parallel()
 	_, sfzPath := writeStereoKit(t, 512)
@@ -846,8 +845,7 @@ func TestConvertMultiDiskRefusesStereo(t *testing.T) {
 }
 
 // TestAssembleMultiReportsProgress covers B9: the split is the slowest
-// thing the CLI does, and this line is its only progress signal. The
-// io/fs refactor kept it on the single disk path and dropped it here.
+// thing the CLI does, and this line is its only progress signal.
 //
 // Not parallel: CaptureLog redirects the global logger.
 func TestAssembleMultiReportsProgress(t *testing.T) {
@@ -1134,12 +1132,11 @@ tune=50
 	}
 }
 
-// TestTuneTransposeMaxNoWrap covers the int16 overflow bug where
-// transpose=127 + tune=100 used to wrap: currentDCP (127 * 256 = 32512) +
-// tuneDCP (256) = 32768, which becomes -32768 in int16 and silently
-// flipped the pitch direction. The fix sums in int32 and clamps at
-// MaxInt16, so the DCP must stay positive (the request is saturated, not
-// inverted).
+// TestTuneTransposeMaxNoWrap covers the int16 overflow. With transpose=127
+// and tune=100, currentDCP (127 * 256 = 32512) plus tuneDCP (256) is
+// 32768. In int16 that reads as -32768 and flips the pitch direction. The
+// sum runs in int32 and clamps at MaxInt16, so the DCP stays positive and
+// the request saturates rather than inverting.
 func TestTuneTransposeMaxNoWrap(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -1335,20 +1332,19 @@ func TestConvertDirMaxVoicesKeyAssignment(t *testing.T) {
 	}
 }
 
-// TestPitchKeycenterPatchesVoiceHeaderCent guards finding F11: the SFZ region's
-// pitch_keycenter must reach the FZV voice header's cent byte (spec §2-1,
-// offset 0xB0). Previously voiceimport.Encode left it at DefaultKeyCentre
-// so fzv extract / sfz export rebuilt the wrong root key on round-trip.
+// TestPitchKeycenterPatchesVoiceHeaderCent guards finding F11: the SFZ
+// region's pitch_keycenter must reach the FZV voice header's cent byte
+// (spec §2-1, offset 0xB0). Left at voiceimport.Encode's DefaultKeyCentre,
+// fzv extract and sfz export rebuild the wrong root key on round trip.
 func TestPitchKeycenterPatchesVoiceHeaderCent(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	wavPath := filepath.Join(dir, "tone.wav")
 	testutil.WriteTestWAV(t, wavPath, 36000, 1000)
 
-	// Use pitch_keycenter=48 (which differs from DefaultKeyCentre) on a
-	// region whose key range does not contain 48, so a half-fix that only
-	// updates the bank's per-key cent[i] (which buildKeygroup already does)
-	// would not also write the voice header at offset 0xB0.
+	// pitch_keycenter=48 differs from DefaultKeyCentre and sits outside the
+	// region's key range. Writing only the bank's per-key cent[i], which
+	// buildKeygroup already does, leaves offset 0xB0 wrong.
 	sfzPath := filepath.Join(dir, "test.sfz")
 	sfzContent := fmt.Sprintf(`<region>
 sample=%s lokey=60 hikey=72 pitch_keycenter=48

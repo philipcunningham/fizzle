@@ -1,9 +1,9 @@
-// E1: a failure shows where the user acted. Four dialog actions used to
-// act only inside `if (apply(r))`, so a refusal left the dialog standing
-// over a status bar line the overlay covers, and the user saw no reason
-// at all. Their siblings here (onConvertSfz, onPlacementChoice) close
-// first and report after. The WAV conversion dialog is the exception:
-// it stays open and reports inline, covered by importdialog.test.tsx.
+// E1: a failure shows where the user acted. A dialog action that acts
+// only inside `if (apply(r))` leaves a refusal standing over a status
+// bar line the overlay covers, with no reason shown, so these actions
+// (onConvertSfz, onPlacementChoice) close first and report after. The
+// WAV conversion dialog is the exception: it stays open and reports
+// inline, covered by importdialog.test.tsx.
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Core, Snapshot } from "../src/boundary/contract";

@@ -308,10 +308,10 @@ func TestSetRoundTrip(t *testing.T) {
 	}
 }
 
-// TestSetMultiBankWritesEveryBankSite is the regression test for F2: on
-// multi-bank dumps the gchn byte lives in every bank that references the
-// voice via vp[]. Writing only data[BankAudioOutOffset+voiceSlot] would
-// patch bank 0; voices owned only by banks 1-7 stay on their old output.
+// TestSetMultiBankWritesEveryBankSite pins F2: on multi-bank dumps the
+// gchn byte lives in every bank that references the voice through vp[].
+// Writing only data[BankAudioOutOffset+voiceSlot] patches bank 0 and
+// leaves voices owned by banks 1 to 7 on their old output.
 func TestSetMultiBankWritesEveryBankSite(t *testing.T) {
 	t.Parallel()
 	// Bank 0 maps slot 0 at split 0; bank 1 maps slot 0 again at split 2.

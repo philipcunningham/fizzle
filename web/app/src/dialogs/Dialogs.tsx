@@ -1,6 +1,6 @@
-// The mockup's dialogs over the real core: every prompt the placement
-// matrix (R7) and the destructive flows require. Pure presentation;
-// the shell owns the pending state and the core calls.
+// Every prompt the placement matrix (R7) and the destructive flows
+// require. Pure presentation; the shell owns the pending state and the
+// core calls.
 import * as Dialog from "@radix-ui/react-dialog";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useState } from "react";
@@ -54,8 +54,7 @@ export interface DialogActions {
   onRequestDelete: (name: string) => void;
   /**
    * Export the document. `then` runs once the export completes, so a
-   * guard's "Export first" carries out the action it was guarding
-   * instead of leaving the user in a dialog that no longer applies.
+   * guard's "Export first" carries out the action it was guarding.
    */
   onExport: (then?: () => void) => void;
   onCloseDisk: () => void;
@@ -72,7 +71,7 @@ export interface DialogActions {
 /**
  * The stereo answer: which side of a stereo file the FZ keeps. Shown
  * only when the input holds one, since a mono batch has nothing to
- * decide. Both folder imports ask it, so both ask it the same way.
+ * decide. Shared, so both folder imports ask it the same way.
  */
 function StereoRow({
   channels,
@@ -106,10 +105,7 @@ function StereoRow({
   );
 }
 
-/**
- * The rate answer both conversion dialogs ask the same way: the three
- * hardware rates as one radio row.
- */
+/** The three hardware rates as one radio row, shared by both dialogs. */
 function RateRow({
   value,
   onValueChange,
@@ -142,20 +138,14 @@ function RateRow({
   );
 }
 
-/**
- * The unexported-changes warning three destructive dialogs carry with
- * the same words.
- */
+/** The unexported-changes warning, worded once for three dialogs. */
 function GuardLine() {
   return (
     <p className="desc dangertext">Unexported changes will be lost. Export first to keep them.</p>
   );
 }
 
-/**
- * The refusal's way out: the rates the whole batch would land at,
- * phrased for the sentence's tail.
- */
+/** The refusal's way out: the rates the whole batch would land at. */
 function fitsTail(rates: number[]): string {
   if (rates.length === 0) return " No rate fits.";
   const labels = rates.map((r) => String(r / 1000));
@@ -164,7 +154,7 @@ function fitsTail(rates: number[]): string {
 
 /**
  * The size line, from the core's estimate alone: what the batch
- * becomes, the room left at this rate, and, when the import cannot
+ * becomes, the room left at this rate, and, when the import can't
  * land, which constraint bit and which rate is the way out.
  */
 function estimateCopy(est: ImportEstimate, rateKHz: string, count: number): string {
@@ -444,7 +434,7 @@ export function Dialogs({
                   className="btn danger"
                   // First visually, last in focus order: initial focus
                   // must land on the safe action, or one habitual Enter
-                  // discards the very edits this dialog guards.
+                  // discards the edits this dialog guards.
                   style={{ marginRight: "auto", order: -1 }}
                   onClick={() => {
                     if (d.intent === "close") actions.onCloseDisk();
@@ -516,10 +506,9 @@ export function Dialogs({
 }
 
 /**
- * chosenSFZ resolves which .sfz the conversion runs on. The user's
- * pick wins, then the classifier's path, which is set when the folder
- * holds one .sfz. Otherwise it is the first candidate, which the
- * chooser shows selected.
+ * Which .sfz the conversion runs on: the user's pick, then the
+ * classifier's path (set when the folder holds one .sfz), then the
+ * first candidate, which the chooser shows selected.
  */
 function chosenSFZ(choices: string[], classified: string, pick: string): string {
   if (choices.includes(pick)) return pick;
@@ -530,9 +519,8 @@ function chosenSFZ(choices: string[], classified: string, pick: string): string 
 /**
  * The SFZ conversion dialog (R6, R9): the sample rate, the stereo
  * answer, and which .sfz the folder's instrument is. A DAW export
- * folder can hold several, and the core refuses to guess between
- * them. That question belongs beside the other two, rather than
- * arriving as a refusal the user can't answer.
+ * folder can hold several and the core refuses to guess, so that
+ * question belongs here rather than arriving as a refusal.
  */
 function SfzBody({
   dialog,

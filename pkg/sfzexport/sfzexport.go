@@ -9,11 +9,10 @@
 //     (cutoff, resonance, envelopes, loop points) for each voice.
 //   - Per-voice filenames are derived from the voice name embedded in the
 //     header, with any filesystem-unsafe runes mapped to underscore.
-//   - Playback modes other than NORMAL collapse on the SFZ side because SFZ
-//     has no equivalent for the FZ's CUE, SYNTH, or REVERSE modes. The
-//     original mode is preserved verbatim in a "// Playback:" comment so the
-//     information survives a round-trip through a text-aware tool, but it is
-//     not recovered by sfz convert.
+//   - Playback modes other than NORMAL collapse on the SFZ side, which has
+//     no equivalent for the FZ's CUE, SYNTH, or REVERSE modes. The original
+//     mode survives verbatim in a "// Playback:" comment, though sfz convert
+//     doesn't read it back.
 //   - A velocity range of (0, 0) means "voice silenced" on the hardware. It
 //     is preserved with explicit lovel/hivel opcodes so re-import does not
 //     silently restore the default (1, 127) range.
@@ -49,11 +48,11 @@ func lfoWaveformName(idx int) string {
 	return fmt.Sprintf("unknown(%d)", idx)
 }
 
-// playbackModeName delegates to disk.PlaybackModeName so the SFZ export's
-// "// Playback:" comment uses the same canonical lowercase identifier as
-// fzfinfo/fzvinfo ("normal", "normal_variant", "synthesized", ...).
-// Unknown modes are surfaced as a hex literal so the value survives
-// round-trips and the user can correlate with bytes on disk.
+// playbackModeName delegates to disk.PlaybackModeName so the "// Playback:"
+// comment uses the same lowercase identifiers as fzfinfo and fzvinfo
+// ("normal", "normal_variant", "synthesized", ...). An unknown mode becomes
+// a hex literal, so the value survives the round trip and still correlates
+// with the bytes on disk.
 func playbackModeName(mode uint16) string {
 	name := disk.PlaybackModeName(mode)
 	if name == disk.PlaybackModeNameUnknown {
@@ -94,19 +93,19 @@ func Export(fzfPath, outputDir, name string) error {
 	gchnMap := buildMuteGroupMap(data, hdr, storedNames)
 	warnSharedVoicePointers(data, hdr, storedNames)
 
-	// Voice filenames must be unique on the output filesystem, even when
-	// two voices share a header name. Tracked separately from voice
-	// display names so the SFZ comments still show the original name.
+	// Voice filenames must be unique even when two voices share a header
+	// name. Tracked apart from the display names so the SFZ comments keep
+	// showing the original.
 	seenWavName := map[string]int{}
 
 	var sfzBuf strings.Builder
 	for emitIdx, fzvData := range voices {
-		// slotIdx is the voice's position in the voice area (the value that
-		// bank vp[] arrays point at). emitIdx is the index into the
-		// compacted FZV slice, which skips NoSound placeholders, so the two
-		// diverge whenever the dump has any leading or interior NoSound
-		// slots. Bank metadata (key range, output, velocity, bvol) is
-		// indexed by the bank's key-split position, looked up below.
+		// slotIdx is the voice's position in the voice area, the value
+		// bank vp[] arrays point at. emitIdx indexes the compacted FZV
+		// slice, which skips NoSound placeholders, so the two diverge on
+		// any dump with leading or interior NoSound slots. Bank metadata
+		// (key range, output, velocity, bvol) is indexed by the bank's
+		// key-split position, looked up below.
 		slotIdx := slotIndices[emitIdx]
 		voiceName := ""
 		if slotIdx < len(storedNames) {
@@ -118,10 +117,9 @@ func Export(fzfPath, outputDir, name string) error {
 
 		sampleRate, samples, err := voiceextract.Decode(fzvData)
 		if err != nil {
-			// One voice with a corrupt header (e.g. waveEnd > available
-			// audio) should not abort the whole export. Surface the
-			// corruption via a WARN, skip the voice, and keep going so
-			// the user still gets the well-formed voices.
+			// One corrupt header (waveEnd past the available audio, say)
+			// mustn't abort the export: warn, skip the voice, and keep
+			// going so the well-formed voices still land.
 			log.Warn().
 				Int("voice", slotIdx+1).
 				Str("name", voiceName).
@@ -129,7 +127,7 @@ func Export(fzfPath, outputDir, name string) error {
 				Msg("skipping voice with undecodable audio")
 			continue
 		}
-		_ = emitIdx // emit position retained for future diagnostics; bank lookups use slotIdx via FindBankSitesForVoice.
+		_ = emitIdx // kept for diagnostics; bank lookups go through slotIdx.
 
 		hdrBytes := fzvData[:disk.SectorSize]
 
@@ -138,26 +136,23 @@ func Export(fzfPath, outputDir, name string) error {
 		dcq := hdrBytes[disk.VoiceDCQOffset]
 		loopSus := hdrBytes[disk.VoiceLoopSusOffset]
 		loopEndByte := hdrBytes[disk.VoiceLoopEndOffset]
-		// loop_sus (0..7) selects which of the eight loopst/looped pairs
-		// is the active sustain loop. Reading [0] unconditionally would
-		// export the wrong loop_start / loop_end for any voice whose
-		// sustain pair was not the first. When loop_sus == 8 there is no
-		// sustain loop; the indexed read is suppressed by the hasLoop
-		// guard below.
+		// loop_sus (0..7) picks which of the eight loopst/looped pairs is
+		// the active sustain loop; reading [0] would export the wrong
+		// loop_start and loop_end whenever it isn't the first. loop_sus of
+		// 8 means no sustain loop, and the hasLoop guard below suppresses
+		// the indexed read.
 		var loopSt0, loopEd0 uint32
 		// loopxf[loop_sus] (0..1023; 0 disables cross-fade) and
-		// looptm[loop_sus] (1..1022; 16ms step) per spec §2-1 have no
-		// SFZ opcode equivalent. Captured here so the comment block
-		// below can surface them as informational metadata, matching
-		// how DCA/DCF/LFO are preserved across a round-trip.
+		// looptm[loop_sus] (1..1022; 16ms step) per spec §2-1 have no SFZ
+		// opcode. Captured for the informational comment block below, as
+		// DCA, DCF, and LFO are.
 		var loopXF, loopTm uint16
 		if loopSus < disk.NoSustainLoop {
 			stOff := disk.VoiceLoopSt0Offset + int(loopSus)*4
 			edOff := disk.VoiceLoopEd0Offset + int(loopSus)*4
 			// Mask off the loop-fine byte (upper 8 of loopst) and the
-			// skip-flag bit (MSB of looped) per spec §2-1 so the SFZ
-			// loop_start / loop_end opcodes carry only the sample
-			// addresses.
+			// skip-flag bit (MSB of looped) per spec §2-1, so the SFZ
+			// loop opcodes carry only the sample addresses.
 			rawSt := binary.LittleEndian.Uint32(hdrBytes[stOff:])
 			rawEd := binary.LittleEndian.Uint32(hdrBytes[edOff:])
 			loopSt0 = disk.LoopStartAddress(rawSt)
@@ -169,9 +164,9 @@ func Export(fzfPath, outputDir, name string) error {
 		}
 		playbackMode := binary.LittleEndian.Uint16(hdrBytes[disk.VoiceLoopModeOffset:])
 
-		// LFO phase-sync flag (MSB of lfo_name) has no SFZ representation;
-		// warn that it is being dropped so users debugging round-trip
-		// issues can locate the source data.
+		// The LFO phase-sync flag (MSB of lfo_name) has no SFZ
+		// representation; warn on the drop so anyone debugging a round
+		// trip can find the source data.
 		if hdrBytes[disk.VoiceLFONameOffset]&disk.LFOPhaseFlag != 0 {
 			log.Warn().
 				Int("voice", slotIdx+1).
@@ -193,8 +188,7 @@ func Export(fzfPath, outputDir, name string) error {
 		}
 
 		// Reverse playback has no SFZ equivalent; the WAV is exported as
-		// forward audio. Compare the raw uint16 value so this warning stays
-		// independent of any name-table refactor in progress.
+		// forward audio.
 		if playbackMode == disk.PlaybackModeReverse {
 			log.Warn().
 				Int("voice", slotIdx+1).
@@ -247,10 +241,9 @@ func Export(fzfPath, outputDir, name string) error {
 			loopEnd = int(loopEd0)
 		}
 
-		// Preserve the voice's root note (byte 0xB0) as the WAV SMPL
-		// chunk's MIDIUnityNote so a round-trip FZV -> WAV -> FZV does
-		// not lose this metadata. Without this the writer falls back to
-		// the hardcoded middle C default.
+		// Carry the voice's root note (byte 0xB0) into the WAV SMPL
+		// chunk's MIDIUnityNote so an FZV to WAV to FZV round trip keeps
+		// it; otherwise the writer falls back to middle C.
 		voiceRoot := hdrBytes[disk.VoiceKeyCentOffset]
 
 		wavFile := &wav.File{
@@ -261,12 +254,10 @@ func Export(fzfPath, outputDir, name string) error {
 			MIDIUnityNote: voiceRoot,
 		}
 
-		// Build a filesystem-safe, unique WAV filename. The counter is
-		// kept on the original (pre-suffix) stem so a name shared by N
-		// voices produces N distinct suffixes ("X", "X-1", "X-2", ...).
-		// Incrementing on the already-suffixed stem would let voices 2
-		// and 3 collide on "X-1" because the bare "X" counter never
-		// advances past 1.
+		// Count on the original, pre-suffix stem so N voices sharing a
+		// name yield N distinct files ("X", "X-1", "X-2", ...). Counting
+		// the suffixed stem instead would collide voices 2 and 3 on
+		// "X-1", because the bare "X" counter never passes 1.
 		stem := sanitizeFilename(voiceName, fmt.Sprintf("VOICE_%d", slotIdx+1))
 		count := seenWavName[stem]
 		seenWavName[stem]++
@@ -283,12 +274,11 @@ func Export(fzfPath, outputDir, name string) error {
 			return fmt.Errorf("sfzexport: %w", err)
 		}
 
-		// Bank metadata: route through the voice's first BankSite so
-		// multi-bank dumps surface the bank that actually owns the voice
-		// (spec §2-2, vp[]). Single-bank dumps yield the trivial site
-		// {0, slotIdx}; multi-bank dumps may resolve to any (bank, split)
-		// pair. If a voice has no bank site (orphan header) we fall back
-		// to bank-0/slot defaults so the SFZ region is still emitted.
+		// Route bank metadata through the voice's first BankSite so a
+		// multi-bank dump surfaces the bank that owns the voice (spec
+		// §2-2, vp[]). Single-bank dumps give the trivial site
+		// {0, slotIdx}. An orphan header with no site falls back to the
+		// defaults so the region is still emitted.
 		var (
 			keyLow, keyHigh, keyCent uint8
 			velLow, velHigh          uint8
@@ -326,12 +316,11 @@ func Export(fzfPath, outputDir, name string) error {
 			lfoWaveformName(lfoWave), lfoRate, lfoDelay, lfoAtck, lfoPitch, lfoAmp, lfoFilter, lfoQ)
 		fmt.Fprintf(&sfzBuf, "// Modulation: dca_level_kf=%d dca_rate_kf=%d dcf_level_kf=%d dcf_rate_kf=%d vel_dca_kf=%d vel_dcf_kf=%d vel_dcq_kf=%d vel_dca_rs=%d vel_dcf_rs=%d\n",
 			dcaLevelKF, dcaRateKF, dcfLevelKF, dcfRateKF, velDCAKF, velDCFKF, velDCQKF, velDCARS, velDCFRS)
-		// Emit loopxf/looptm only when a sustain loop is selected and at
-		// least one of the two is non-zero; otherwise the line is noise
-		// (spec §2-1: loopxf=0 disables cross-fade, looptm is unused
-		// without a multi-loop). SFZ has no opcode for either, so the
-		// values are preserved as an informational comment alongside
-		// DCA/DCF/LFO/Modulation/Playback.
+		// Emit loopxf and looptm only with a sustain loop selected and one
+		// of the two non-zero; otherwise the line is noise (spec §2-1:
+		// loopxf=0 disables cross-fade, looptm is unused without a
+		// multi-loop). Neither has an SFZ opcode, so they ride along as a
+		// comment.
 		if loopSus < disk.NoSustainLoop && (loopXF > 0 || loopTm > 0) {
 			fmt.Fprintf(&sfzBuf, "// Loop: xfade=%d time=%d\n", loopXF, loopTm)
 		}
@@ -357,9 +346,9 @@ func Export(fzfPath, outputDir, name string) error {
 			fmt.Fprintf(&sfzBuf, "mutegroup=%d\n", mg)
 		}
 
-		// Velocity: emit explicit lovel/hivel for anything other than the
-		// fizzle default (1, 127). This preserves (0, 0) silencing and any
-		// other non-default range across re-import.
+		// Emit explicit lovel/hivel for anything but the fizzle default
+		// (1, 127), so (0, 0) silencing and every other range survives
+		// re-import.
 		if velLow != disk.DefaultVelLow || velHigh != disk.DefaultVelHigh {
 			fmt.Fprintf(&sfzBuf, "lovel=%d hivel=%d\n", velLow, velHigh)
 		}
@@ -414,13 +403,12 @@ func dcpToTransposeAndTune(dcp int16) (semitones, cents int) {
 }
 
 // sanitizeFilename maps a voice name to a filesystem-safe stem. Any rune
-// outside [A-Za-z0-9 _-] is replaced with underscore, leading and trailing
-// whitespace is stripped, and internal whitespace runs are collapsed to a
-// single space (so the on-disk filename matches what the SFZ parser
-// reconstructs after splitting on whitespace). An empty result falls back
-// to the supplied default. This also prevents a corrupt or adversarial FZF
-// whose voice header contains "../" or other path metacharacters from
-// writing outside outputDir.
+// outside [A-Za-z0-9 _-] becomes an underscore. Whitespace runs collapse
+// to one space, so the on-disk name matches what the SFZ parser rebuilds
+// after splitting on whitespace. An empty result falls back to
+// the supplied default. This also stops a corrupt or hostile voice header
+// holding "../" or other path metacharacters from writing outside
+// outputDir.
 func sanitizeFilename(name, fallback string) string {
 	var b strings.Builder
 	for _, r := range name {
@@ -442,12 +430,10 @@ func sanitizeFilename(name, fallback string) string {
 }
 
 // buildMuteGroupMap walks every (bank, split) site across all bank sectors
-// and collects the distinct single-bit gchn values. Multi-bank dumps may
-// reference a voice from several banks with different gchn values; the
-// SFZ mutegroup is per region, so each unique gchn gets its own group ID
-// and the export loop picks the gchn that corresponds to the *site* used
-// for that region (sfzexport falls back to the first BankSite when
-// emitting key/vel/gchn).
+// and collects the distinct single-bit gchn values. A multi-bank dump may
+// reference one voice from several banks with different gchn values. An
+// SFZ mutegroup is per region, so each unique gchn gets its own group ID.
+// The export loop reads the gchn of the site it emits, the first BankSite.
 func buildMuteGroupMap(data []byte, hdr *fzutil.FZFHeader, names []string) map[uint8]int {
 	seen := map[uint8]int{}
 	nextGroup := 1
@@ -467,9 +453,8 @@ func buildMuteGroupMap(data []byte, hdr *fzutil.FZFHeader, names []string) map[u
 		}
 		if bits.OnesCount8(gchn) != 1 {
 			// Multi-bit gchn assigns the voice to several generators at
-			// once. SFZ mutegroup is a single integer, so the multi-bit
-			// grouping cannot be reproduced and the voice falls back to
-			// polyphonic on round-trip.
+			// once. An SFZ mutegroup is a single integer, so that grouping
+			// can't be reproduced and the voice comes back polyphonic.
 			name := ""
 			if v < len(names) {
 				name = names[v]
@@ -490,13 +475,12 @@ func buildMuteGroupMap(data []byte, hdr *fzutil.FZFHeader, names []string) map[u
 	return seen
 }
 
-// warnSharedVoicePointers warns when a voice slot is referenced by more
-// than one (bank, split) site across the full set of bank sectors. On the
-// hardware this is how a single voice can occupy several key splits, both
-// within one bank and across banks; on SFZ export only the first site is
-// rendered (one region per slot), so the additional sharing is lost. A
-// re-import via sfzconvert produces a single-bank dump with identity
-// vp[]=i, never restoring the original spread.
+// warnSharedVoicePointers warns when more than one (bank, split) site
+// references a voice slot. On the hardware that's how one voice occupies
+// several key splits, within a bank and across banks; the export renders
+// only the first site, one region per slot, so the sharing is lost.
+// Re-importing through sfzconvert yields a single-bank dump with identity
+// vp[]=i, never the original spread.
 func warnSharedVoicePointers(data []byte, hdr *fzutil.FZFHeader, names []string) {
 	for v := range hdr.NVoice {
 		sites := fzutil.FindBankSitesForVoice(data, hdr, v)

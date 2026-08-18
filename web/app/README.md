@@ -1,6 +1,6 @@
 # fizzle Web UI
 
-The real front end, built in slices over the Go core compiled to
+The React and TypeScript front end over the Go core compiled to
 WebAssembly. The specification, plan, and decision log live in
 `handoffs/` at the repository root.
 
@@ -23,3 +23,6 @@ payload budget. `npm run smoke` drives the built app through a real
 browser and verifies a corpus image round trips byte identical.
 `make web-check` from the repository root runs the WASM build plus the
 check chain; `make check` includes it.
+
+`npm run visual` compares per-platform screenshot baselines. CI skips
+it, so run it by hand before shipping a UI change.

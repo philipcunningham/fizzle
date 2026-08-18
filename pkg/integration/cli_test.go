@@ -115,10 +115,9 @@ func extractVoiceViaCLI(t *testing.T, imgPath, name string) string {
 	return outPath
 }
 
-// assertVoiceOutputs runs `fzf info --json` and verifies that the named
-// voices have the expected output strings. Other voices are ignored. This
-// is more robust than asserting on rendered table glyphs because the JSON
-// format is stable across renderer changes.
+// assertVoiceOutputs runs `fzf info --json` and checks the named voices
+// carry the expected output strings, ignoring the rest. JSON survives
+// renderer changes where rendered table glyphs don't.
 func assertVoiceOutputs(t *testing.T, fzfPath string, want map[string]string) {
 	t.Helper()
 	out, _ := mustRun(t, "fzf", "info", "--json", fzfPath)
@@ -291,11 +290,10 @@ func TestCLIDiskAddAndGet(t *testing.T) {
 	})
 }
 
-// TestCLIDiskAddProgramRoundTrip exercises the Type-5 "Program" path through
+// TestCLIDiskAddProgramRoundTrip drives the Type-5 "Program" path through
 // the full CLI: format a fresh disk, add the DEMO binary as a Program
-// file, verify the directory listing, extract it back, and confirm the
-// bytes match. Uses the committed testdata/assembly/DEMO.bin fixture so it
-// runs in CI without nasm installed.
+// file, check the directory listing, extract it back, and compare bytes.
+// It uses the committed testdata/assembly/DEMO.bin so CI needs no nasm.
 func TestCLIDiskAddProgramRoundTrip(t *testing.T) {
 	t.Parallel()
 	demoPath := filepath.Join("..", "..", "testdata", "assembly", "DEMO.bin")
@@ -1326,9 +1324,9 @@ func TestCLIFzvEditModulationKF(t *testing.T) {
 	}
 }
 
-// TestCLIFzvEditVelModulationSigned verifies the three signed
-// initial-touch velocity modulation flags (vel-dcq-kf, vel-dca-rs,
-// vel-dcf-rs) round-trip via the `fzv edit` -> `fzv info --json` path.
+// TestCLIFzvEditVelModulationSigned round-trips the three signed
+// initial-touch velocity modulation flags (vel-dcq-kf, vel-dca-rs, and
+// vel-dcf-rs) from `fzv edit` through `fzv info --json`.
 func TestCLIFzvEditVelModulationSigned(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

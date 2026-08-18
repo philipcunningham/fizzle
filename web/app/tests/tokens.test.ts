@@ -81,7 +81,7 @@ describe("non-text contrast (WCAG 1.4.11)", () => {
   // The edges are the whole of what identifies a control here. An
   // input's black fill is 1.14 against the raised panel it sits in and
   // the active tab is 1.14 against the page, so nothing but the border
-  // says where either begins. It has to read on all three surfaces.
+  // says where either begins, on all three surfaces.
   for (const edge of ["border-faint", "border", "accent"]) {
     for (const bg of BACKGROUNDS) {
       it(`${edge} on ${bg} is at least 3:1`, () => {
@@ -151,8 +151,8 @@ describe("on screen keyboard contrast (Q5)", () => {
 });
 
 describe("hierarchy from brightness and colour (Q6)", () => {
-  // Which file is open was a 1.09 step of hue and nothing else. Colour
-  // may carry it, but never alone (WCAG 1.4.1).
+  // Hue alone marks which file is open at a 1.09 step. Colour may carry
+  // it, but never alone (WCAG 1.4.1).
   it("marks the open file row with weight as well as hue", () => {
     expect(styleValue(mockup, ".filerow.selected", "font-weight")).toBe("700");
   });
@@ -168,20 +168,18 @@ describe("keyboard range visibility", () => {
     expect(contrast(token("key-black-on"), token("bg-raised"))).toBeGreaterThanOrEqual(NON_TEXT);
   });
 
-  // The amber root dot and the plain key fills pin both in-range
-  // fills into one narrow luminance band, so the fills cannot also
-  // separate white keys from black keys; the in-range edge stroke is
-  // the boundary that carries that meaning, and it needs 3:1 against
-  // both fills it separates.
+  // The amber root dot and the plain key fills pin both in-range fills
+  // into one narrow luminance band, so the fills can't also separate
+  // white keys from black. The in-range edge stroke carries that
+  // meaning, and it needs 3:1 against both fills it separates.
   it("the in-range key edge separates white keys from black keys", () => {
     expect(contrast(token("key-edge-on"), token("key-white-on"))).toBeGreaterThanOrEqual(NON_TEXT);
     expect(contrast(token("key-edge-on"), token("key-black-on"))).toBeGreaterThanOrEqual(NON_TEXT);
   });
 });
 
-// Text needs air inside its box: the drop zone's browse button was
-// flush against the prompt line, and the matrix controller labels sat
-// on the cell border.
+// Text needs air inside its box: the drop zone's browse button and the
+// matrix controller labels are the tight cases.
 describe("labels get room from their boxes", () => {
   it("the drop zone separates its prompt from the browse button", () => {
     expect(parseInt(styleValue(mockup, ".dropzone .btn", "margin-top"), 10)).toBeGreaterThanOrEqual(

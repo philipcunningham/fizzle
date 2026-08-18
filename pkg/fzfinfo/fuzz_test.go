@@ -11,15 +11,14 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/internal/bitconv"
 )
 
-// FuzzParseFZF feeds arbitrary FZF byte sequences into Parse. Seeds include a
-// well-formed multi-voice fixture; the fuzzer mutates around it to exercise
-// bank-sector counting, voice-area boundary handling, and the multi-disk
-// split detection that reads BankTotalWaveOffset.
+// FuzzParseFZF feeds arbitrary FZF byte sequences into Parse. Mutating
+// around the well-formed multi-voice seeds exercises bank-sector
+// counting, voice-area boundary handling, and the multi-disk split
+// detection that reads BankTotalWaveOffset.
 //
-// The asserted invariants are deliberately tight: a successful Parse must
-// yield a voice count that matches the number of voice entries returned,
-// a memory size that does not exceed the file length, and a split-state
-// that is internally consistent.
+// The invariants are deliberately tight: a successful Parse yields a
+// voice count matching the entries returned, a memory size within the
+// file length, and an internally consistent split state.
 func FuzzParseFZF(f *testing.F) {
 	for _, names := range [][]string{
 		{"A"},
@@ -31,9 +30,8 @@ func FuzzParseFZF(f *testing.F) {
 	}
 	for _, name := range []string{"HOOVER.img", "TECHNO.img", "BRASS.img", "PAD-LFO.img"} {
 		if data, err := os.ReadFile("../../testdata/synthetic/" + name); err == nil {
-			// Real disk images contain an FZF starting somewhere inside;
-			// feed the image as-is to exercise the parser against
-			// non-FZF prefix bytes.
+			// A real disk image holds its FZF somewhere inside, so
+			// feeding it whole exercises non-FZF prefix bytes.
 			f.Add(data)
 		}
 	}

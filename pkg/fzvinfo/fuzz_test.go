@@ -10,9 +10,9 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil"
 )
 
-// FuzzParseFZV feeds arbitrary bytes to Parse and Render/RenderJSON. The
-// goal is to surface header-parser bugs (off-by-one indexing, unhandled
-// envelope shapes, etc.) before they reach users.
+// FuzzParseFZV feeds arbitrary bytes to Parse, Render, and RenderJSON to
+// surface header-parser bugs such as off-by-one indexing or an unhandled
+// envelope shape.
 func FuzzParseFZV(f *testing.F) {
 	f.Add(testutil.MakeTestVoice("A", 100))
 	f.Add(testutil.MakeTestVoice("LONGNAME", 500))

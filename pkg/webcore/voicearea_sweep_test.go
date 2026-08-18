@@ -16,14 +16,12 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
-// The two sweeps below close the gap that let the voice-area
-// regressions through. The unit tests all drove instruments this
-// package assembled, where the summed bstep values equal the walked
-// voice count. Real dumps mostly do not: areas share voices through
-// vp[], the sum runs above the count, and the walk ends on the audio's
-// own bytes. Every operation has to hold on both shapes, so one sweep
-// runs each operation over every dump in testdata and the other walks
-// random sequences of them.
+// The two sweeps below cover both dump shapes. Instruments this package
+// assembles have summed bstep values equal to the walked voice count.
+// Real dumps mostly do not: areas share voices through vp[], the sum
+// runs above the count, and the walk ends on the audio's own bytes.
+// Every operation has to hold on both, so one sweep runs each operation
+// over every dump in testdata and the other walks random sequences.
 
 // areaOp names one operation and the patch builder that performs it.
 type areaOp struct {
@@ -130,9 +128,9 @@ func assertAudioHeld(t *testing.T, what string, before, after dumpGeometry) {
 	}
 }
 
-// Every area operation, over every dump under testdata. The reviewer's
-// own sweep of this shape found one dump of 224 damaged by duplicate,
-// which no suite in the tree would have caught.
+// Every area operation, over every dump under testdata. A sweep of this
+// shape found one dump of 224 damaged by duplicate, which no other test
+// in the tree catches.
 func TestAreaOpsOverTheCorpus(t *testing.T) {
 	dumps := corpusDumps(t)
 	shared, tried, refused := 0, 0, 0
@@ -209,10 +207,9 @@ func TestAddVoiceOverTheCorpus(t *testing.T) {
 
 // A random walk of area operations, checking after every step that the
 // audio has not moved since the sequence began. Single operations on a
-// fresh instrument are the easy case; the damage the review found came
-// from the states a sequence reaches, where the count has already
-// crossed a sector boundary or the summed bsteps have already parted
-// from the walk.
+// fresh instrument are the easy case; the damage comes from the states
+// a sequence reaches, where the count has already crossed a sector
+// boundary or the summed bsteps have already parted from the walk.
 func TestAreaOpSequencesHoldTheAudio(t *testing.T) {
 	const steps = 250
 	applied, refusedBy := 0, map[string]int{}

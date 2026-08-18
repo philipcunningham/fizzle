@@ -217,13 +217,9 @@ func TestOpenLoneSplitDiskFlagsMissing(t *testing.T) {
 	}
 }
 
-// R5 plus E3: a lone half of a split pair carries a truncated dump.
-// A size growing edit would re-split that truncation and format a
-// fresh disk 2 over the real one; a header only edit would rewrite
-// disk 1's wave count from the pair's total down to what this half
-// holds, so the sampler stops asking for the other disk. Every
-// mutating operation refuses, names the disk to fetch, and changes
-// nothing.
+// R5 plus E3: every mutating operation on a lone half of a split pair
+// refuses, names the disk to fetch, and changes nothing. The damage a
+// write would do is in checkWholeDocument.
 func TestEditsOnALoneHalfRefuse(t *testing.T) {
 	s, _ := splitSession(t)
 	disk1, _ := s.ExportImageAt(0)
@@ -363,8 +359,7 @@ func TestEditsOnALoneContinuationRefuse(t *testing.T) {
 // with a stray disk 2 is nonsense whatever that disk holds. The stitch
 // runs an unrelated instrument's audio onto the end of a whole dump,
 // and every read of the document afterwards sees a file of the wrong
-// length: the reviewer's ExtractFile returned 503,808 bytes where the
-// real dump is 9,216.
+// length.
 func TestOpenImagePairRefusesACompleteDiskOne(t *testing.T) {
 	whole := twoVoiceSession(t)
 	wholeImage := mustExport(t, whole)

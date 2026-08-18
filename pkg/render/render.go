@@ -12,15 +12,15 @@ import (
 
 var noteNames = [...]string{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
 
-// NoteName converts a MIDI note number to a human-readable note name (e.g. 60 yields "C4").
-// Uses the convention that middle C (MIDI 60) is C4.
+// NoteName converts a MIDI note number to a note name, on the convention
+// that middle C (MIDI 60) is "C4".
 func NoteName(midi uint8) string {
 	octave := int(midi)/disk.SemitonesPerOctave - 1
 	return fmt.Sprintf("%s%d", noteNames[midi%disk.SemitonesPerOctave], octave)
 }
 
-// RateName returns a short display string for a sample rate index byte
-// (e.g. index 0 yields "36k", 1 yields "18k", 2 yields "9k").
+// RateName returns a short display string for a sample-rate index byte:
+// index 0 yields "36k", 1 yields "18k", and 2 yields "9k".
 func RateName(idx uint8) string {
 	if int(idx) < len(disk.SampleRates) {
 		return fmt.Sprintf("%dk", disk.SampleRates[idx]/1000)
@@ -28,14 +28,14 @@ func RateName(idx uint8) string {
 	return "?"
 }
 
-// Printf writes formatted output to w, discarding any write error.
-// Use this for terminal rendering where write failures are not actionable.
+// Printf writes formatted output to w, discarding any write error. Use it
+// for terminal rendering, where a write failure isn't actionable.
 func Printf(w io.Writer, format string, args ...any) {
 	fmt.Fprintf(w, format, args...) //nolint:errcheck
 }
 
-// Println writes a line to w, discarding any write error.
-// Use this for terminal rendering where write failures are not actionable.
+// Println writes a line to w, discarding any write error. Use it for
+// terminal rendering, where a write failure isn't actionable.
 func Println(w io.Writer, args ...any) {
 	fmt.Fprintln(w, args...) //nolint:errcheck
 }
@@ -56,8 +56,8 @@ const (
 	bytesPerMB = 1024 * 1024
 )
 
-// FormatBytes returns a human-readable string for a byte count,
-// using KB or MB as appropriate (e.g. "140.1 KB", "1.4 MB", "512 B").
+// FormatBytes returns a human-readable byte count, in B, KB, or MB as
+// the size warrants: "512 B", "140.1 KB", "1.4 MB".
 func FormatBytes(b int) string {
 	switch {
 	case b >= bytesPerMB:

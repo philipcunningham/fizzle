@@ -50,10 +50,9 @@ func TestAssembleVoiceKeyMapping(t *testing.T) {
 }
 
 // TestAssembleWritesBVol pins the per-voice bvol[64] volume array (spec
-// §2-2, range 0-127) to DefaultBankVolume. We default to 0 because factory
-// Casio disks sit in 0..27 and a disk written with bvol=0 plays loud on
-// real hardware while bvol=127 plays much quieter. Field semantics are not
-// fully understood; see the DefaultBankVolume comment in pkg/disk.
+// §2-2, range 0-127) to DefaultBankVolume. The default is 0 because factory
+// Casio disks sit in 0..27, and on real hardware bvol=0 plays loud while
+// bvol=127 plays much quieter. See DefaultBankVolume in pkg/disk.
 func TestAssembleWritesBVol(t *testing.T) {
 	t.Parallel()
 	const n = 5
@@ -114,12 +113,10 @@ func TestFixSampleOffsets(t *testing.T) {
 	}
 }
 
-// TestFixSampleOffsetsPreservesLoopFlagBits is a regression test for a bug
-// where fixSampleOffsets treated loopst[i] and looped[i] as plain 32-bit
-// addresses and so corrupted the reserved flag bits (spec §2-1: loopst
-// upper 8 bits = loop-fine, looped MSB = skip flag). Third-party voices
-// with non-zero flag bits would survive a build round-trip with garbage in
-// those bits.
+// TestFixSampleOffsetsPreservesLoopFlagBits pins the reserved flag bits
+// across the address adjustment (spec §2-1: loopst upper 8 bits = loop-fine,
+// looped MSB = skip flag). Treating those cells as plain 32-bit addresses
+// leaves garbage in the flag bits of any third-party voice that sets them.
 func TestFixSampleOffsetsPreservesLoopFlagBits(t *testing.T) {
 	t.Parallel()
 	voice := make([]byte, disk.SectorSize)
@@ -147,15 +144,15 @@ func TestFixSampleOffsetsPreservesLoopFlagBits(t *testing.T) {
 	}
 }
 
-// TestAssembleWithGroupsPreservesLoopFlagBits is the end-to-end regression
-// test: a voice carrying loop-fine and skip-flag bits should survive
-// assembly into an FZF with both flag bits intact and addresses shifted by
-// the priorSamples count for the voice's slot.
+// TestAssembleWithGroupsPreservesLoopFlagBits covers the same ground end to
+// end: a voice carrying loop-fine and skip-flag bits survives assembly into
+// an FZF with both bits intact and its addresses shifted by the priorSamples
+// count for its slot.
 func TestAssembleWithGroupsPreservesLoopFlagBits(t *testing.T) {
 	t.Parallel()
 
-	// Voice 0 contributes 50 samples (100 bytes -> padded to one sector).
-	// Voice 1's slot has priorSamples = padded(100)/2 = 512 samples.
+	// Voice 0 contributes 50 samples (100 bytes, padded to one sector), so
+	// voice 1's slot has priorSamples = padded(100)/2 = 512 samples.
 	v0 := testutil.MakeTestVoice("FIRST", 50)
 	v1 := testutil.MakeTestVoice("LOOPY", 50)
 
@@ -217,7 +214,6 @@ func TestAssembleAudioOffsets(t *testing.T) {
 		binary.LittleEndian.PutUint32(v[0x04:], uint32(sampleCounts[i])) //nolint:gosec // G115: test constant
 		binary.LittleEndian.PutUint32(v[0x08:], 0)
 		binary.LittleEndian.PutUint32(v[0x0c:], uint32(sampleCounts[i])) //nolint:gosec // G115: test constant
-		// Fill audio with a recognisable pattern: voice index repeated.
 		marker := byte(i + 1)
 		for j := disk.SectorSize; j < len(v); j++ {
 			v[j] = marker
@@ -230,25 +226,21 @@ func TestAssembleAudioOffsets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Audio area starts after bank sector + voice area.
 	voiceSectors := disk.VoiceAreaSectors(n)
 	audioAreaStart := disk.SectorSize + voiceSectors*disk.SectorSize
 
 	for i := range n {
-		// Read waveStart from the voice header in the voice area.
 		voff := (i/4)*disk.SectorSize + (i%4)*disk.VoicePackSize
 		hdrOff := disk.SectorSize + voff // after bank sector
 		waveStart := int(binary.LittleEndian.Uint32(out[hdrOff+0x00 : hdrOff+0x04]))
 		waveEnd := int(binary.LittleEndian.Uint32(out[hdrOff+0x04 : hdrOff+0x08]))
 
-		// The audio for voice i must be at audioAreaStart + waveStart*2.
 		audioByteStart := audioAreaStart + waveStart*2
 		if audioByteStart+2 > len(out) {
 			t.Errorf("voice %d: audioByteStart %d out of range", i+1, audioByteStart)
 			continue
 		}
 
-		// Check that the first byte of audio matches the marker for this voice.
 		got := out[audioByteStart]
 		want := byte(i + 1)
 		if got != want {
@@ -256,7 +248,6 @@ func TestAssembleAudioOffsets(t *testing.T) {
 				i+1, got, want)
 		}
 
-		// Also verify waveEnd - waveStart == sampleCounts[i].
 		if waveEnd-waveStart != sampleCounts[i] {
 			t.Errorf("voice %d: waveEnd-waveStart = %d, want %d", i+1, waveEnd-waveStart, sampleCounts[i])
 		}
@@ -284,9 +275,8 @@ func TestAssembleSectorBoundary(t *testing.T) {
 	waveStart5 := int(binary.LittleEndian.Uint32(out[voice5HdrOff+0x00 : voice5HdrOff+0x04]))
 	waveEnd5 := int(binary.LittleEndian.Uint32(out[voice5HdrOff+0x04 : voice5HdrOff+0x08]))
 
-	// Voice 5's waveStart must equal the cumulative padded sample count of voices 1-4.
-	// Each of voices 1-4 has 512 samples = 512*2=1024 bytes (already sector-aligned) = 512 samples.
-	// Cumulative = 4 * 512 = 2048.
+	// Voices 1-4 each hold 512 samples (1024 bytes, already sector-aligned),
+	// so voice 5's waveStart is the cumulative 4 * 512 = 2048.
 	if waveStart5 != 2048 {
 		t.Errorf("voice 5 waveStart: got %d, want 2048", waveStart5)
 	}
@@ -347,10 +337,8 @@ func TestAssembleDefaultAudioOutIsPolyphonic(t *testing.T) {
 	}
 }
 
-// multiDiskFixture builds a set of 3 large voices (300,000 samples each,
-// ~600 KB per voice) and assembles them into a multi-disk result.
-// 3 voices at 36kHz = ~1.8 MB, which requires 2 disks.
-// Returns the voices and assembled result for use in tests.
+// multiDiskFixture builds 3 large voices (300,000 samples, ~600 KB each) and
+// assembles them. At 36 kHz that is ~1.8 MB, which needs 2 disks.
 func multiDiskFixture(t *testing.T) (voices [][]byte, result MultiDiskResult) {
 	t.Helper()
 	const nVoices = 3
@@ -399,14 +387,11 @@ func TestAssembleMultiDiskBothDisksFit(t *testing.T) {
 	}
 }
 
-// TestAssembleMultiDiskDisk1BankHasAllVoices is the critical regression test
-// for the multi-disk format. Disk 1's bank sector must contain the total voice
-// count for the full instrument, not just the voices whose audio fits on disk 1.
-//
-// Why this matters: after loading disk 1, the sampler compares the bank voice
-// count against how much audio it received. If the counts match, it considers
-// loading complete. If disk 1's bank only listed disk 1 voices, the sampler
-// would never prompt for disk 2.
+// TestAssembleMultiDiskDisk1BankHasAllVoices pins the multi-disk format: disk
+// 1's bank sector carries the voice count for the whole instrument, not just
+// the voices whose audio fits on disk 1. After loading disk 1 the sampler
+// compares that count against the audio it received, and treats matching
+// counts as a finished load, so a disk-1-only count never prompts for disk 2.
 func TestAssembleMultiDiskDisk1BankHasAllVoices(t *testing.T) {
 	t.Parallel()
 	voices, result := multiDiskFixture(t)
@@ -421,12 +406,10 @@ func TestAssembleMultiDiskDisk1BankHasAllVoices(t *testing.T) {
 	}
 }
 
-// TestAssembleMultiDiskTotalWaveExceedsDisk1Audio verifies that the total wave
-// sector count (WaveCount in the result) exceeds the audio sectors on disk 1.
-//
-// The caller (diskadd) writes WaveCount into the DIS tail on both disks. The
-// sampler compares total wave sectors against disk 1's local audio to decide
-// whether to prompt for disk 2.
+// TestAssembleMultiDiskTotalWaveExceedsDisk1Audio verifies that WaveCount
+// exceeds the audio sectors on disk 1. diskadd writes WaveCount into the DIS
+// tail on both disks, and the sampler compares it against disk 1's local
+// audio to decide whether to prompt for disk 2.
 func TestAssembleMultiDiskTotalWaveExceedsDisk1Audio(t *testing.T) {
 	t.Parallel()
 	_, result := multiDiskFixture(t)
@@ -503,8 +486,8 @@ func TestAssembleMultiDiskDisk1VoiceAreaCoversAllVoices(t *testing.T) {
 }
 
 // TestAssembleMultiDiskDisk2IsNotParseable verifies that disk 2 does not start
-// with a recognisable bank sector. Under the new split strategy, disk 2 is
-// pure audio continuation: the sampler appends it to RAM after disk 1's audio.
+// with a recognisable bank sector. Disk 2 is pure audio continuation: the
+// sampler appends it to RAM after disk 1's audio.
 func TestAssembleMultiDiskDisk2IsNotParseable(t *testing.T) {
 	t.Parallel()
 	_, result := multiDiskFixture(t)
@@ -559,10 +542,9 @@ func TestAssembleMultiDiskExceedsHardwareLimit(t *testing.T) {
 
 func TestAssembleMultiDiskExceedsSampleRAM(t *testing.T) {
 	t.Parallel()
-	// Two voices whose total audio fits on 2 floppies but exceeds the
-	// hardware's 2 MB sample RAM. Each voice is just over 1 MB so the
-	// combined audio is ~2.1 MB (fits on 2 × 1.25 MB floppies but not
-	// in 2 MB of RAM).
+	// Two voices whose audio fits on 2 floppies but exceeds the hardware's
+	// 2 MB sample RAM: each is just over 1 MB, so ~2.1 MB combined fits on
+	// 2 × 1.25 MB floppies but not in RAM.
 	samplesPerVoice := (disk.MaxSampleRAM/2 + 512) / 2
 	voices := make([][]byte, 2)
 	groups := make([]Keygroup, 2)
@@ -645,10 +627,9 @@ func TestAssembleMultiDiskMetadata(t *testing.T) {
 	}
 }
 
-// TestAssembleMultiDiskAudioContinuity verifies that concatenating disk 1's
-// audio area and disk 2's data reconstructs the complete FZF audio. This
-// proves that the split is a clean byte-level partition with no duplication
-// or gaps.
+// TestAssembleMultiDiskAudioContinuity concatenates disk 1's audio area and
+// disk 2's data back into the complete FZF audio, proving the split is a
+// clean byte-level partition with no duplication or gaps.
 func TestAssembleMultiDiskAudioContinuity(t *testing.T) {
 	t.Parallel()
 	voices, result := multiDiskFixture(t)
@@ -692,10 +673,9 @@ func TestAssembleMultiDiskAllFitsErrors(t *testing.T) {
 	}
 }
 
-// TestBuildKeyCentreNotCorrupted is a regression test for a bug where
-// midiChan was written at offset 0x104 instead of 0x142, which overwrote
-// the cent[] array starting at voice 3, setting their key centres to 0 (C-1).
-// This caused wrong pitch playback on hardware for all but the first two voices.
+// TestBuildKeyCentreNotCorrupted keeps midiChan off the cent[] array. Writing
+// it at 0x104 rather than 0x142 overwrites cent[] from voice 3 on, zeroing
+// their key centres to C-1 and detuning playback on hardware.
 func TestBuildKeyCentreNotCorrupted(t *testing.T) {
 	t.Parallel()
 	// Build 5 voices so voices 3-5 span the corrupted region.
@@ -731,8 +711,8 @@ func TestBuildNoVoices(t *testing.T) {
 }
 
 // TestBuildContextCancelled verifies Build aborts mid-iteration when ctx is
-// already cancelled. We don't need a real voice file because the ctx check
-// fires before the read attempt.
+// already cancelled. No real voice file is needed: the ctx check fires
+// before the read.
 func TestBuildContextCancelled(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -752,8 +732,8 @@ func TestBuildWarnsSizeExceedsDisk(t *testing.T) {
 
 	dir := t.TempDir()
 
-	// Each voice is ~1 MB of audio (500,000 samples × 2 bytes).
-	// Two such voices give ~2 MB, exceeding UsableDataSize (~1.25 MB).
+	// Each voice is ~1 MB (500,000 samples × 2 bytes), so two give ~2 MB,
+	// over UsableDataSize (~1.25 MB).
 	v := testutil.MakeTestVoice("BIG", 500000)
 	vPath := filepath.Join(dir, "big.fzv")
 	if err := os.WriteFile(vPath, v, 0644); err != nil {
@@ -769,9 +749,8 @@ func TestBuildWarnsSizeExceedsDisk(t *testing.T) {
 	}
 }
 
-// TestBuildBankSectorRejectsKeyLowGreaterThanKeyHigh verifies that an
-// inverted key range is rejected with a descriptive error rather than
-// producing an incoherent bank sector.
+// TestBuildBankSectorRejectsKeyLowGreaterThanKeyHigh verifies an inverted key
+// range fails with a descriptive error instead of an incoherent bank sector.
 func TestBuildBankSectorRejectsKeyLowGreaterThanKeyHigh(t *testing.T) {
 	t.Parallel()
 	voices := [][]byte{testutil.MakeTestVoice("BAD", 64)}
@@ -852,9 +831,7 @@ func TestBuildBankSectorRejectsKeyCentreOverMaxMIDI(t *testing.T) {
 }
 
 // TestBuildBankSectorWarnsKeyCentreOutsideRange documents that a KeyCentre
-// outside [KeyLow, KeyHigh] is a soft warning, not a hard error. Real SFZ
-// corpora (e.g. JUNGLISM) legitimately use pitch_keycenter to transpose a
-// sample beyond its key range, and the hardware DCP handles it fine.
+// outside [KeyLow, KeyHigh] warns rather than failing; see validateKeygroup.
 //
 // Not parallel: CaptureLog mutates the global logger.
 func TestBuildBankSectorWarnsKeyCentreOutsideRange(t *testing.T) {
@@ -889,13 +866,9 @@ func TestBuildBankSectorAcceptsValidKeygroups(t *testing.T) {
 // TestAssembleWritesVoiceHeaderKeyRange verifies that AssembleWithKeygroups
 // writes the per-voice key range (hwid/lwid/cent at 0xae/0xaf/0xb0, spec §2-1)
 // into each voice header in the assembled FZF, not just into the bank sector
-// arrays (spec §2-2). Without this, voices imported via voiceimport.Encode
-// would keep their DefaultKeyHigh/Low/Centre values in the FZF and tools that
-// read voice-header bytes (fzv info, voiceunpack) would report stale defaults.
-//
-// This is the regression guard for F15, which extends F11 (sfzconvert cent)
-// to cover all three key-range bytes at the voicebuild level so both the
-// `fzf build` and `sfz convert` pipelines benefit.
+// arrays (spec §2-2). Otherwise a voice imported via voiceimport.Encode keeps
+// its DefaultKeyHigh/Low/Centre bytes, and tools that read the voice header
+// (fzv info, voiceunpack) report those stale defaults.
 func TestAssembleWritesVoiceHeaderKeyRange(t *testing.T) {
 	t.Parallel()
 	type kr struct {

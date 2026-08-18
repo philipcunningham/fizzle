@@ -74,8 +74,7 @@ func TestAddVoiceNoDiskCreatesDiskAndInstrument(t *testing.T) {
 		t.Error("the assembled instrument should map its voice")
 	}
 
-	// The voice's audio survives placement: the slot decodes to the
-	// same frames the .fzv decodes to.
+	// The voice's audio survives placement.
 	wantRate, wantPCM, err := voiceextract.Decode(fzv)
 	if err != nil {
 		t.Fatal(err)
@@ -89,9 +88,8 @@ func TestAddVoiceNoDiskCreatesDiskAndInstrument(t *testing.T) {
 	}
 }
 
-// R7 matrix, .fzv row, "instrument open": joins the voice list. The
-// join lands mapped to a fresh area (the format sizes the voice area
-// from bank references, so membership is reference).
+// R7 matrix, .fzv row, "instrument open": joins the voice list, mapped
+// to a fresh area so the next parse still finds the voice.
 func TestAddVoiceJoinsVoiceList(t *testing.T) {
 	s := twoVoiceSession(t)
 	pcmBefore := dumpPCMBytes(t, s)
@@ -121,7 +119,6 @@ func TestAddVoiceJoinsVoiceList(t *testing.T) {
 		t.Fatalf("joined area velocity = %d..%d, want 1..127", joined.VelLow, joined.VelHigh)
 	}
 
-	// PCM grew by exactly the voice's audio block.
 	_, wantPCM, err := voiceextract.Decode(fzv)
 	if err != nil {
 		t.Fatal(err)
@@ -332,7 +329,6 @@ func TestAddBankJoinsAtSlot(t *testing.T) {
 	if area.VoiceSlot != 0 || area.VoiceName != voiceLow {
 		t.Fatalf("joined area = %+v, want slot 0 (%s)", area, voiceLow)
 	}
-	// The instrument's own voices and audio are untouched.
 	if got := len(inst.Voices); got != 2 {
 		t.Fatalf("voices = %d, want 2", got)
 	}
@@ -380,8 +376,8 @@ func TestAddBankKeepsTheAudioWhereItIs(t *testing.T) {
 // A bank sector holds more than the bank. Sector 0 also carries the
 // instrument's effect block (R19: bend range and all 21 modulation
 // cells) and the multi-disk total wave marker, neither of which the
-// arriving .fzb owns. Replacing the whole sector took a bend range of
-// 99 down to the firmware default and wiped every cell.
+// arriving .fzb owns. Replacing the whole sector would take a bend
+// range of 99 down to the firmware default and wipe every cell.
 func TestAddBankAtSlotZeroKeepsTheInstrumentsEffects(t *testing.T) {
 	s := twoVoiceSession(t)
 	if _, cerr := s.SetBendRange(99); cerr != nil {
@@ -487,9 +483,8 @@ func TestJoinedVoiceRoutesToAllOutputs(t *testing.T) {
 
 // R7's .wav and .fzv cells promise sequential mapping and J5 promises
 // the next free key range. Every voice the WAV importer produces
-// carries the same fixed default range, so honouring the incoming
-// header stacked every joined voice on the same two octaves and one
-// key sounded all of them.
+// carries the same fixed default range, so the join takes the next free
+// key rather than the incoming header (joinKeyRange).
 func TestJoinedVoicesTakeTheNextFreeKey(t *testing.T) {
 	s := twoVoiceSession(t) // areas at 36..59 and 60..96
 	const joins = 8

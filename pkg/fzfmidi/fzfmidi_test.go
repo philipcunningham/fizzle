@@ -13,12 +13,11 @@ import (
 )
 
 // buildMultiBankFZF synthesises an FZF whose bank sectors map distinct
-// (bank, split) -> voice-slot references via vp[]. Each bankPlan is the
-// list of voice-slot indices the bank's vp[] array points to (key-split
-// position s -> bankPlan[s]). The voice area is sized to cover the
-// largest referenced slot, and every referenced slot gets a plausible
-// active voice header so InferVoiceCount and IsPlausibleVoiceSlot accept
-// it.
+// (bank, split) pairs onto voice slots through vp[]. Each bankPlan lists
+// the voice-slot indices that bank's vp[] points at, so key-split
+// position s maps to bankPlan[s]. The voice area covers the largest
+// referenced slot, and every referenced slot gets a plausible active
+// voice header that InferVoiceCount and IsPlausibleVoiceSlot accept.
 func buildMultiBankFZF(t *testing.T, bankPlans [][]int) []byte {
 	t.Helper()
 	if len(bankPlans) == 0 {
@@ -334,12 +333,12 @@ func TestSetMissingFile(t *testing.T) {
 	}
 }
 
-// TestSetMultiBankWritesEveryBankSite is the regression test for F1: on
-// real-hardware multi-bank dumps the per-voice mchn byte lives in each
-// bank's own sector indexed by key-split position (spec §2-2). Writing
-// only data[BankMIDIRecvChanOffset+voiceSlot] would patch bank 0 alone.
-// Synthesise a 2-bank FZF where slot 0 is referenced from bank 0 split 0
-// AND bank 1 split 2; both sites must be updated.
+// TestSetMultiBankWritesEveryBankSite pins F1: on real-hardware
+// multi-bank dumps the per-voice mchn byte lives in each bank's own
+// sector, indexed by key-split position (spec §2-2), and writing only
+// data[BankMIDIRecvChanOffset+voiceSlot] patches bank 0 alone. Slot 0
+// here is referenced from bank 0 split 0 and bank 1 split 2, and both
+// sites must update.
 func TestSetMultiBankWritesEveryBankSite(t *testing.T) {
 	t.Parallel()
 	data := buildMultiBankFZF(t, [][]int{{0, 1}, {2, 3, 0}})
@@ -357,11 +356,12 @@ func TestSetMultiBankWritesEveryBankSite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Bank 0 split 0 -> data[BankMIDIRecvChanOffset+0] should be 6 (chan 7 stored 0-indexed).
+	// Bank 0 split 0 sits at data[BankMIDIRecvChanOffset+0], holding 6
+	// for channel 7 stored 0-indexed.
 	if v := got[disk.BankMIDIRecvChanOffset+0]; v != 6 {
 		t.Errorf("bank 0 split 0 mchn: got %d, want 6", v)
 	}
-	// Bank 1 split 2 -> data[1*SectorSize+BankMIDIRecvChanOffset+2] should be 6.
+	// Bank 1 split 2 sits at data[1*SectorSize+BankMIDIRecvChanOffset+2].
 	if v := got[disk.SectorSize+disk.BankMIDIRecvChanOffset+2]; v != 6 {
 		t.Errorf("bank 1 split 2 mchn: got %d, want 6", v)
 	}

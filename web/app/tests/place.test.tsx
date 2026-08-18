@@ -132,10 +132,9 @@ describe("placement routing", () => {
     await screen.findByText("Voices (5/64)");
   });
 
-  // The dialog counts every WAV in the dropped tree, so the count is
-  // a promise: the folder import delivers that many voices. The core
-  // converted the top level alone. The fake never did, so this pins
-  // both layers to one promise rather than reproducing that gap.
+  // The dialog counts every WAV in the dropped tree, so the count is a
+  // promise: the folder import delivers that many voices. This pins
+  // both layers to that promise.
   it("a nested WAV folder converts every file it counted (R8)", async () => {
     await openDisk();
     pickFiles([
@@ -150,9 +149,8 @@ describe("placement routing", () => {
   });
 
   it("the folder import carries the one stereo answer to the core (R8)", async () => {
-    // No instrument yet, so the batch takes the folder route, where
-    // the answer used to be dropped on the floor. The files are
-    // stereo, which is what makes the question appear at all.
+    // No instrument yet, so the batch takes the folder route. The files
+    // are stereo, which is what makes the question appear at all.
     await openDisk();
     pickFiles([
       new File([wavFixture(2, 44100, 100)], "01 kick.wav"),
@@ -170,10 +168,9 @@ describe("placement routing", () => {
     expect(fakeCalls.wavFolderChannel).toBe("mix");
   });
 
-  // B2: the SFZ route is what a dropped library takes, and it asks
-  // the same question the WAV route does. The answer used to have
-  // nowhere to go: the dialog never showed it and the boundary had no
-  // parameter to carry it.
+  // B2: the SFZ route is what a dropped library takes, and it asks the
+  // same stereo question the WAV route does. The dialog has to show it
+  // and the boundary has to carry it.
   it("the SFZ conversion carries the one stereo answer to the core", async () => {
     await openDisk();
     const sfz = new TextEncoder().encode("<region> sample=kick.wav\n");
@@ -188,10 +185,9 @@ describe("placement routing", () => {
     });
   });
 
-  // R6 lists SFZ folders as an input, and a DAW export often holds
-  // more than one .sfz. The core asks which one; until the dialog
-  // carried the question, nothing could answer it and Cancel was the
-  // only way out.
+  // R6 lists SFZ folders as an input, and a DAW export often holds more
+  // than one .sfz. The core asks which one, so the dialog has to carry
+  // the question or Cancel is the only way out.
   it("a folder holding two .sfz files asks which one to convert (R6)", async () => {
     const inner = createFakeCore();
     const asked: string[] = [];
@@ -359,8 +355,8 @@ describe("sidebar file actions", () => {
     await screen.findByText("Voices (0/64)");
   });
 
-  // The instrument row's Enter switches tab, and a context menu is a
-  // pointer gesture, so deleting it was pointer-only (Q5).
+  // The instrument row's Enter switches tab and a context menu is a
+  // pointer gesture, so deletion needs its own keyboard route (Q5).
   it("deletes a file from the keyboard as well as the pointer (Q5)", async () => {
     await openInstrumentDisk();
     const row = screen.getByRole("button", { name: /full/ });
@@ -373,7 +369,7 @@ describe("sidebar file actions", () => {
   });
 
   // R26: the core stitches a split dump back together for extractFile,
-  // and until now nothing in the UI called it for the full dump.
+  // and the UI calls it for the full dump.
   it("exports the instrument dump as .fzf (R26)", async () => {
     const inner = createFakeCore();
     const asked: string[] = [];
@@ -393,9 +389,9 @@ describe("sidebar file actions", () => {
   });
 });
 
-// A bare .sfz is only the instrument's recipe: the browser cannot
-// read the samples it references unasked, so the shell asks for the
-// folder instead of offering a conversion that must fail.
+// A bare .sfz is only the instrument's recipe: the browser can't read
+// the samples it references unasked, so the shell asks for the folder
+// instead of offering a conversion that must fail.
 describe("a lone .sfz asks for its samples", () => {
   const PENDING_SFZ_TEXT = "<region> sample=JUNGLISM Samples/amen 01.wav\n";
   const FOLDER_SFZ_TEXT = "<region> sample=JUNGLISM Samples/amen 01.wav folder copy\n";
@@ -569,8 +565,7 @@ describe("a lone .sfz asks for its samples", () => {
   });
 });
 
-// The prompt asks for one thing, in one sentence: the copy the owner
-// settled on.
+// The prompt asks for one thing, in one sentence.
 describe("the sfz prompt's wording", () => {
   it("asks for the samples folder and nothing else", async () => {
     await openDisk();

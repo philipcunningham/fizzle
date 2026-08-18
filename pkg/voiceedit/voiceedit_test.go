@@ -52,9 +52,7 @@ func parseFZV(t *testing.T, path string) *fzvinfo.VoiceParams {
 	return params
 }
 
-// ---------------------------------------------------------------------------
-// Validation tests
-// ---------------------------------------------------------------------------
+// Validation tests.
 
 func TestValidateByte(t *testing.T) {
 	t.Parallel()
@@ -130,9 +128,7 @@ func TestValidateWaveform(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Patch building tests
-// ---------------------------------------------------------------------------
+// Patch building tests.
 
 func TestBuildLFOPatches(t *testing.T) {
 	t.Parallel()
@@ -179,9 +175,8 @@ func TestBuildLFOPatchesInvalidRate(t *testing.T) {
 
 // TestBuildLFOPatchesPreservesPhaseFlag pins the spec §2-1 layout of the
 // lfo_name byte: bits 0-6 are the waveform index, bit 7 is the phase-sync
-// flag. When only the waveform index changes, the phase-sync flag must
-// survive the byte-level write. A clean byte(wave) write (the prior
-// implementation) silently cleared bit 7.
+// flag. A waveform-only change must leave bit 7 alone, which a clean
+// byte(wave) write silently clears.
 func TestBuildLFOPatchesPreservesPhaseFlag(t *testing.T) {
 	t.Parallel()
 	// origLFOName = 0x83: waveform 3 (Triangle) | bit 7 (phase sync).
@@ -308,9 +303,7 @@ func TestBuildNamePatch(t *testing.T) {
 	if len(p.Bytes) != disk.VoiceNameFieldSize {
 		t.Fatalf("payload length: got %d, want %d", len(p.Bytes), disk.VoiceNameFieldSize)
 	}
-	// BuildNamePatch stores the name verbatim: mixed case preserved.
-	// (Factory disks such as "All Voices" use mixed case; upper-casing
-	// on commit surprises users who Tab through unchanged fields.)
+	// Case is stored verbatim; see BuildNamePatch.
 	if string(p.Bytes[:6]) != "my pad" {
 		t.Errorf("payload prefix: got %q, want %q", p.Bytes[:6], "my pad")
 	}
@@ -335,9 +328,7 @@ func TestBuildNamePatchTooLong(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// FZV patching tests
-// ---------------------------------------------------------------------------
+// FZV patching tests.
 
 func TestApplyToFZV(t *testing.T) {
 	t.Parallel()
@@ -460,9 +451,7 @@ func TestApplyToFZVOutOfRange(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// FZF voice patching tests
-// ---------------------------------------------------------------------------
+// FZF voice patching tests.
 
 func TestApplyToFZFVoice(t *testing.T) {
 	t.Parallel()
@@ -524,9 +513,7 @@ func TestApplyToFZFVoiceNotFound(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Round-trip tests
-// ---------------------------------------------------------------------------
+// Round-trip tests.
 
 func TestLFOPatchRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -591,9 +578,7 @@ func TestNamePatchRoundTrip(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Audio preservation test
-// ---------------------------------------------------------------------------
+// Audio preservation test.
 
 func TestApplyToFZVUint16Patch(t *testing.T) {
 	t.Parallel()
@@ -647,9 +632,8 @@ func TestApplyToFZFVoiceCaseInsensitive(t *testing.T) {
 
 // TestApplyToFZFVoiceSyncsBankKeyRange verifies that BuildKeyRangePatch edits
 // propagate from the voice header into every bank site's per-split key-range
-// array (spec §2-2: hwid[64]/lwid[64]/cent[64]). Hardware playback reads the
-// bank arrays when the FZF is loaded as a bank, so a voice-header-only patch
-// would be a silent no-op on the FZ-1. Regression guard for F14.
+// array (spec §2-2: hwid[64]/lwid[64]/cent[64]). A bank-loaded FZF plays from
+// those arrays, so a voice-header-only patch is a silent no-op on the FZ-1.
 func TestApplyToFZFVoiceSyncsBankKeyRange(t *testing.T) {
 	t.Parallel()
 	fzfPath := extractTestFZF(t, "../../testdata/synthetic/TECHNO.img", "FULL-DATA-FZ")
@@ -714,8 +698,7 @@ func TestApplyToFZFVoiceSyncsBankKeyRange(t *testing.T) {
 }
 
 // TestApplyToFZFVoiceNonKeyRangePatchSkipsBank confirms that patches with no
-// bank counterpart (LFO, filter, envelope, etc.) do NOT touch the bank sector.
-// Regression guard against over-eager bank propagation.
+// bank counterpart (LFO, filter, envelope) leave the bank sector alone.
 func TestApplyToFZFVoiceNonKeyRangePatchSkipsBank(t *testing.T) {
 	t.Parallel()
 	fzfPath := extractTestFZF(t, "../../testdata/synthetic/TECHNO.img", "FULL-DATA-FZ")
@@ -778,9 +761,9 @@ func TestApplyToFZFVoiceNonKeyRangePatchSkipsBank(t *testing.T) {
 }
 
 // TestApplyToFZFVoiceSyncsBankKeyRangeMultiBank exercises bank-sector sync on
-// a synthetic FZF where the target voice slot is referenced by multiple banks
-// at distinct key-splits; the case TECHNO.img's `COWBELL` may or may not hit
-// depending on its bank topology. Mirrors fzfmidi/fzfoutput's multi-bank tests.
+// a synthetic FZF where one voice slot is referenced by two banks at distinct
+// key-splits, a topology TECHNO.img's `COWBELL` may not have. Mirrors the
+// multi-bank tests in fzfmidi and fzfoutput.
 func TestApplyToFZFVoiceSyncsBankKeyRangeMultiBank(t *testing.T) {
 	t.Parallel()
 
@@ -796,8 +779,8 @@ func TestApplyToFZFVoiceSyncsBankKeyRangeMultiBank(t *testing.T) {
 	// we prepend a duplicate bank sector and shift the voice area.
 	bank0 := make([]byte, disk.SectorSize)
 	copy(bank0, data[:disk.SectorSize])
-	// Modify bank 0 in place: bstep stays 2, vp[]=[0,1].
-	// Create a clone bank 1 that maps split 0 -> slot 1, split 1 -> slot 0.
+	// Bank 0 keeps bstep 2 and vp[]=[0,1]. Clone it into a bank 1 whose
+	// split 0 maps to slot 1 and split 1 to slot 0.
 	bank1 := make([]byte, disk.SectorSize)
 	copy(bank1, bank0)
 	binary.LittleEndian.PutUint16(bank1[disk.BankVoiceNumOffset:], 1)
@@ -1000,9 +983,7 @@ func extractBrassVoice(t *testing.T, voiceName string) *fzvinfo.VoiceParams {
 	return parseFZV(t, filepath.Join(dir, voiceName+".fzv"))
 }
 
-// ---------------------------------------------------------------------------
-// Rate/stop conversion tests
-// ---------------------------------------------------------------------------
+// Rate/stop conversion tests.
 
 func TestRateDisplayToByte(t *testing.T) {
 	t.Parallel()
@@ -1192,9 +1173,7 @@ func TestBrassEnvelopeDisplayValues(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// DCA envelope patch tests
-// ---------------------------------------------------------------------------
+// DCA envelope patch tests.
 
 func TestBuildDCAPatches(t *testing.T) {
 	t.Parallel()
@@ -1276,9 +1255,7 @@ func TestBuildDCAPatchesValidation(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// DCF envelope patch tests
-// ---------------------------------------------------------------------------
+// DCF envelope patch tests.
 
 func TestBuildDCFPatches(t *testing.T) {
 	t.Parallel()
@@ -1330,9 +1307,7 @@ func TestBuildDCFPatchesValidation(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// DCA/DCF patch round-trip tests
-// ---------------------------------------------------------------------------
+// DCA/DCF patch round-trip tests.
 
 func TestDCAPatchRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -1466,9 +1441,7 @@ func TestDCAEditPreservesOtherParams(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Modulation patch tests
-// ---------------------------------------------------------------------------
+// Modulation patch tests.
 
 func TestBuildModulationPatchesAllSet(t *testing.T) {
 	t.Parallel()
@@ -1588,11 +1561,9 @@ func TestBuildModulationPatchesValidation(t *testing.T) {
 
 // TestApplyToFZVSignedVelDCAKFAndVelDCFKFRoundTrip writes negative values
 // to vel_dca_kf and vel_dcf_kf and verifies they round-trip via fzvinfo.
-// Per spec §2-1 both bytes are signed -127..+127 (a minus number assigns
-// the lower velocity to generate the bigger volume / filter cutoff). This
-// guards against F17 regressing: previously these two fields rejected
-// negative values at the CLI/voiceedit layer even though fzvinfo parsed
-// them as int8.
+// Per spec §2-1 both bytes are signed -127..+127 (a minus number makes the
+// lower velocity generate the bigger volume or filter cutoff), and fzvinfo
+// parses them as int8, so the CLI and voiceedit must accept negatives too.
 func TestApplyToFZVSignedVelDCAKFAndVelDCFKFRoundTrip(t *testing.T) {
 	t.Parallel()
 	path := buildTestFZV(t)
@@ -1660,18 +1631,14 @@ func TestApplyToFZVSignedVelModulationRoundTrip(t *testing.T) {
 	}
 }
 
-// TestConcurrentApplyToFZVSafe is a regression test for the lost-write race
-// between two processes (or goroutines) calling ApplyToFZV on the same file.
-// Without the fileutil.WithFileLock guard around the read-modify-write cycle,
-// concurrent calls can read the same baseline, each apply their own patch
-// independently, and the last writer's atomic rename clobbers the other
-// writer's changes. With the lock, every writer's edit is observable in the
-// final file because each read-modify-write runs in its own critical section.
+// TestConcurrentApplyToFZVSafe covers the lost-write race between two callers
+// of ApplyToFZV on one file. Without the fileutil.WithFileLock guard around
+// the read-modify-write cycle, both read the same baseline and the last
+// atomic rename clobbers the other's edit.
 //
-// The test asserts the weaker property that the file is coherent after the
-// race: it is still a valid FZV and contains exactly one of the writers'
-// LFORate values (no torn header). The acceptance check (one-of writers won)
-// matches diskadd_test.go's TestConcurrentAddSafe pattern.
+// The assertion is the weaker coherence property: the file still parses and
+// carries exactly one writer's LFORate, so the header never tore. That
+// one-of-the-writers-won check matches diskadd_test.go's TestConcurrentAddSafe.
 func TestConcurrentApplyToFZVSafe(t *testing.T) {
 	t.Parallel()
 	path := buildTestFZV(t)
@@ -1704,9 +1671,8 @@ func TestConcurrentApplyToFZVSafe(t *testing.T) {
 		}
 	}
 
-	// The file must still parse and its LFORate must equal one of the
-	// writers' values. A torn header would either fail to parse or carry
-	// a rate value none of the writers wrote.
+	// A torn header would either fail to parse or carry a rate value none
+	// of the writers wrote.
 	after := parseFZV(t, path)
 	final := int(after.LFORate)
 	wonBy := -1
@@ -1721,8 +1687,7 @@ func TestConcurrentApplyToFZVSafe(t *testing.T) {
 	}
 }
 
-// ApplyToFZVBytes is the pure in-memory entry point the web core
-// calls: the same patching as ApplyToFZV with no filesystem.
+// ApplyToFZVBytes must produce the same bytes as ApplyToFZV.
 func TestApplyToFZVBytesMatchesApplyToFZV(t *testing.T) {
 	samples := make([]int16, 2000)
 	for i := range samples {
@@ -1842,9 +1807,7 @@ func TestBuildLoopSelectPatch(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Loop attribute (XF/Tm) and slot-addressed patching tests
-// ---------------------------------------------------------------------------
+// Loop attribute (XF/Tm) and slot-addressed patching tests.
 
 func TestBuildLoopAttrPatchRoundTrips(t *testing.T) {
 	t.Parallel()

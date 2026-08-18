@@ -20,15 +20,13 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/render"
 )
 
-// VoiceEntry is an alias for fzutil.VoiceEntry: fzbinfo and fzfinfo share
-// the same 11-field shape for bank-mapped voice metadata. The alias keeps
-// existing callers (`fzbinfo.VoiceEntry{...}` literals, `info.Voices[i].KeyLow`)
-// working unchanged. fzfinfo's local VoiceEntry embeds the same type and
-// adds three audio-only fields (rate index, duration, has-loop).
-// PlaybackMode is the spec's loop-mode field ("normal" / "no_sound" / ...).
-// NoSound entries are spec-defined placeholders, included so the slot index
-// matches the bank's vp[] references; callers that want audible voices only
-// should filter on PlaybackMode != disk.PlaybackModeNameNoSound.
+// VoiceEntry is an alias for fzutil.VoiceEntry, the 11-field shape
+// fzbinfo and fzfinfo share for bank-mapped voice metadata. fzfinfo's own
+// VoiceEntry embeds the same type and adds three audio-only fields (rate
+// index, duration, and has-loop). PlaybackMode is the spec's loop-mode
+// field ("normal", "no_sound", and so on). NoSound entries are
+// spec-defined placeholders, kept so slot indices match the bank's vp[]
+// references; filter them out for audible voices only.
 type VoiceEntry = fzutil.VoiceEntry
 
 // BankDump holds the parsed contents of a bank dump file.
@@ -55,19 +53,17 @@ func Parse(path string) (*BankDump, error) {
 	}
 
 	bank := data[:disk.SectorSize]
-	// bstep is the bank sector's stored voice count. The spec uses a separate
-	// file-level vn field to size the voice area, but FZBs (single-bank by
-	// spec §1-5) lose that during extraction. fzfutil.ParseFZFHeader recovers
-	// vn for FZF by walking the voice area; do the same here so a buggy tool
-	// that wrote a stale bstep cannot make fzbinfo silently report a wrong
-	// voice count.
+	// bstep is the bank sector's stored voice count. The spec sizes the
+	// voice area from a separate file-level vn field, which FZBs
+	// (single-bank by spec §1-5) lose during extraction. fzutil recovers
+	// vn for FZF by walking the voice area, so do the same here and a
+	// stale bstep from a buggy tool can't skew the reported count.
 	bstep := int(binary.LittleEndian.Uint16(bank[disk.BankVoiceCountOffset : disk.BankVoiceCountOffset+2]))
 	voiceAreaStart := disk.SectorSize
 
-	// InferVoiceCount uses its bstep argument as an upper bound on the walk.
-	// When bstep is implausible (0 or >MaxVoices) we still want to recover
-	// the true count, so fall back to MaxVoices as the bound and let the
-	// walk itself decide where the voice area ends.
+	// InferVoiceCount takes bstep as an upper bound on the walk. An
+	// implausible bstep (0 or above MaxVoices) falls back to MaxVoices so
+	// the walk itself decides where the voice area ends.
 	upper := bstep
 	if upper <= 0 || upper > disk.MaxVoices {
 		upper = disk.MaxVoices
@@ -81,9 +77,9 @@ func Parse(path string) (*BankDump, error) {
 	case bstep >= 1 && bstep <= disk.MaxVoices && bstep == inferred:
 		nvoice = bstep
 	default:
-		// bstep disagrees with the voice area, or is out of range. Trust
-		// the inferred walk and log a debug message so the divergence
-		// surfaces under --debug without breaking normal use.
+		// bstep disagrees with the voice area or is out of range. Trust
+		// the walk, and log so the divergence surfaces under --debug
+		// without disturbing normal use.
 		logger.Debug().
 			Str("path", path).
 			Int("bstep", bstep).
@@ -107,10 +103,10 @@ func Parse(path string) (*BankDump, error) {
 		BankName:   bankName,
 	}
 
-	// FZB is single-bank by spec §1-5 (one bank sector, no multi-bank fan-out
-	// over key splits). The (bank, split) and voice-slot indices coincide
-	// for every entry, so we synthesise a one-bank FZFHeader and reuse the
-	// shared show-* helpers without forking a single-bank variant.
+	// FZB is single-bank by spec §1-5: one bank sector, no multi-bank
+	// fan-out over key splits. The (bank, split) and voice-slot indices
+	// coincide for every entry, so a synthesised one-bank FZFHeader lets
+	// the shared show-* helpers work unforked.
 	hdr := &fzutil.FZFHeader{
 		NVoice:         nvoice,
 		BStep0:         nvoice,
@@ -121,11 +117,10 @@ func Parse(path string) (*BankDump, error) {
 	info.ShowVolume = fzutil.BankSectorShowsVolume(data, hdr)
 
 	for i := range nvoice {
-		// ParseBankVoiceEntry returns false for NoSound placeholders and for
-		// truncated input. Mirror fzfinfo: emit a placeholder VoiceEntry so
-		// len(info.Voices) == VoiceCount and bank vp[] indices line up with
-		// the rendered table. Without this, NoSound slots fall out silently
-		// and every subsequent voice's slot index is shifted left.
+		// ParseBankVoiceEntry returns false for NoSound placeholders and
+		// truncated input. Mirror fzfinfo and emit a placeholder, keeping
+		// len(info.Voices) == VoiceCount; drop them instead and every
+		// later voice's slot index shifts left out of step with vp[].
 		voff := disk.VoiceSlotOffset(0, i)
 		var mode uint16
 		if voff+disk.VoiceLoopModeOffset+2 <= len(voiceArea) {
@@ -187,10 +182,9 @@ func Render(w io.Writer, info *BankDump) {
 	t.AppendHeader(header)
 
 	for _, v := range info.Voices {
-		// NoSound slots are spec-defined placeholders with no audible output;
-		// the entry is kept in info.Voices so consumers (and bank vp[]
-		// indices) can correlate slot order, but it has no meaningful row
-		// to render. Same policy as fzfinfo.Render.
+		// NoSound slots stay in info.Voices to preserve slot order for
+		// bank vp[], but there's no row worth rendering. Same policy as
+		// fzfinfo.Render.
 		if v.PlaybackMode == disk.PlaybackModeNameNoSound {
 			continue
 		}
@@ -208,10 +202,8 @@ func Render(w io.Writer, info *BankDump) {
 			var vel string
 			switch {
 			case v.VelLow == 0 && v.VelHigh == 0:
-				// Spec §1-5 says htch/ltch range is 1-127; (0,0) is
-				// unreachable by MIDI note-on (which uses vel 1-127),
-				// so the voice will never trigger. Mirror the fzfinfo
-				// rendering so both info tools agree on this state.
+				// Spec §1-5 gives htch/ltch the range 1 to 127, so (0,0)
+				// never triggers. Mirrors fzfinfo.Render.
 				vel = "off"
 			default:
 				vel = fmt.Sprintf("%d to %d", v.VelLow, v.VelHigh)

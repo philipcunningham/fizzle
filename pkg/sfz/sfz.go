@@ -34,9 +34,9 @@ const (
 	// maxRegions matches the FZ-1 hardware limit of 64 voices per bank.
 	maxRegions           = disk.MaxVoices
 	maxSFZFileSize int64 = 16 << 20
-	// maxWarnings bounds the diagnostics a single file can accumulate.
-	// A hostile file of hundreds of thousands of malformed regions must
-	// not allocate a warning for each one.
+	// maxWarnings bounds the diagnostics one file can accumulate, so a
+	// hostile file of hundreds of thousands of malformed regions can't
+	// allocate a warning for each.
 	maxWarnings = 256
 
 	// DefaultLoVel is the minimum velocity for an SFZ region.
@@ -65,10 +65,9 @@ const (
 // group, master, and global inheritance already applied.
 //
 // Cutoff, Resonance, LoopStart, and LoopEnd use -1 as an in-band "opcode
-// absent" sentinel: downstream code in pkg/sfzconvert only applies these
-// fields when the value is >= 0. Construct via NewRegion to get the
-// sentinels in place; the Go zero value of 0 is a valid (and dangerous)
-// hardware setting for these fields.
+// absent" sentinel: pkg/sfzconvert applies them only when the value is
+// >= 0. Construct via NewRegion so the sentinels are in place; the zero
+// value 0 is a valid, and dangerous, hardware setting for these fields.
 type Region struct {
 	Sample         string
 	LoKey          uint8
@@ -79,9 +78,9 @@ type Region struct {
 	Transpose      int
 	Tune           int
 	// MuteGroup implements monophonic grouping (SFZ mutegroup= opcode, as
-	// exported by Renoise). A new note cuts off any playing note in the same
-	// group. HasMuteGroup distinguishes "opcode present with value 0" from
-	// "opcode absent". Only regions with HasMuteGroup=true are monophonic.
+	// exported by Renoise): a new note cuts off any playing note in the
+	// same group. HasMuteGroup separates "opcode present with value 0"
+	// from "opcode absent"; only HasMuteGroup regions are monophonic.
 	MuteGroup    int
 	HasMuteGroup bool
 	OneShot      bool
@@ -91,13 +90,10 @@ type Region struct {
 	LoopEnd      int
 }
 
-// NewRegion returns a Region with optional-opcode fields pre-set to their
-// "absent" sentinels (-1) and velocity range set to the SFZ defaults
-// (1..127). Callers should override the fields that the SFZ source
-// actually specifies and leave the rest alone.
-//
-// Sample, LoKey, HiKey, and PitchKeycenter have no useful default and
-// must be set by the caller.
+// NewRegion returns a Region with the optional-opcode fields pre-set to
+// their "absent" sentinels (-1) and the velocity range set to the SFZ
+// defaults (1..127). Override only the fields the SFZ source specifies.
+// Sample, LoKey, HiKey, and PitchKeycenter have no useful default.
 func NewRegion() Region {
 	return Region{
 		LoVel:     DefaultLoVel,
@@ -144,19 +140,16 @@ type opcodes map[string]string
 // warnings generated during parsing. Sample paths are resolved to absolute
 // paths relative to the SFZ file's directory (or default_path if set).
 //
-// Path confinement: paths referenced from the SFZ (#include, default_path,
-// sample=) that resolve outside the top-level SFZ's directory tree emit
-// warnings but are still read. The intent is to flag accidental and
-// adversarial paths without breaking legitimate SFZ packs that share WAVs
-// across sibling directories. The check is lexical (filepath.Rel) and does
-// not resolve symlinks; an attacker with write access to a symlink inside
-// the root can escape detection.
+// Path confinement: references (#include, default_path, sample=) that
+// resolve outside the top-level SFZ's directory tree warn but are still
+// read. Real SFZ packs share WAVs across sibling directories. The check is
+// lexical (filepath.Rel) and doesn't resolve symlinks, so a symlink inside
+// the root escapes detection.
 func Parse(path string) ([]Region, []Warning, error) {
 	p := newParser(nil)
 
-	// Resolve the top-level root before parsing so #include checks can use
-	// it. We tolerate filepath.Abs errors here because parseFile re-runs
-	// the same call and surfaces the error there.
+	// Resolve the root before parsing so #include checks can use it. An
+	// Abs error is ignored here; parseFile re-runs the call and reports it.
 	if abs, err := filepath.Abs(path); err == nil {
 		p.rootDir = filepath.Dir(abs)
 	}
@@ -230,11 +223,10 @@ type parser struct {
 }
 
 // isOutsideRoot reports whether target resolves outside p.rootDir. The
-// comparison is lexical: target and root are both made absolute and
-// filepath.Rel is consulted. A symlinked path inside the root that points
-// outside is not detected. Returns false (i.e., "inside, no warning") if
-// the root is empty or either path cannot be made absolute, since failing
-// open is safer than spamming spurious warnings.
+// comparison is lexical, so a symlink inside the root that points outside
+// isn't detected. It returns false ("inside, no warning") when the root is
+// empty or a path can't be made absolute: failing open beats spurious
+// warnings.
 func (p *parser) isOutsideRoot(target string) bool {
 	if p.fsys != nil {
 		return !fs.ValidPath(path.Clean(target))
@@ -248,12 +240,11 @@ func (p *parser) isOutsideRoot(target string) bool {
 	}
 	rel, err := filepath.Rel(p.rootDir, absTarget)
 	if err != nil {
-		// Different volumes (Windows) -> definitely outside.
+		// Different volumes (Windows) means outside.
 		return true
 	}
-	// "..", "../foo", or any path starting with parent-of-root is outside.
-	// An absolute result indicates Rel could not produce a relative path,
-	// which also means outside.
+	// A rel of ".." or a "../" prefix is outside, as is an absolute result,
+	// which means Rel found no relative path at all.
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return true
 	}
@@ -277,9 +268,8 @@ func (p *parser) parseFile(pth string) error {
 	}
 	p.included[pth] = true
 
-	// Path-confinement: warn if an #include resolves outside the top-level
-	// SFZ directory tree. The top-level file itself sets rootDir (in Parse)
-	// so the first call here is always inside its own root and skipped.
+	// The top-level file sets rootDir in Parse, so the first call here is
+	// always inside its own root and skipped.
 	if p.isOutsideRoot(pth) {
 		p.warn(Warning{
 			Region:  -1,
@@ -371,18 +361,17 @@ func (p *parser) parseText(text, dir string) error {
 
 		if tok == "#include" {
 			i++
-			// Collect all tokens until we have a complete quoted string.
+			// Collect tokens until the quoted path closes; an unquoted
+			// path is a single bare token.
 			var incParts []string
 			for i < len(tokens) {
 				part := tokens[i]
 				incParts = append(incParts, part)
 				i++
-				// A complete include path is wrapped in quotes.
 				joined := strings.Join(incParts, " ")
 				if strings.HasPrefix(joined, `"`) && strings.HasSuffix(joined, `"`) {
 					break
 				}
-				// No quotes: single bare token.
 				if !strings.HasPrefix(joined, `"`) {
 					break
 				}
@@ -447,8 +436,8 @@ func (p *parser) parseText(text, dir string) error {
 		}
 		key := strings.ToLower(keyRaw)
 
-		// The value may continue across subsequent tokens until we hit
-		// another key=value token or a header tag.
+		// The value runs on across later tokens until a key=value token
+		// or a header tag ends it.
 		for i+1 < len(tokens) {
 			next := tokens[i+1]
 			if strings.HasPrefix(next, "<") || strings.Contains(next, "=") || strings.HasPrefix(next, "#") {
@@ -459,7 +448,6 @@ func (p *parser) parseText(text, dir string) error {
 		}
 		value = strings.TrimSpace(value)
 
-		// Apply #define substitution.
 		if sub, ok := p.defines[value]; ok {
 			value = sub
 		}
@@ -511,10 +499,9 @@ func (p *parser) lookup(key string) (string, bool) {
 	return "", false
 }
 
-// clampVel clamps a velocity value to the SFZ-spec range [0, 127] and emits
-// a warning when clamping occurs. Mirrors the transpose/tune clamp warning
-// in flushRegion so out-of-range velocity values are surfaced rather than
-// silently swallowed.
+// clampVel clamps a velocity to the SFZ-spec range [0, 127] and warns when
+// it does. That mirrors the transpose and tune clamps in flushRegion, so
+// an out-of-range value is surfaced rather than swallowed.
 func (p *parser) clampVel(key string, n int) uint8 {
 	if n < 0 || n > disk.MaxMIDINote {
 		clamped := n
@@ -545,7 +532,7 @@ func (p *parser) flushRegion() {
 		return
 	}
 
-	// Resolve sample path to absolute using default_path or the SFZ file's directory.
+	// Resolve the sample path against default_path, else the SFZ's directory.
 	samplePath := sampleRaw
 	if p.fsys == nil {
 		samplePath = filepath.FromSlash(sampleRaw)
@@ -558,9 +545,7 @@ func (p *parser) flushRegion() {
 		}
 	}
 
-	// Path-confinement: warn (softly) if the sample resolves outside the
-	// top-level SFZ directory tree. Real SFZ packs sometimes share WAVs
-	// across sibling directories so this is not treated as an error.
+	// A sample outside the SFZ root warns rather than errors; see Parse.
 	if p.isOutsideRoot(samplePath) {
 		p.warn(Warning{
 			Region:  len(p.regions),
@@ -621,14 +606,10 @@ func (p *parser) flushRegion() {
 		}
 	}
 
-	// SFZ velocity range is 0..127. Don't clamp to DefaultLoVel: a region
-	// exported with (0, 0) must survive round-trip rather than be silently
-	// promoted to (1, 1). The DefaultLoVel/DefaultHiVel constants are still
-	// used as fallbacks when the opcode is absent (see parseInt).
-	//
-	// Out-of-range values are clamped to [0, 127] and warned about, mirroring
-	// the transpose/tune handling below. The SFZ spec defines velocity as
-	// 0..127 so lovel=200 is malformed.
+	// The SFZ velocity range is 0..127, so don't clamp up to DefaultLoVel:
+	// a region exported with (0, 0) must survive the round trip rather than
+	// be promoted to (1, 1). DefaultLoVel and DefaultHiVel apply only when
+	// the opcode is absent (see parseInt).
 	lovel := p.clampVel("lovel", parseInt("lovel", DefaultLoVel))
 	hivel := p.clampVel("hivel", parseInt("hivel", DefaultHiVel))
 	if hivel < lovel {
@@ -719,21 +700,19 @@ func (p *parser) flushRegion() {
 	r.LoopStart = loopStart
 	r.LoopEnd = loopEnd
 	if len(p.regions) >= maxRegions {
-		// The cap is enforced here, as the regions arrive, so a file
-		// with hundreds of thousands of them cannot allocate them all
-		// before the count is checked. Parsing stops counting; run()
-		// turns the overflow into the error.
+		// Capped as the regions arrive, so a file with hundreds of
+		// thousands of them can't allocate them all before the count is
+		// checked. run() turns the overflow flag into the error.
 		p.overflowed = true
 		return
 	}
 	p.regions = append(p.regions, r)
 }
 
-// tokenise splits SFZ text (with comments already stripped) into whitespace-
-// separated tokens. Header tags (<region> etc.) and directives (#define,
-// #include) are emitted as-is. Key=value pairs where the value contains
-// spaces (e.g. sample=JUNGLE Samples/foo.wav) are assembled by the caller
-// in parseText using the presence of '=' as a delimiter.
+// tokenise splits comment-stripped SFZ text on whitespace, emitting header
+// tags and directives as-is. A value holding spaces (sample=JUNGLE
+// Samples/foo.wav) arrives as several tokens; parseText reassembles it,
+// using '=' to spot where the next opcode starts.
 func tokenise(text string) []string {
 	return strings.Fields(text)
 }
@@ -776,12 +755,10 @@ func parseKeyValue(s string) (int, error) {
 	if s == "" {
 		return 0, fmt.Errorf("sfz: empty value")
 	}
-	// Try plain integer first.
 	if n, err := strconv.Atoi(s); err == nil {
 		return n, nil
 	}
-	// Try note name: letter [# or b] octave
-	// e.g. c4=60, c#4=61, db4=61, a#3=46
+	// Note name: letter, then # or b, then octave. c4=60, c#4=61, db4=61.
 	s = strings.ToLower(s)
 	if len(s) < 2 {
 		return 0, fmt.Errorf("sfz: cannot parse key %q", s)
@@ -799,7 +776,7 @@ func parseKeyValue(s string) (int, error) {
 		accidental = -1
 		rest = rest[1:]
 	}
-	// Handle negative octaves (e.g. c-1 = MIDI 0).
+	// Atoi also takes the negative octaves, c-1 and below.
 	octave, err := strconv.Atoi(rest)
 	if err != nil {
 		return 0, fmt.Errorf("sfz: cannot parse octave in %q", s)

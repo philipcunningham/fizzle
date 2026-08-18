@@ -4,8 +4,14 @@
 // Section 7 of the spec asks a continuous gesture to land in history as
 // exactly one undoable step, and R24 repeats it. That makes the bracket
 // a pairing problem: open once, close once, however the gesture ends.
-// Both halves are idempotent, because more than one ending arrives. A
+// Both halves are idempotent, because more than one ending arrives: a
 // release under capture fires pointerup and then lostpointercapture.
+//
+// Key auto-repeat is the same problem. It fires about thirty keydowns a
+// second, and one history entry each wipes a session against the 100
+// entry cap, so a repeat run is bracketed rather than guarded on
+// e.repeat: a guard would buy the one undo step by making a held key
+// stop working.
 import { useEffect, useRef } from "react";
 
 export interface GestureBracket {
@@ -18,10 +24,9 @@ export interface GestureBracket {
 /**
  * Tracks one control's bracket and closes it if the control leaves the
  * document mid-gesture. React's onLostPointerCapture doesn't fire when
- * the node is removed. An editor that unmounts under a held pointer
- * therefore leaves the core's bracket open. Every later edit then
- * coalesces into it, and the Undo button stays disabled while the work
- * piles up. An undo that pops the import does exactly that.
+ * the node is removed, so an editor that unmounts under a held pointer
+ * (an undo that pops the import, say) leaves the core's bracket open.
+ * Every later edit then coalesces into it and Undo stays disabled.
  */
 export function useGestureBracket(onBegin?: () => void, onCommit?: () => void): GestureBracket {
   const open = useRef(false);

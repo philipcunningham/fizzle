@@ -162,12 +162,10 @@ func TestUnpackDuplicateNames(t *testing.T) {
 	}
 }
 
-// TestUnpackSlashInVoiceName is a regression test for a bug where voice names
-// containing path separators (e.g. "BRASS/BASS 2", observed in the real
-// Casio FZ-1 Shareware Library corpus) caused filepath.Join to silently
-// create subdirectories under outputDir. The expected behavior is that the
-// path separators are stripped from the on-disk filename so each voice
-// produces exactly one top-level .fzv file.
+// TestUnpackSlashInVoiceName covers voice names holding a path separator
+// ("BRASS/BASS 2", from the Casio FZ-1 Shareware Library corpus), which
+// filepath.Join would read as a directory under outputDir. Each voice must
+// produce exactly one top-level .fzv file.
 func TestUnpackSlashInVoiceName(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -213,18 +211,16 @@ func TestUnpackSlashInVoiceName(t *testing.T) {
 	}
 }
 
-// TestUnpackAudioIntegrity is a regression test for a bug where the audio block
-// boundary calculation in unpack() used the cumulative waveEnd address directly
-// instead of computing the per-voice delta. This caused voices at even positions
-// (0, 2, 4, ...) to have their sample offsets not subtracted, producing wrong
-// waveEnd values and corrupted durations when the FZF was unpacked.
+// TestUnpackAudioIntegrity pins the per-voice audio block boundaries. Taking
+// the cumulative waveEnd address instead of the per-voice delta leaves the
+// sample offsets unsubtracted on even-numbered voices, so their waveEnd and
+// duration come out wrong.
 func TestUnpackAudioIntegrity(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	// Three voices with distinct, easily-verifiable sample counts.
-	// Use names that sort alphabetically in the same order as build order
-	// so that buildAndUnpack returns them in a predictable sequence.
+	// Distinct sample counts, and names that sort alphabetically in build
+	// order so buildAndUnpack returns them in a predictable sequence.
 	specs := []struct {
 		name    string
 		samples int
@@ -295,11 +291,10 @@ func TestUnpackAudioSampleValues(t *testing.T) {
 	}
 }
 
-// TestUnpackAudioBytesAllBoundaries is the definitive regression test for the
-// class of bug where unpack reads audio from the wrong byte offset. It builds
-// 9 voices (crossing the 4-voice sector boundary at indices 4 and 8), fills
-// each voice's audio with a distinct marker byte, and verifies that after
-// unpack each voice contains only its own marker bytes, not another voice's.
+// TestUnpackAudioBytesAllBoundaries catches unpack reading audio from the
+// wrong byte offset. It builds 9 voices (crossing the 4-voice sector boundary
+// at indices 4 and 8), fills each voice's audio with a distinct marker byte,
+// and checks every unpacked voice holds only its own marker.
 func TestUnpackAudioBytesAllBoundaries(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -434,8 +429,8 @@ func TestUnpackRoundTripNineVoices(t *testing.T) {
 // audio. Voices whose audio is on disk 2 should be silently skipped.
 func TestUnpackMultiDiskDisk1NoPanic(t *testing.T) {
 	t.Parallel()
-	// Build a 3-voice instrument that is larger than one disk, split it,
-	// and verify that unpacking disk 1 produces only the voices present.
+	// A 3-voice instrument larger than one disk, split, then unpacked from
+	// disk 1 alone.
 	voices := make([][]byte, 3)
 	groups := make([]voicebuild.Keygroup, 3)
 	for i := range voices {
@@ -459,7 +454,6 @@ func TestUnpackMultiDiskDisk1NoPanic(t *testing.T) {
 	}
 
 	outDir := filepath.Join(dir, "out")
-	// Must not panic.
 	if err := Unpack(disk1Path, outDir); err != nil {
 		t.Fatalf("Unpack disk 1 panicked or errored: %v", err)
 	}
@@ -468,9 +462,8 @@ func TestUnpackMultiDiskDisk1NoPanic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// All 3 voice headers are on disk 1. Voices whose audio starts within
-	// disk 1's audio area are unpacked (possibly with truncated audio if the
-	// audio extends to disk 2). The key invariant is no panic.
+	// All 3 voice headers sit on disk 1, and a voice whose audio starts
+	// inside disk 1's audio area unpacks (truncated if it runs onto disk 2).
 	if len(entries) == 0 {
 		t.Error("expected at least 1 voice from disk 1")
 	}
@@ -570,15 +563,13 @@ func TestUnpackBankZeroIsDefault(t *testing.T) {
 	}
 }
 
-// TestUnpackSkipsNoSoundSlotsBeforeValidVoices is a regression test for
-// CASIO139.FZF, where the head of the voice area carries legitimate
-// PlaybackModeNoSound placeholder slots with garbage in their wave pointer
-// fields. Before the fix, unpack used `break` (not `continue`) on the
-// first slot whose audioStart looked out of range, which killed extraction
-// of every subsequent valid voice. After the fix, NoSound and other
-// non-plausible slots are skipped via `continue` and only true multi-disk
+// TestUnpackSkipsNoSoundSlotsBeforeValidVoices models CASIO139.FZF, whose
+// voice area opens with legitimate PlaybackModeNoSound placeholder slots
+// carrying garbage wave pointers. Those slots must be skipped one by one:
+// breaking out of the loop on the first out-of-range audioStart kills
+// extraction of every valid voice behind them. Only real multi-disk
 // continuation (a plausible voice whose audio is past the local area)
-// breaks the loop.
+// ends the loop.
 func TestUnpackSkipsNoSoundSlotsBeforeValidVoices(t *testing.T) {
 	t.Parallel()
 
@@ -593,9 +584,8 @@ func TestUnpackSkipsNoSoundSlotsBeforeValidVoices(t *testing.T) {
 		testutil.MakeTestVoice("GAMMA", 100),
 	}
 
-	// Assemble a synthetic FZF: 1 bank sector + voice area sized for `total`
-	// slots + audio area. We can't reuse voicebuild because it doesn't
-	// emit NoSound placeholder slots.
+	// Synthetic FZF: 1 bank sector, a voice area sized for `total` slots, and
+	// an audio area. voicebuild can't build it: it emits no NoSound slots.
 	voiceAreaSectors := (total + 3) / 4
 	audioSizes := make([]int, realVoices)
 	for i, v := range realFZVs {
@@ -671,20 +661,17 @@ func TestUnpackSkipsNoSoundSlotsBeforeValidVoices(t *testing.T) {
 	}
 }
 
-// TestUnpackPreservesLoopFlagBits is the regression test for
-// subtractSampleOffsets corrupting the loop-fine byte (loopst[i] upper 8
-// bits) and the skip flag (looped[i] MSB) on round-trip. The previous
-// implementation treated those fields as plain 32-bit addresses and
-// subtracted the wave-area offset across the reserved bits, smearing the
-// flag-value into the address.
+// TestUnpackPreservesLoopFlagBits pins subtractSampleOffsets against the
+// loop-fine byte (loopst[i] upper 8 bits) and the skip flag (looped[i] MSB).
+// Treating those cells as plain 32-bit addresses subtracts the wave-area
+// offset across the reserved bits, smearing the flag value into the address.
 func TestUnpackPreservesLoopFlagBits(t *testing.T) {
 	t.Parallel()
 
-	// Synthesise a 1-voice FZF whose only voice has wave area at sample
-	// offset waveStart, and whose loopst[0]/looped[0] addresses land just
-	// past waveStart in the combined area. After unpack the addresses
-	// should be relative to the voice's own audio block (waveStart
-	// subtracted) while the flag bits remain intact.
+	// A 1-voice FZF whose wave area sits at sample offset waveStart and whose
+	// loopst[0]/looped[0] addresses land just past it in the combined area.
+	// Unpack must rebase the addresses onto the voice's own audio block and
+	// leave the flag bits intact.
 	const waveStart = 1000
 	const sampleCount = 600
 	const loopStartAddr = waveStart + 0x100 // 0x4E8
@@ -713,11 +700,8 @@ func TestUnpackPreservesLoopFlagBits(t *testing.T) {
 	binary.LittleEndian.PutUint32(fzf[slot+disk.VoiceLoopSt0Offset:], loopStRaw)
 	binary.LittleEndian.PutUint32(fzf[slot+disk.VoiceLoopEd0Offset:], loopEdRaw)
 
-	// Audio area: waveStart points past the local audio area (the voice
-	// behaves as if its audio is at offset 0 in the audio block). unpack()
-	// uses byteStart = waveStart*disk.BytesPerSample, so we need the audio
-	// area to span [waveStart*2, waveStart*2 + audioBytes). Grow fzf to
-	// include audio at byteStart.
+	// unpack slices at byteStart = waveStart*disk.BytesPerSample, so the
+	// audio area has to span [waveStart*2, waveStart*2 + audioBytes).
 	audioAreaStart := disk.SectorSize + disk.SectorSize
 	byteStart := waveStart * disk.BytesPerSample
 	audioByteEnd := byteStart + audioBytes
@@ -759,14 +743,13 @@ func TestUnpackPreservesLoopFlagBits(t *testing.T) {
 	}
 }
 
-// TestUnpackMultiBankCoversAllBanks is the regression test for Fix E:
-// previously UnpackBank and ApplyToFZFVoice relied on hdr.NVoice, which
-// was derived from bank 0's bstep alone. Voices stored in slots used only
-// by banks 1-7 (referenced via their vp[]) were invisible: UnpackBank
-// could not reach them and findVoiceIndex returned "not found".
+// TestUnpackMultiBankCoversAllBanks guards hdr.NVoice against being derived
+// from bank 0's bstep alone. That hides every voice in a slot only banks 1-7
+// reference through their vp[]: UnpackBank can't reach them and
+// findVoiceIndex reports "not found".
 //
-// The synthetic FZF here has 2 bank sectors with bsteps 3 and 2; the
-// voice area holds 5 distinct voices. After the fix all 5 must unpack.
+// The synthetic FZF here has 2 bank sectors with bsteps 3 and 2, and a voice
+// area holding 5 distinct voices. All 5 must unpack.
 func TestUnpackMultiBankCoversAllBanks(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -781,8 +764,8 @@ func TestUnpackMultiBankCoversAllBanks(t *testing.T) {
 	fzfSize := nBanks*disk.SectorSize + voiceSectors*disk.SectorSize + totalVoices*audioBlockBytes
 	data := make([]byte, fzfSize)
 
-	// Bank sectors: must have non-zero bstep and printable name to be
-	// recognised by CountBankSectors. vp[] maps each bank's key-split
+	// Bank sectors need a non-zero bstep and a printable name for
+	// CountBankSectors to see them. vp[] maps each bank's key-split
 	// positions to voice-slot indices (spec §2-2). Bank 0 owns slots
 	// 0..bsteps[0]-1; bank 1 owns the next bsteps[1] slots.
 	slotCursor := 0
@@ -850,22 +833,18 @@ func TestUnpackMultiBankCoversAllBanks(t *testing.T) {
 	}
 }
 
-// TestUnpackBankFollowsVpNotSequentialRange is the regression test for F5
-// case 1: previously UnpackBank computed startVoice as sum(bstep[0..b-1])
-// and sliced allVoices[startVoice : startVoice+bstep[b]]. That assumed
-// the voice slots a bank references are sequential, which is false: each
-// bank's vp[] independently maps key-split positions to slot indices and
-// banks can share slots, skip slots, or reference slots in any order
-// (spec §2-2). The fix walks the bank's vp[] and picks each referenced
-// voice from the unpacked slice by slot index.
+// TestUnpackBankFollowsVpNotSequentialRange pins UnpackBank to the bank's
+// vp[]. Slicing allVoices from sum(bstep[0..b-1]) assumes the slots a bank
+// references are sequential, which is false: each vp[] maps key-split
+// positions to slot indices independently, and banks share slots, skip
+// slots, or reference them in any order (spec §2-2).
 func TestUnpackBankFollowsVpNotSequentialRange(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
 	// 2 banks, bsteps {2, 2}. Bank 0 references slots 0 and 2; bank 1
-	// references slots 1 and 3. If UnpackBank used the old sequential
-	// slice it would return slots 0..1 for bank 0 and 2..3 for bank 1,
-	// reversing the correct mapping.
+	// references slots 1 and 3. A sequential slice would hand back slots
+	// 0..1 for bank 0 and 2..3 for bank 1, reversing the mapping.
 	const nBanks = 2
 	bsteps := [nBanks]int{2, 2}
 	totalSlots := 4
@@ -954,10 +933,9 @@ func TestUnpackBankFollowsVpNotSequentialRange(t *testing.T) {
 	}
 }
 
-// TestUnpackBankDeduplicatesSharedKeySplits exercises F5 case 2: a bank's
-// vp[] can reference the same voice slot from several key splits (sharing
-// one voice across a range). UnpackBank must emit each distinct voice
-// once, not once per split.
+// TestUnpackBankDeduplicatesSharedKeySplits covers a bank's vp[] referencing
+// one voice slot from several key splits (sharing a voice across a range).
+// UnpackBank must emit each distinct voice once, not once per split.
 func TestUnpackBankDeduplicatesSharedKeySplits(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -1005,24 +983,20 @@ func TestUnpackBankDeduplicatesSharedKeySplits(t *testing.T) {
 	}
 }
 
-// TestUnpackZeroSampleVoiceProducesHeaderOnly is the regression test for the
-// stray-bytes bug: when a voice had waveEnd <= waveStart (a NoSound
-// placeholder or a wiped slot), the old code forced byteSize up to one
-// SectorSize, slicing 1024 bytes from the *next* voice's audio block into
-// this voice's FZV. Re-packing then wrote that foreign audio back into the
-// silent slot's place, corrupting both voices.
-//
-// The fix: zero-sample voices produce a header-only FZV (one sector, no
-// audio bytes). voicebuild.Build accepts header-only FZVs and emits a
-// zero-sample voice on rebuild, preserving silence.
+// TestUnpackZeroSampleVoiceProducesHeaderOnly pins the stray-bytes case: a
+// voice with waveEnd <= waveStart (a NoSound placeholder or a wiped slot)
+// must yield a header-only FZV, one sector with no audio. Forcing byteSize
+// up to a SectorSize instead slices 1024 bytes out of the next voice's audio
+// block, and re-packing writes that foreign audio into the silent slot,
+// corrupting both. voicebuild.Build takes header-only FZVs and rebuilds them
+// as zero-sample voices, so silence survives.
 func TestUnpackZeroSampleVoiceProducesHeaderOnly(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	// Build a synthetic FZF: 1 bank + 1 voice-area sector with two
-	// plausible active voices, the first zero-sample (waveStart=waveEnd=0)
-	// and the second a normal voice with audio. Without the fix the unpack
-	// of voice 0 would steal the first 1024 bytes of voice 1's audio block.
+	// Synthetic FZF: 1 bank plus 1 voice-area sector holding two plausible
+	// active voices, the first zero-sample (waveStart=waveEnd=0) and the
+	// second normal. Voice 0 must not steal voice 1's first 1024 bytes.
 	const totalVoices = 2
 	const v1Samples = 512
 	const markerByte = 0xAB
@@ -1044,9 +1018,8 @@ func TestUnpackZeroSampleVoiceProducesHeaderOnly(t *testing.T) {
 	binary.LittleEndian.PutUint32(data[slot0+disk.VoiceGenEndOffset:], 0)
 	binary.LittleEndian.PutUint16(data[slot0+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
 
-	// Voice slot 1: a normal voice whose audio starts at sample 0 (since
-	// slot 0 owns zero samples). Fill audio with a marker so any cross-
-	// contamination is obvious.
+	// Voice slot 1: a normal voice whose audio starts at sample 0, because
+	// slot 0 owns none. The marker byte makes contamination obvious.
 	slot1 := disk.VoiceSlotOffset(disk.SectorSize, 1)
 	loudName := disk.PadLabel("LOUD")
 	copy(data[slot1+disk.VoiceNameOffset:], loudName[:])
@@ -1144,13 +1117,11 @@ func TestRoundTripZeroSampleVoice(t *testing.T) {
 	}
 }
 
-// TestSanitizeFilenameDotOnly verifies that voice names consisting entirely
-// of '.' characters are rejected as filename stems, falling back to the
-// default voice name. Without this defense, a voice named ".." would expand
-// to "../<dedup>.fzv". The `.fzv` suffix currently saves us (a bare ".."
-// becomes "...fzv", a regular filename) but the defense is accidental.
-// Reject pure-dot names so the boundary is intentional rather than
-// dependent on the suffix.
+// TestSanitizeFilenameDotOnly verifies that a name of nothing but '.' falls
+// back to the default voice name rather than becoming a filename stem: a
+// voice named ".." would otherwise expand to "../<dedup>.fzv". The `.fzv`
+// suffix happens to save it ("...fzv" is a regular filename), so this makes
+// the boundary deliberate instead of a side effect of the suffix.
 func TestSanitizeFilenameDotOnly(t *testing.T) {
 	t.Parallel()
 	cases := []string{".", "..", "...", "....."}
@@ -1162,22 +1133,20 @@ func TestSanitizeFilenameDotOnly(t *testing.T) {
 		if strings.ContainsAny(got, "/\\") {
 			t.Errorf("sanitizeFilename(%q) = %q, must not contain path separator", in, got)
 		}
-		// The fallback should be a normal filename stem, not a dot sequence.
+		// The fallback is a normal filename stem, not a dot sequence.
 		for _, r := range got {
 			if r == '.' && len(got) <= 5 {
-				// trailing dots in a name are fine; pure-dot is the concern
-				// caught by the equality check above.
+				// Trailing dots are fine; the check above catches pure dots.
 				_ = r
 			}
 		}
 	}
 }
 
-// TestUnpackVoiceNameDotsProducesSafeFilename is the end-to-end regression
-// test for the dot-only voice-name path traversal hazard. It builds a
-// 1-voice FZF whose voice name in the header is ".." (padded to 12 chars
-// with spaces) and verifies that the resulting on-disk file is a normal
-// filename inside outputDir, not anything like "..fzv" or "../<something>".
+// TestUnpackVoiceNameDotsProducesSafeFilename covers the dot-only name
+// traversal hazard end to end: a 1-voice FZF whose header name is ".."
+// (space-padded to 12) must land as a normal filename inside outputDir,
+// not "..fzv" or "../<something>".
 func TestUnpackVoiceNameDotsProducesSafeFilename(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -1260,14 +1229,12 @@ func TestUnpackBankOutOfRange(t *testing.T) {
 	}
 }
 
-// TestUnpackPreservesKeygroupKeyRange is the end-to-end regression guard for
-// F15: build an FZF whose per-voice keygroups differ from the FZV defaults
-// written by voiceimport.Encode, unpack it, and confirm that fzvinfo.Parse
-// reports the keygroup values from the bank, not the stale Encode defaults.
-//
-// Voice-header offsets 0xae/0xaf/0xb0 are spec §2-1; the voicebuild fix
-// writes those during assembly so the bank's split-mapping arrays (§2-2)
-// and the per-voice header agree on every voice the FZF contains.
+// TestUnpackPreservesKeygroupKeyRange guards key ranges end to end: build an
+// FZF whose per-voice keygroups differ from the FZV defaults voiceimport.Encode
+// writes, unpack it, and confirm fzvinfo.Parse reports the keygroup values
+// rather than the stale defaults. voicebuild stamps the header bytes at
+// 0xae/0xaf/0xb0 (spec §2-1) during assembly so they agree with the bank's
+// split-mapping arrays (§2-2) on every voice.
 func TestUnpackPreservesKeygroupKeyRange(t *testing.T) {
 	t.Parallel()
 	type kr struct {
@@ -1283,9 +1250,8 @@ func TestUnpackPreservesKeygroupKeyRange(t *testing.T) {
 	voicePaths := make([]string, len(want))
 	for i := range want {
 		v := testutil.MakeTestVoice(fmt.Sprintf("V%02d", i+1), 64)
-		// Stamp in the voiceimport.Encode defaults so this test models the
-		// actual regression: an FZV carrying 96/36/72 in its header that
-		// must be overwritten by the keygroup during voicebuild.
+		// Stamp in the voiceimport.Encode defaults (96/36/72), which the
+		// keygroup must overwrite during voicebuild.
 		v[disk.VoiceKeyHighOffset] = disk.DefaultKeyHigh
 		v[disk.VoiceKeyLowOffset] = disk.DefaultKeyLow
 		v[disk.VoiceKeyCentOffset] = disk.DefaultKeyCentre
@@ -1296,9 +1262,8 @@ func TestUnpackPreservesKeygroupKeyRange(t *testing.T) {
 		voicePaths[i] = p
 	}
 
-	// Build via the same path AssembleWithKeygroups exercises by reading
-	// FZVs from disk; voicebuild.Build uses the default chromatic keygroup,
-	// so we go through AssembleWithKeygroups directly to set our own ranges.
+	// voicebuild.Build would apply the default chromatic keygroup, so go
+	// through AssembleWithKeygroups to set our own ranges.
 	voices := make([][]byte, len(want))
 	groups := make([]voicebuild.Keygroup, len(want))
 	for i, k := range want {

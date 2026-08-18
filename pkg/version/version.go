@@ -1,8 +1,7 @@
-// Package version holds the fizzle release version. The Version, Commit, and
-// Date variables are overridden at build time via -ldflags.
+// Package version holds the fizzle release version.
 package version
 
-// Build information, set via ldflags.
+// Build information, overridden at build time via -ldflags.
 var (
 	Version = "dev"
 	Commit  = "none"

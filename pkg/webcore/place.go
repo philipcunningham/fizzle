@@ -44,7 +44,7 @@ func (s *Session) LoadFZF(data []byte) (Snapshot, *Error) {
 // otherwise it joins the instrument's voice list. The join lands with
 // a fresh area carrying the voice's own key range: the FZ format sizes
 // a dump's voice area from bank references, so a voice no bank
-// references would vanish on the next parse. Membership is reference.
+// references would vanish on the next parse.
 func (s *Session) AddVoice(fzvData []byte) (Snapshot, *Error) {
 	vp, err := fzvinfo.ParseBytes(fzvData)
 	if err != nil {
@@ -93,8 +93,7 @@ func (s *Session) AddVoice(fzvData []byte) (Snapshot, *Error) {
 
 // ImportWAVToInstrument converts a WAV through the CLI's importer and
 // places the voice with AddVoice's matrix behaviour: the instrument
-// grows by one voice (the slice 5 deferral), or comes into being when
-// absent.
+// grows by one voice, or comes into being when absent.
 func (s *Session) ImportWAVToInstrument(filename string, wavData []byte, rate uint32, channel string) (Snapshot, *Error) {
 	voice, cerr := convertWAV(filename, wavData, rate, channel)
 	if cerr != nil {
@@ -172,9 +171,9 @@ func nextFreeKey(d *dumpState, bank, skipArea int) uint8 {
 // The rule: a voice that carries a key range of its own keeps it, and a
 // voice that carries the WAV importer's fixed default does not. Every
 // voice that importer produces reads 36 to 96 root 60, so honouring the
-// incoming header stacked eight dropped WAVs on the same two octaves
-// and one key sounded all eight. R7's .wav and .fzv cells promise
-// sequential mapping, and J5 promises the next free key range.
+// incoming header stacks every dropped WAV on the same two octaves and
+// one key sounds them all. R7's .wav and .fzv cells promise sequential
+// mapping, and J5 promises the next free key range.
 //
 // A voice with no range of its own takes one key, the first the bank
 // leaves free, with the area's root on that key so the samples sound at
@@ -359,12 +358,10 @@ func addBankPatches(d *dumpState, fzb []byte, slot int) ([]model.Patch, *Error) 
 }
 
 // appendVoiceToDump appends an .fzv (header sector plus PCM) to a full
-// dump as a fresh voice slot, matching the retired studio TUI's pool
-// assign byte for byte: grow the voice area at the boundary when the slot
-// needs it, land the PCM at the end of the audio area, and rewrite the
-// header's wave pointers to absolute sample offsets. An empty
-// instrument's silent placeholder slot is filled rather than appended
-// past. Returns the grown dump and the slot the voice landed in.
+// dump as a fresh voice slot: grow the voice area at the boundary when
+// the slot needs it, land the PCM at the end of the audio area, and
+// rewrite the header's wave pointers to absolute sample offsets. It
+// returns the slot the voice landed in.
 func appendVoiceToDump(d *dumpState, fzv []byte) (int, *Error) {
 	if len(fzv) < disk.SectorSize {
 		return 0, errf("invalid-fzv", "voice file is %d bytes, shorter than one sector", len(fzv))

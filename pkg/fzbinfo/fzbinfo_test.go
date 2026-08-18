@@ -195,15 +195,14 @@ func TestRenderJSONExcludesShowVelocity(t *testing.T) {
 	}
 }
 
-// TestParseRecoversFromStaleBstep is a regression test for the bug where
-// fzbinfo trusted the bank sector's bstep field blindly. fzfinfo recovers vn
-// from the voice-area walk for FZF (since standalone FZF files lose the dBP
-// file-head's vn field); FZBs face the same problem and must use the same
-// strategy, otherwise a buggy upstream tool that wrote a stale bstep would
-// cause fzbinfo to report a phantom voice count.
+// TestParseRecoversFromStaleBstep pins fzbinfo to the voice-area walk
+// rather than the bank sector's bstep field. Standalone FZF files lose
+// the dBP file head's vn field, so fzfinfo recovers vn by walking; FZBs
+// face the same gap, and trusting bstep lets a buggy upstream tool's
+// stale value produce a phantom voice count.
 //
-// The synthetic FZB here has bstep=5 but only 2 plausible voice slots
-// followed by garbage. The parser must report VoiceCount=2, not 5.
+// The synthetic FZB here claims bstep=5 with only 2 plausible voice slots
+// followed by garbage. The parser must report VoiceCount=2.
 func TestParseRecoversFromStaleBstep(t *testing.T) {
 	t.Parallel()
 	// Build a valid 2-voice FZF in memory, truncate to one bank + one
@@ -216,11 +215,10 @@ func TestParseRecoversFromStaleBstep(t *testing.T) {
 	data := append([]byte(nil), fzfData[:fzbEnd]...)
 	// Corrupt bstep to claim 5 voices...
 	binary.LittleEndian.PutUint16(data[disk.BankVoiceCountOffset:], 5)
-	// ...and stamp an unrecognised loop mode into slot 2 so the voice-area
-	// walk terminates there. Without this, slot 2's all-zero bytes parse as
-	// PlaybackModeNoSound and IsActiveOrEmptyVoiceSlot accepts them as a
-	// legitimate empty placeholder, letting the walk continue past the real
-	// voices into the trailing zero padding.
+	// ...and stamp an unrecognised loop mode into slot 2 so the walk stops
+	// there. Slot 2's all-zero bytes otherwise parse as
+	// PlaybackModeNoSound, which IsActiveOrEmptyVoiceSlot accepts as an
+	// empty placeholder, carrying the walk into the trailing padding.
 	slot2 := disk.VoiceSlotOffset(disk.SectorSize, 2)
 	binary.LittleEndian.PutUint16(data[slot2+disk.VoiceLoopModeOffset:], 0xBEEF)
 
@@ -240,19 +238,16 @@ func TestParseRecoversFromStaleBstep(t *testing.T) {
 	}
 }
 
-// TestParseErrorsWhenNoPlausibleVoices guards against a degenerate FZB with
-// zero plausible voices. The walk should return 0 and the parser should
-// surface that as a clear error rather than silently returning an empty
-// BankDump.
+// TestParseErrorsWhenNoPlausibleVoices covers a degenerate FZB with zero
+// plausible voices: the walk returns 0 and the parser errors rather than
+// handing back an empty BankDump.
 func TestParseErrorsWhenNoPlausibleVoices(t *testing.T) {
 	t.Parallel()
-	// One-sector bank followed by a single all-zero voice sector. The
-	// playback-mode byte at offset 0x10 is therefore PlaybackModeNoSound,
-	// which IsActiveOrEmptyVoiceSlot accepts; but the wave pointers are all
-	// zero and the loop mode is NoSound, so InferVoiceCount still walks
-	// successfully and returns a non-zero count. To get a truly zero-count
-	// result we stamp non-NoSound, non-Normal garbage into the mode field
-	// so IsActiveOrEmptyVoiceSlot rejects it.
+	// One-sector bank followed by a single all-zero voice sector. That
+	// leaves PlaybackModeNoSound in the mode byte at offset 0x10, which
+	// IsActiveOrEmptyVoiceSlot accepts, so InferVoiceCount walks and
+	// returns a non-zero count. Stamping non-NoSound, non-Normal garbage
+	// into the mode field gets it rejected and the count to zero.
 	data := make([]byte, disk.SectorSize*2)
 	binary.LittleEndian.PutUint16(data[disk.BankVoiceCountOffset:], 3)
 	for i := 0; i < disk.VoicesPerSector; i++ {
@@ -269,10 +264,10 @@ func TestParseErrorsWhenNoPlausibleVoices(t *testing.T) {
 	}
 }
 
-// TestRenderVelocityZeroShowsOff is the regression test for Fix G: when
-// VelLow == 0 && VelHigh == 0 the voice cannot match any MIDI note-on
-// (spec §1-5: htch/ltch range is 1-127), so it is silent on hardware.
-// Mirror fzfinfo's "off" rendering rather than the old "any".
+// TestRenderVelocityZeroShowsOff pins Fix G: VelLow == 0 with VelHigh ==
+// 0 matches no MIDI note-on (spec §1-5 gives htch/ltch the range 1 to
+// 127), so the voice is silent on hardware and renders "off", the same as
+// fzfinfo.
 func TestRenderVelocityZeroShowsOff(t *testing.T) {
 	t.Parallel()
 	fzfData, _ := fzfbuilder.MakeTestFZF(t, []string{"SILENT"})
@@ -302,11 +297,11 @@ func TestRenderVelocityZeroShowsOff(t *testing.T) {
 	}
 }
 
-// TestParseInsertsNoSoundPlaceholders is the regression test for Fix F: when
-// ParseBankVoiceEntry returns false for a NoSound slot, fzbinfo must emit a
-// placeholder entry so len(info.Voices) matches VoiceCount and bank vp[]
-// references stay aligned. Before the fix, NoSound slots were silently
-// `continue`d and every subsequent voice's index was shifted left.
+// TestParseInsertsNoSoundPlaceholders pins Fix F: when
+// ParseBankVoiceEntry returns false for a NoSound slot, fzbinfo emits a
+// placeholder so len(info.Voices) matches VoiceCount and bank vp[]
+// references stay aligned. Skipping the slot shifts every later voice's
+// index left.
 func TestParseInsertsNoSoundPlaceholders(t *testing.T) {
 	t.Parallel()
 	// Build a 3-voice FZB whose middle slot is NoSound.

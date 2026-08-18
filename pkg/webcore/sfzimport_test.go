@@ -212,8 +212,8 @@ func stereoWAVBytes(frames int) []byte {
 	return buf.Bytes()
 }
 
-// B2: the stereo answer the dialog collected must reach the samples,
-// and it covers the whole batch.
+// The stereo answer the dialog collected must reach the samples, and it
+// covers the whole batch.
 func TestImportWAVFolderCarriesTheChannelChoice(t *testing.T) {
 	const frames = 400
 	for _, tc := range []struct {
@@ -251,10 +251,9 @@ func TestImportWAVFolderCarriesTheChannelChoice(t *testing.T) {
 	}
 }
 
-// B2 on the SFZ route, which is what the browser's folder drop takes
-// and what J2 opens with. The same stereo bytes into ImportSFZ used to
-// give a voice of 2 * frames samples, the two channels alternating,
-// where ImportWAVFolder already gave the frames.
+// The same on the SFZ route, which is what the browser's folder drop
+// takes and what J2 opens with. Without the answer, the same stereo
+// bytes give a voice of twice the frames, the two channels alternating.
 func TestImportSFZCarriesTheChannelChoice(t *testing.T) {
 	const frames = 400
 	for _, tc := range []struct {

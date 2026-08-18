@@ -14,13 +14,14 @@ import (
 )
 
 // unformattedFillByte fills all non-reserved sectors of a freshly formatted
-// disk. 'Z' is an arbitrary printable byte: it makes unused regions instantly
-// recognisable in a hex dump and distinguishes a fresh image from one that
-// has held data and been zeroed. The sampler never reads these bytes because
-// the CAT marks the sectors as free.
+// disk. 'Z' is an arbitrary printable byte: it makes unused regions
+// recognisable in a hex dump and tells a fresh image apart from one that has
+// held data and been zeroed. The sampler never reads these bytes because the
+// CAT marks the sectors as free.
 const unformattedFillByte = 'Z'
 
-// catInitialAlloc marks clusters 0 and 1 as allocated in the CAT bitmap.
+// catInitialAlloc marks clusters 0 (label and CAT) and 1 (directory) as
+// allocated in the CAT bitmap.
 const catInitialAlloc = 0x03
 
 // Format creates a new blank FZ series disk image at path with the given label.
@@ -67,12 +68,11 @@ func Format(path, label string) error {
 	return nil
 }
 
-// BuildImage constructs the raw bytes of a blank formatted disk image
-// in memory. Unlike Format it never touches the filesystem and
-// validates strictly: an empty, over-length, or non printable ASCII
-// label is an error. Format validates the label it was given, then
-// truncates before calling here, keeping the CLI's truncate-and-warn
-// behaviour.
+// BuildImage constructs the raw bytes of a blank formatted disk image in
+// memory. Unlike Format it never touches the filesystem and validates
+// strictly: an empty, over-length, or non printable ASCII label is an error.
+// Format validates then truncates before calling here, which keeps the CLI's
+// truncate-and-warn behaviour.
 func BuildImage(label string) ([]byte, error) {
 	if label == "" {
 		return nil, fmt.Errorf("diskformat: disk label must not be empty")
@@ -92,22 +92,16 @@ func BuildImage(label string) ([]byte, error) {
 func buildImage(label string) []byte {
 	img := make([]byte, disk.ImageSize)
 
-	// Sector 0: label at LabelOffset, padded to 12 bytes.
+	// Sector 0: label, FZ series identification tag, then the CAT bitmap.
 	paddedLabel := disk.PadLabel(label)
 	copy(img[disk.LabelOffset:disk.LabelOffset+disk.LabelSize], paddedLabel[:])
 
-	// Disk name tag at DiskNameTagOffset identifies this as an FZ series image.
 	img[disk.DiskNameTagOffset] = disk.DiskNameTag
 
-	// Spec §1-2 marks bytes 0x10..0x1B as the Password field. fizzle does
-	// not support password protection; we write the disk name into this
-	// slot to match the byte pattern that factory FZ-1 disks carry. The
-	// FZ-1 firmware ignores this slot on unprotected disks.
+	// Spec §1-2 marks bytes 0x10..0x1B as the Password field; the disk name
+	// goes there to match factory FZ-1 disks (see disk.PasswordOffset).
 	copy(img[disk.PasswordOffset:disk.PasswordOffset+disk.LabelSize], paddedLabel[:])
 
-	// CAT bitmap starts at CATOffset. Byte 0 has bits 0 and 1 set, marking
-	// clusters 0 and 1 (the label/CAT sector and the directory sector) as
-	// allocated.
 	img[disk.CATOffset] = catInitialAlloc
 
 	// Mark clusters beyond the physical disk capacity as allocated so the

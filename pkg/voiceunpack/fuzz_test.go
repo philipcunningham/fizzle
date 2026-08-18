@@ -68,9 +68,8 @@ func FuzzUnpack(f *testing.F) {
 
 // FuzzBuildUnpackRoundTrip asserts that voices fed through
 // voicebuild.AssembleWithKeygroups and then voiceunpack.Unpack come back with
-// their stable header fields and audio payloads intact (modulo the
-// sector-padding that the unpacker applies). This is the strongest
-// invariant the build/unpack pipeline must preserve.
+// their stable header fields and audio payloads intact, modulo the
+// sector-padding the unpacker applies.
 func FuzzBuildUnpackRoundTrip(f *testing.F) {
 	// Seeds: three distinct shapes covering 1, 2, and several voices, with
 	// varied sample counts and names.
@@ -93,10 +92,9 @@ func FuzzBuildUnpackRoundTrip(f *testing.F) {
 			samples = 64 + raw%(2048-64+1)
 		}
 
-		// Decode per-voice name (3..6 ASCII letters, uppercase to dodge the
-		// uppercasing/truncation rules in the build pipeline). Names must be
-		// unique so the unpacker does not deduplicate them with "-N"
-		// suffixes, which would break our round-trip identity check.
+		// Per-voice names of 3..6 uppercase ASCII letters dodge the build
+		// pipeline's uppercasing and truncation. They must be unique, or the
+		// unpacker's "-N" dedup suffixes break the identity check.
 		var nameSeed []byte
 		if len(data) > 3 {
 			nameSeed = data[3:]
@@ -147,8 +145,8 @@ func FuzzBuildUnpackRoundTrip(f *testing.F) {
 			t.Fatalf("unpacked %d files, want %d", len(entries), n)
 		}
 
-		// Sort entries by filename so the order is deterministic. Build a
-		// lookup from expected name -> unpacked bytes.
+		// Sort entries so the order is deterministic, then key the unpacked
+		// bytes by expected name.
 		fileNames := make([]string, 0, len(entries))
 		for _, e := range entries {
 			fileNames = append(fileNames, e.Name())
@@ -164,8 +162,7 @@ func FuzzBuildUnpackRoundTrip(f *testing.F) {
 			if !strings.HasSuffix(fn, ".fzv") {
 				t.Fatalf("unexpected output filename %q (no .fzv suffix)", fn)
 			}
-			// Pull the name out of the header rather than trusting the
-			// filename; that is the invariant we want to check.
+			// The header name is the invariant here, not the filename.
 			if len(b) < disk.VoiceNameOffset+disk.LabelSize {
 				t.Fatalf("%s: unpacked file too small (%d bytes)", fn, len(b))
 			}

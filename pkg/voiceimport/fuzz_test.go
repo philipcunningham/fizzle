@@ -48,12 +48,11 @@ func FuzzEncode(f *testing.F) {
 	})
 }
 
-// FuzzImport drives the full I/O path (WAV file -> Import -> FZV file) with
-// arbitrary WAV input. This is the same surface where a SMPL-loop bug was
-// shipped, missed by fuzzing because the I/O entry point had no fuzz at all
-// (only the in-memory Encode helper did). Verifies that any WAV the parser
-// accepts can be imported, that the resulting FZV parses back, and that
-// SMPL loops in the source survive the rate scaling.
+// FuzzImport drives the whole I/O path, WAV file through Import to FZV file,
+// on arbitrary WAV input. Fuzzing only the in-memory Encode helper left this
+// surface uncovered and a SMPL-loop bug shipped through it. Any WAV the
+// parser accepts must import, the FZV must parse back, and a source SMPL
+// loop must survive the rate scaling.
 func FuzzImport(f *testing.F) {
 	// Seed: minimal valid WAV, looped WAV at source rate, looped WAV that
 	// will get resampled.
@@ -108,10 +107,9 @@ func FuzzImport(f *testing.F) {
 		if params.SampleRate != dstRate {
 			t.Errorf("imported rate %d != requested %d", params.SampleRate, dstRate)
 		}
-		// SMPL-loop propagation: if the source WAV had a meaningful loop,
-		// the imported FZV must carry a sustain loop with the rate-scaled
-		// loop points. This is the regression guard for the bug fixed in
-		// 560e833.
+		// A meaningful loop in the source WAV must come back as a sustain
+		// loop in the FZV, with the loop points scaled to the target rate.
+		// This is the regression guard for the bug fixed in 560e833.
 		if wf.LoopStart >= 0 {
 			if !params.HasActiveLoop {
 				t.Fatalf("source WAV had loop %d..%d, imported FZV has no loop", wf.LoopStart, wf.LoopEnd)

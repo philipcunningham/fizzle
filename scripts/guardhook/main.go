@@ -1,10 +1,8 @@
 // Command guardhook is a Claude Code PreToolUse hook. It denies Write
 // and Edit calls that target protected paths: real-hardware corpus
-// fixtures and generated artefacts that only build steps may touch.
-// The web parameter schema joins the list when slice 3 makes it a
-// generated file. A deliberate change to a protected path is made by
-// the operator, or by removing the path from this list in the same
-// change that justifies it.
+// fixtures and generated artefacts that only build steps may touch. A
+// deliberate change to a protected path comes from the operator, or from
+// removing the path from this list in the change that justifies it.
 package main
 
 import (

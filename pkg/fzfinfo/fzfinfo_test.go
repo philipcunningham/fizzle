@@ -139,12 +139,10 @@ func TestInfoSingleKeyNoRangeNotation(t *testing.T) {
 	// Single-key voice should not show "X to X".
 	lines := strings.Split(buf.String(), "\n")
 	for _, line := range lines {
-		// Skip the header line.
 		if strings.Contains(line, "Keys") {
 			continue
 		}
 		if strings.Contains(line, " to ") {
-			// Check if both sides of "to" are the same note (that would be redundant).
 			parts := strings.SplitN(line, " to ", 2)
 			if len(parts) == 2 {
 				lhs := strings.Fields(parts[0])
@@ -230,10 +228,9 @@ func TestInfoRealHardwareTECHNO(t *testing.T) {
 		t.Fatalf("Info: %v", err)
 	}
 	out := buf.String()
-	// TECHNO is a multi-bank dump: 8 bank sectors with 32 distinct voice
-	// slots in the voice area. Prior to the multi-bank fix only bank 0's
-	// bstep=11 voices were surfaced; the remaining slots (used by banks
-	// 1-7 via vp[]) were dropped on the floor.
+	// TECHNO is a multi-bank dump: 8 bank sectors, 32 distinct voice
+	// slots. Counting from bank 0's bstep alone surfaces 11 and drops
+	// every slot banks 1 to 7 reach through vp[].
 	if !strings.Contains(out, "Voices:    32") {
 		t.Errorf("expected 32 voices (multi-bank coverage):\n%s", out)
 	}
@@ -243,17 +240,16 @@ func TestInfoRealHardwareTECHNO(t *testing.T) {
 	t.Logf("fzf info output:\n%s", out)
 }
 
-// TestInfoTechnoBank1OnlyVoicesShowCorrectMetadata is the regression test
-// for F3: voices that are referenced only from banks 1-7 (not bank 0)
-// must show the bank metadata of *their* owning bank, not the misaligned
-// bytes that fall at bank-0[offset+voiceSlot] when voiceSlot is past
-// bank 0's bstep.
+// TestInfoTechnoBank1OnlyVoicesShowCorrectMetadata pins F3: a voice
+// referenced only from banks 1 to 7 must show its owning bank's metadata,
+// not the misaligned bytes at bank-0[offset+voiceSlot] once voiceSlot
+// passes bank 0's bstep.
 //
-// Voice slot 11 in TECHNO (NASTY BASS) is referenced by bank 0 vp[0]=11,
-// so it should show bank 0 split 0's key range (42-66). Prior to the fix
-// fzfinfo read bank[disk.BankKeyLowOffset+11], which is well past bank 0's
-// 11 splits and lands on the velocity-low array's slot 11 byte (=0). The
-// snapshot used to show key_low=0, key_high=0 for this voice.
+// TECHNO's voice slot 11 (NASTY BASS) is referenced by bank 0 vp[0]=11,
+// so it shows bank 0 split 0's key range, 42 to 66. Reading
+// bank[disk.BankKeyLowOffset+11] instead lands past bank 0's 11 splits on
+// the velocity-low array's slot 11 byte (0), reporting key_low=0 and
+// key_high=0.
 func TestInfoTechnoBank1OnlyVoicesShowCorrectMetadata(t *testing.T) {
 	t.Parallel()
 	const technoImg = "../../testdata/synthetic/TECHNO.img"
@@ -496,11 +492,9 @@ func TestInfoHighlightedRowMarked(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := buf.String()
-	// Voice 2's row should contain "*2".
 	if !strings.Contains(out, "*2") {
 		t.Errorf("highlighted voice 2 should have *2 prefix:\n%s", out)
 	}
-	// Voice 1 and 3 should not be marked.
 	lines := strings.Split(out, "\n")
 	for _, line := range lines {
 		if strings.Contains(line, "*1") || strings.Contains(line, "*3") {
@@ -621,13 +615,13 @@ func TestParseNonSplit(t *testing.T) {
 	}
 }
 
-// TestParseGarbageTotalWaveMarkerNotSplit guards against a regression where a
-// garbage value at BankTotalWaveOffset would cause a single-disk FZF to be
-// misreported as is_split=true. Real-world dumps (e.g. CASIO084.FZF,
-// CASIO097.FZF from the FZ-1 Shareware Library) carry uninitialised bytes at
-// offset 0x290, and only non-plausible (all-zero) voice slots happen to
-// satisfy the inner boundary test. Detection must require corroborating
-// evidence: a plausible voice whose wavst points past local audio.
+// TestParseGarbageTotalWaveMarkerNotSplit guards a single-disk FZF
+// against being misreported as is_split=true from a garbage
+// BankTotalWaveOffset. Real dumps (CASIO084.FZF and CASIO097.FZF from the
+// FZ-1 Shareware Library) carry uninitialised bytes at offset 0x290, and
+// only implausible all-zero voice slots satisfy the inner boundary test.
+// Detection needs corroboration: a plausible voice whose wavst points
+// past local audio.
 func TestParseGarbageTotalWaveMarkerNotSplit(t *testing.T) {
 	t.Parallel()
 	fzfPath := buildFZF(t, 2)
@@ -638,9 +632,8 @@ func TestParseGarbageTotalWaveMarkerNotSplit(t *testing.T) {
 	// Stamp a garbage totalWaveMarker that vastly exceeds the local audio
 	// area, mimicking the field's contents in CASIO084.FZF and CASIO097.FZF.
 	binary.LittleEndian.PutUint32(data[disk.BankTotalWaveOffset:], 0xCAFEBABE)
-	// Build a second FZF where, on top of the garbage marker, one voice slot
-	// is zeroed out so its (garbage) wavst would have satisfied the old
-	// boundary test had the slot not been rejected for implausibility.
+	// Zero a voice slot so its garbage wavst satisfies the boundary test
+	// on every count except the plausibility check that rejects it.
 	voiceAreaStart := disk.SectorSize
 	voiceSlot := voiceAreaStart + disk.VoiceSlotOffset(0, 1)
 	for i := range disk.VoiceHeaderUsed {
@@ -754,13 +747,11 @@ func TestRenderJSONExcludesShowVelocity(t *testing.T) {
 	}
 }
 
-// TestParseAcceptsNormalVariantWithWarn is a regression test for the
-// undocumented playback mode 0x0157 observed in the FZ-1 Factory Library's
-// Clarinet.fzf. The file uses 0x0157 for every "first voice of each bank"
-// position; the bit pattern differs from NORMAL (0x01D7) by exactly one
-// cleared bit (bit 7 of the low byte). We treat it as a NORMAL variant so
-// the file parses, and emit a WARN log so the undocumented value remains
-// visible to anyone scanning logs.
+// TestParseAcceptsNormalVariantWithWarn covers the undocumented playback
+// mode 0x0157 the FZ-1 Factory Library's Clarinet.fzf uses at every "first
+// voice of each bank" position. The bit pattern differs from NORMAL
+// (0x01D7) by one cleared bit, bit 7 of the low byte. fizzle parses it as
+// a NORMAL variant and logs a WARN so the value stays visible.
 func TestParseAcceptsNormalVariantWithWarn(t *testing.T) {
 	buf := testutil.CaptureLog(t)
 
@@ -794,12 +785,11 @@ func TestParseAcceptsNormalVariantWithWarn(t *testing.T) {
 	}
 }
 
-// TestParseIncludesNoSoundSlots verifies that the parsed Voices array has
-// one entry per voice slot (matching voice_count == vn from the spec), with
-// PlaybackModeNoSound placeholder slots represented by entries carrying
-// PlaybackMode == "no_sound" rather than being filtered out. This keeps
-// slot indices aligned with the bank's vp[] references and lets consumers
-// filter to audible voices via PlaybackMode.
+// TestParseIncludesNoSoundSlots pins one Voices entry per voice slot
+// (voice_count == vn from the spec), with NoSound placeholders present as
+// PlaybackMode "no_sound" rather than filtered out. That keeps slot
+// indices aligned with the bank's vp[] references and leaves consumers to
+// filter on PlaybackMode.
 func TestParseIncludesNoSoundSlots(t *testing.T) {
 	t.Parallel()
 	// Construct a synthetic FZF with bstep=5: two leading NoSound slots
@@ -857,9 +847,9 @@ func TestParseIncludesNoSoundSlots(t *testing.T) {
 	}
 }
 
-// TestRenderSkipsNoSoundRows verifies the human-readable table omits
-// PlaybackModeNoSound rows (they carry no audible payload) while the JSON
-// representation continues to include them for slot-index correspondence.
+// TestRenderSkipsNoSoundRows pins the table dropping NoSound rows, which
+// carry no audible payload, while the JSON keeps them for slot-index
+// correspondence.
 func TestRenderSkipsNoSoundRows(t *testing.T) {
 	t.Parallel()
 	info := &FullDump{
@@ -887,11 +877,10 @@ func TestRenderSkipsNoSoundRows(t *testing.T) {
 	}
 }
 
-// TestMemoryBytesClampedToAudioArea is a regression test for the
-// memory_bytes overflow bug. Some real-world FZFs (e.g. Drums.fzf) carry a
-// garbage waveEnd in the last voice header that, multiplied by 2 bytes per
-// sample, reports ~4 GB of memory for a sub-MB file. MemoryBytes must be
-// clamped to the audio actually present in the file.
+// TestMemoryBytesClampedToAudioArea pins the memory_bytes clamp. Real
+// FZFs such as Drums.fzf carry a garbage waveEnd in the last voice
+// header that, at 2 bytes per sample, reports about 4 GB for a sub-MB
+// file, so MemoryBytes must clamp to the audio present.
 func TestMemoryBytesClampedToAudioArea(t *testing.T) {
 	t.Parallel()
 
@@ -904,8 +893,8 @@ func TestMemoryBytesClampedToAudioArea(t *testing.T) {
 	voiceArea := disk.SectorSize
 	slot := disk.VoiceSlotOffset(voiceArea, 0)
 	binary.LittleEndian.PutUint16(data[slot+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
-	// Sane waveStart, but waveEnd that, when multiplied by BytesPerSample,
-	// would imply ~8 GB of audio. Pre-fix this leaked into MemoryBytes.
+	// Sane waveStart, but a waveEnd implying about 8 GB of audio once
+	// multiplied by BytesPerSample.
 	binary.LittleEndian.PutUint32(data[slot+disk.VoiceWaveStartOffset:], 0)
 	binary.LittleEndian.PutUint32(data[slot+disk.VoiceWaveEndOffset:], 0xFFFFFFFF)
 

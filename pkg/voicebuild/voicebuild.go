@@ -19,16 +19,15 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/render"
 )
 
-// Sentinel errors. Wrap with %w; callers should use errors.Is to identify
-// a specific failure mode rather than matching error message substrings.
+// Sentinel errors. Wrap with %w; match with errors.Is, not on message text.
 var (
 	ErrNoVoices      = errors.New("voicebuild: no voice files provided")
 	ErrTooManyVoices = errors.New("voicebuild: too many voices")
 )
 
 // defaultBankName is the 12-byte name written into a generated bank sector.
-// The trailing spaces are load-bearing: the FZ label field is exactly 12 bytes,
-// space-padded. Do not trim them.
+// The trailing spaces are load-bearing: the FZ label field is exactly 12
+// bytes, space-padded.
 const defaultBankName = "All Voices  "
 
 // defaultEffectData is the 24-byte global effect block (struct efectdata)
@@ -45,17 +44,16 @@ const defaultBankName = "All Voices  "
 //	[1]  reserved / 0
 //	[2]  reserved / 0
 //	[3]  mod_lfp     mod wheel to LFO pitch depth (0x0f = 15)
-//	[4-13] reserved / 0   (additional controller routings the spec describes
-//	                       but which fizzle does not currently expose)
+//	[4-13] reserved / 0
 //	[14] fot_dca     foot pedal to DCA (volume) depth (0x40 = 64)
 //	[15-16] reserved / 0
 //	[17] aft_lfp     aftertouch to LFO pitch depth (0x08 = 8)
 //	[18-23] reserved / 0
 //
-// The `fzf effects` command (see pkg/fzfeffects/) can modify these values.
-// The four named fields above are the ones verified on hardware; the
-// "reserved / 0" slots correspond to additional routings in struct efectdata
-// whose semantics have not been independently confirmed.
+// Only the four named fields are verified on hardware. The "reserved / 0"
+// slots are further struct efectdata routings the spec describes, with
+// semantics fizzle hasn't confirmed and doesn't expose. The `fzf effects`
+// command (pkg/fzfeffects/) can modify these values.
 var defaultEffectData = [disk.EffectDataSize]byte{
 	0x18, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x00, // bend=24 (0x00), mod_lfp=15 (0x03)
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, // fot_dca=64 (0x0E)
@@ -67,9 +65,9 @@ var defaultEffectData = [disk.EffectDataSize]byte{
 // generators handle it.
 //
 // AudioOut is the gchn bitmask: 0xff means all 8 generators (polyphonic).
-// A single-bit value like 0x01 assigns one generator (monophonic: new note
-// cuts the previous one). Voices sharing the same single-bit AudioOut value
-// will mute each other, implementing SFZ mutegroup behaviour.
+// A single-bit value like 0x01 assigns one generator (monophonic: a new note
+// cuts the previous one). Voices sharing one single-bit AudioOut value mute
+// each other, which is how SFZ mutegroups map onto the hardware.
 //
 // The Go zero value of Keygroup is unsafe to load on real hardware:
 // VelLow=0 disables note-on triggering, and AudioOut=0 routes the voice to
@@ -86,9 +84,8 @@ type Keygroup struct {
 
 // NewKeygroup returns a Keygroup with the given key range and root note,
 // the standard 1..127 velocity range, and polyphonic audio routing
-// (AudioOut = 0xff). MIDI channel defaults to 0; callers that need
-// per-voice channel routing or a monophonic mutegroup assignment should
-// override the relevant fields after construction.
+// (AudioOut = 0xff). MIDI channel defaults to 0; override the fields after
+// construction for per-voice channel routing or a monophonic mutegroup.
 func NewKeygroup(keyLow, keyHigh, keyCentre uint8) Keygroup {
 	return Keygroup{
 		KeyLow:    keyLow,
@@ -337,13 +334,9 @@ func buildAudioBlocks(voices [][]byte) ([][]byte, error) {
 }
 
 // buildBankSector constructs a 1024-byte bank sector for n voices using the
-// provided keygroup mappings. The bank name and effect data use package defaults.
-//
-// Returns an error if any keygroup has an out-of-range or inconsistent key
-// mapping: KeyLow > KeyHigh, KeyCentre outside [KeyLow, KeyHigh], or any of
-// the three exceeding disk.MaxMIDINote. Writing such values would produce a
-// bank the hardware silently mis-maps, so we fail early with a descriptive
-// error rather than emit an incoherent dump.
+// provided keygroup mappings. The bank name and effect data use package
+// defaults. An incoherent key mapping is an error (see validateKeygroup):
+// the hardware silently mis-maps such a bank, so fail before emitting one.
 //
 // voiceNames is optional metadata for error messages; pass nil to omit names.
 func buildBankSector(n int, groups []Keygroup, voiceNames []string) ([]byte, error) {
@@ -365,8 +358,7 @@ func buildBankSector(n int, groups []Keygroup, voiceNames []string) ([]byte, err
 		}
 		bank[disk.BankAudioOutOffset+i] = audioOut //nolint:gosec // G602
 		// bvol: per-voice mix volume (spec §2-2). Factory Casio dumps use
-		// 0..~27 and we default to 0; field semantics are not fully
-		// understood; see the DefaultBankVolume comment in pkg/disk.
+		// 0..~27; the semantics aren't settled. See DefaultBankVolume in pkg/disk.
 		bank[disk.BankVolumeOffset+i] = disk.DefaultBankVolume //nolint:gosec // G602
 		binary.LittleEndian.PutUint16(bank[disk.BankVoiceNumOffset+2*i:], uint16(i))
 	}
@@ -390,13 +382,13 @@ func extractVoiceNames(voices [][]byte) []string {
 }
 
 // validateKeygroup checks that a Keygroup has a coherent key mapping before
-// it is written to a bank sector. See buildBankSector for the rationale.
+// it goes into a bank sector.
 //
 // Range overflow (any field > MaxMIDINote) and KeyLow > KeyHigh are hard
 // errors: the hardware silently mis-maps such banks. KeyCentre outside
-// [KeyLow, KeyHigh] is only a warning, because real SFZ corpora (e.g.
-// JUNGLISM) legitimately use pitch_keycenter to transpose a sample beyond
-// its key range and the hardware DCP handles it fine.
+// [KeyLow, KeyHigh] is only a warning, because real SFZ corpora such as
+// JUNGLISM legitimately use pitch_keycenter to transpose a sample beyond
+// its key range, and the hardware DCP handles it fine.
 func validateKeygroup(idx int, g Keygroup, voiceNames []string) error {
 	label := fmt.Sprintf("voice %d", idx+1)
 	if idx < len(voiceNames) && voiceNames[idx] != "" {
@@ -430,14 +422,14 @@ func validateKeygroup(idx int, g Keygroup, voiceNames []string) error {
 // of all audio preceding these voices in the combined wave area.
 //
 // The per-voice key range bytes (hwid/lwid/cent at offsets 0xae/0xaf/0xb0,
-// spec §2-1) are overwritten from the matching Keygroup so that voice-header
+// spec §2-1) are overwritten from the matching Keygroup so voice-header
 // playback metadata stays in sync with the bank's split-mapping arrays
-// (spec §2-2). Without this, voices imported via voiceimport.Encode would
-// keep their DefaultKeyHigh/Low/Centre values in the FZF, and voiceunpack /
-// fzv info would later display those stale defaults instead of the keygroup
-// the caller specified. This is the voicebuild counterpart to the F11
-// sfzconvert.regionToFZVFromFile cent fix (commit 699341d), broadened to
-// cover all three bytes and all callers (fzf build, sfz convert).
+// (spec §2-2). Without this, a voice imported via voiceimport.Encode keeps
+// its DefaultKeyHigh/Low/Centre bytes in the FZF, and voiceunpack and
+// fzv info report those stale defaults instead of the caller's keygroup.
+// Counterpart to the F11 cent fix in sfzconvert.regionToFZVFromFile
+// (commit 699341d), broadened to all three bytes and to both the fzf
+// build and sfz convert callers.
 func buildVoiceArea(voices [][]byte, audioBlocks [][]byte, groups []Keygroup, priorSamples int) []byte {
 	n := len(voices)
 	voiceSectors := disk.VoiceAreaSectors(n)
@@ -496,11 +488,11 @@ func assembleWithGroups(voices [][]byte, groups []Keygroup) ([]byte, error) {
 //
 // Loop-pointer fields reserve flag bits the address adjustment must not
 // disturb (spec §2-1: loopst[i] upper 8 bits = loop-fine, looped[i] MSB =
-// skip flag). For those fields we mask out the address, add the offset, and
-// OR the preserved flag bits back in before writing. Real-world FZ-1 voices
-// produced by the sampler usually leave these flag bits zero, but third-
-// party files (or files produced by an FZ-1 with loop-fine adjustments)
-// carry non-zero values that previously got corrupted on round-trip.
+// skip flag). For those fields, mask out the address, add the offset, and
+// OR the preserved flag bits back in before writing. Voices the sampler
+// itself writes usually leave these bits zero, but third-party files (and
+// files carrying loop-fine adjustments) set them, and a plain add smears
+// the flag value into the address.
 func fixSampleOffsets(voice []byte, offsetSamples int) {
 	off := bitconv.NarrowU32(offsetSamples)
 	disk.ForEachSamplePointer(voice, func(field []byte, kind disk.SamplePointerKind) {

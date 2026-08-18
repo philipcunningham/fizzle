@@ -89,10 +89,9 @@ describe("the generation window", () => {
   });
 });
 
-// The cells are wired to the core through the shell, not just rendered.
-// They were built while another agent held App.tsx, so the callback was
-// optional and the running app passed nothing: the window read the
-// core's frames and committed none of them back.
+// The cells are wired to the core through the shell, not just rendered:
+// an optional callback the app never passes reads the core's frames and
+// commits none of them back.
 describe("the generation window commits through the shell", () => {
   it("sends the edited frames to the core", async () => {
     const core = createFakeCore();

@@ -124,8 +124,8 @@ func TestEstimateImportTracksRate(t *testing.T) {
 	}
 }
 
-// The feedback scenario: 59.4 s of stereo 44.1 kHz is over the
-// sampler's memory at 36 and 18 kHz and fits only at 9 kHz.
+// 59.4 s of stereo 44.1 kHz is over the sampler's memory at 36 and
+// 18 kHz, and fits only at 9 kHz.
 func TestEstimateImportOverSampleMemory(t *testing.T) {
 	s := NewSession()
 	if _, cerr := s.NewDisk("EST"); cerr != nil {
@@ -187,8 +187,8 @@ func TestEstimateImportReportsSplit(t *testing.T) {
 	}
 }
 
-// A single first import splits like every other path now, and the
-// estimate says so.
+// A single first import splits like every other path, and the estimate
+// says so.
 func TestEstimateImportSingleOverOneDisk(t *testing.T) {
 	s := NewSession()
 	if _, cerr := s.NewDisk("EST"); cerr != nil {

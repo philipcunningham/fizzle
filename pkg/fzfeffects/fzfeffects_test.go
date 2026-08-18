@@ -18,11 +18,10 @@ func readEffectByte(t *testing.T, path string, fieldOffset int) byte {
 	return data[disk.BankEffectOffset+fieldOffset]
 }
 
-// TestEffectOffsetsMatchSpec pins every effect-block field offset used by
-// fzfeffects to the offsets given in the FZ-1 Data Structures spec section
-// 2-3 (`struct effectdata`). Originally a regression test for an off-by-one
-// where aft_lfp was incorrectly mapped to byte 18 (aft_lfa) instead of 17;
-// now also covers the 18 additional routings exposed by Tier 2L.
+// TestEffectOffsetsMatchSpec pins every effect-block field offset
+// fzfeffects uses to the FZ-1 Data Structures spec section 2-3 (`struct
+// effectdata`). It guards an off-by-one that maps aft_lfp to byte 18
+// (aft_lfa) instead of 17.
 func TestEffectOffsetsMatchSpec(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -68,8 +67,8 @@ func TestEffectOffsetsMatchSpec(t *testing.T) {
 	if got := readEffectByte(t, p, disk.EffectAftLFPOffset); got != 0x08 {
 		t.Errorf("byte at aft_lfp offset = 0x%02x, want 0x08 (default aftertouch-LFP)", got)
 	}
-	// And the byte at offset 0x12 (aft_lfa) must NOT be 0x08; that would
-	// mean we're still writing the value at the wrong position.
+	// The byte at offset 0x12 (aft_lfa) must not be 0x08, which would
+	// mean the value landed one position late.
 	if got := readEffectByte(t, p, 0x12); got != 0x00 {
 		t.Errorf("byte at aft_lfa offset = 0x%02x, want 0x00 (the default 8 belongs at 0x11, not 0x12)", got)
 	}
@@ -153,10 +152,9 @@ func TestSetAllFields(t *testing.T) {
 	}
 }
 
-// TestSetExtendedRoutings exercises the 18 routing fields beyond the
-// original four (bend, mod_lfp, fot_dca, aft_lfp). It writes one byte per
-// routing, reads back, and confirms the per-field offsets match the spec
-// layout.
+// TestSetExtendedRoutings covers the routing fields beyond bend,
+// mod_lfp, fot_dca, and aft_lfp: one byte written per routing, read back,
+// and checked against the spec's offsets.
 func TestSetExtendedRoutings(t *testing.T) {
 	t.Parallel()
 	_, p := fzfbuilder.MakeTestFZF(t, []string{"A"})

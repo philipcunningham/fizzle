@@ -5,9 +5,8 @@ import (
 	"sync"
 )
 
-// TestPlayer is a Player implementation for use in tests. It records
-// PlayWAV calls and returns a configurable error. Use NewTestPlayer to
-// create one.
+// TestPlayer is a Player for tests. It records PlayWAV calls and returns
+// a configurable error.
 type TestPlayer struct {
 	mu    sync.Mutex
 	avail bool

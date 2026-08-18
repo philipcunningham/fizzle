@@ -80,12 +80,8 @@ func TestReadSampleRatePreserved(t *testing.T) {
 // path added for SFZ sample libraries.
 func TestRead24Bit(t *testing.T) {
 	t.Parallel()
-	// Build a minimal 24-bit mono WAV by hand.
-	// The known 24-bit samples and their expected 16-bit values after >> 8:
-	// 0x7FFFFF yields 0x7FFF = 32767 (near full-scale positive)
-	// 0x800000 yields -32768 after sign extension and >>8 (but let us check exactly)
-	// 0x000000 yields 0
-	// 0x010203 yields 0x0102 = 258 (upper two bytes)
+	// A minimal hand-built 24-bit mono WAV. Decoding sign-extends each
+	// sample and shifts it >> 8 into int16.
 	samples24 := [][3]byte{
 		{0xFF, 0xFF, 0x7F}, // 0x7FFFFF yields 32767
 		{0x00, 0x00, 0x00}, // 0        yields 0
@@ -230,11 +226,9 @@ func TestReadStereoDecodesInterleaved(t *testing.T) {
 	}
 }
 
-// TestWrite_RejectsStereo pins the Read/Write asymmetry: Read
-// accepts stereo and exposes ExtractChannel / MixChannels; Write
-// emits a mono RIFF header and so MUST refuse a stereo File to
-// avoid producing a malformed file (mono header + 2× sample data).
-// Callers reduce to mono via ExtractChannel/MixChannels first.
+// TestWrite_RejectsStereo pins the Read/Write asymmetry: Read takes stereo,
+// while Write emits a mono RIFF header and so must refuse a stereo File
+// rather than write a malformed one (mono header, 2× the sample data).
 func TestWrite_RejectsStereo(t *testing.T) {
 	t.Parallel()
 	stereo := &File{
@@ -872,11 +866,10 @@ func TestReadDuplicateFmtChunkUsesLast(t *testing.T) {
 	}
 }
 
-// TestWriteMIDIUnityNoteRoundTrip pins the WAV writer's behaviour for the
-// SMPL chunk's MIDIUnityNote field, which the voice -> WAV pipeline uses
-// to preserve the FZV root note across extracts. A zero value falls back
-// to middle C (60) for back-compat with callers that haven't been
-// updated; any non-zero value is round-tripped verbatim.
+// TestWriteMIDIUnityNoteRoundTrip pins the SMPL chunk's MIDIUnityNote field,
+// which carries the FZV root note through a voice-to-WAV extract. Zero falls
+// back to middle C (60) for callers that don't set it; any other value
+// round-trips verbatim.
 func TestWriteMIDIUnityNoteRoundTrip(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -913,10 +906,9 @@ func TestWriteMIDIUnityNoteRoundTrip(t *testing.T) {
 	}
 }
 
-// TestWriteMIDIUnityNoteWithoutLoop pins the WAV writer's behaviour for the
-// one-shot SMPL chunk path: when MIDIUnityNote is non-zero but no loop is
-// set, Write must still emit a SMPL chunk (with NumSampleLoops = 0) so the
-// root note round-trips. This is the regression coverage for F10.
+// TestWriteMIDIUnityNoteWithoutLoop pins the one-shot SMPL path: with a
+// non-zero MIDIUnityNote and no loop, Write still emits a SMPL chunk
+// (NumSampleLoops = 0) so the root note round-trips.
 func TestWriteMIDIUnityNoteWithoutLoop(t *testing.T) {
 	t.Parallel()
 	f := &File{
@@ -966,9 +958,8 @@ func TestReadFmtZeroSampleRate(t *testing.T) {
 
 func TestReadChunkSizeOverflow(t *testing.T) {
 	t.Parallel()
-	// A chunk whose declared size is 0xFFFFFFFF used to wrap to 0 when the
-	// parser incremented the padded length, causing misaligned parsing of
-	// later chunks. The parser must instead return a clean error.
+	// A declared size of 0xFFFFFFFF wraps to 0 when the parser increments
+	// the padded length, misaligning every later chunk. Expect a clean error.
 	fmtChunk := buildFmtChunk(1, 1, 44100, 16)
 	// Build a forged chunk header with id="JUNK" and size=0xFFFFFFFF, no body.
 	bogus := make([]byte, 8)

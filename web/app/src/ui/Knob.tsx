@@ -1,6 +1,6 @@
-// The mockup's rotary knob: vertical drag sweeps the value, arrow keys
-// step it, the arc shows the position. Values are integers; drags emit
-// rounded values so the core's confirmed value matches the display.
+// The rotary knob: vertical drag sweeps the value, arrow keys step it,
+// the arc shows the position. Values are integers, and drags emit
+// rounded ones so the core's confirmed value matches the display.
 import { useRef } from "react";
 import { clamp } from "./format";
 import { useGestureBracket } from "./gesture";
@@ -45,9 +45,9 @@ export function Knob({ label, value, min, max, onChange, onGestureBegin, onGestu
   const frac = (value - min) / span;
   const angle = SWEEP_START + frac * (SWEEP_END - SWEEP_START);
 
-  // Only a value the core doesn't already hold is an edit. A drag or a
-  // key that runs into a rail otherwise writes the value on screen.
-  // That lands a phantom undo step and lights the unexported marker.
+  // Only a value the core doesn't already hold is an edit: a drag or a
+  // key that runs into a rail otherwise lands a phantom undo step and
+  // lights the unexported marker.
   const emit = (next: number) => {
     if (next !== value) onChange(next);
   };
@@ -62,8 +62,8 @@ export function Knob({ label, value, min, max, onChange, onGestureBegin, onGestu
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={value}
-        // The drag is vertical, so the default horizontal reading a
-        // slider gets would describe a gesture this control hasn't got.
+        // The drag is vertical, so a slider's default horizontal
+        // reading would describe a gesture this control hasn't got.
         aria-orientation="vertical"
         tabIndex={0}
         style={{ cursor: "ns-resize", touchAction: "none" }}
@@ -89,12 +89,8 @@ export function Knob({ label, value, min, max, onChange, onGestureBegin, onGestu
           start.current = null;
           gesture.commit();
         }}
-        // The keyboard is a first-class path (Q5), and auto-repeat
-        // fires about thirty keydowns a second. Each one used to land
-        // its own history entry, which against the 100 entry cap wipes
-        // a session. The run is bracketed rather than guarded on
-        // e.repeat. R24 asks for one undo step, and a repeat guard
-        // would buy that by making a held key stop working.
+        // The keyboard is a first-class path (Q5), so a key auto-repeat
+        // run is bracketed like a drag (R24). See useGestureBracket.
         onKeyDown={(e) => {
           const step = arrowStep(e.key);
           if (step === null) return;

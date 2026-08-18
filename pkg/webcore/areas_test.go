@@ -101,11 +101,10 @@ func dumpGeometryOf(t *testing.T, fzf []byte) dumpGeometry {
 // samples it had.
 //
 // Where the dump arrived with the summed bstep values equal to the
-// walked count, that equality has to survive too. In that state the
-// sum is what stops the walk, so raising it past the last slot walks
-// the reader into the audio. Real hardware dumps arrive with the sum
-// far above the count (areas share voices through vp[], so bstep
-// over-counts), and there the walk stops on the first byte pattern
+// walked count, that equality has to survive too: in that state the sum
+// is what stops the walk, so raising it past the last slot walks the
+// reader into the audio. Real hardware dumps arrive with the sum far
+// above the count, and there the walk stops on the first byte pattern
 // that is not a voice slot instead.
 func assertVoiceAreaInvariant(t *testing.T, before, after dumpGeometry, survivors []string) {
 	t.Helper()
@@ -135,13 +134,12 @@ func assertVoiceAreaInvariant(t *testing.T, before, after dumpGeometry, survivor
 }
 
 // nVoiceSession assembles an instrument of n voices, one area each,
-// and returns the voice names in slot order. Two things about the
-// shape matter. A voice sector holds four slots, so the damage a wrong
-// voice count does depends on whether the count crosses a multiple of
-// four. And each voice opens on silence, the way a recorded sample
-// does: zero bytes read as an empty voice slot, so a count that runs
-// past the last slot walks straight into the audio and drags the audio
-// start a sector with it.
+// and returns the voice names in slot order. A voice sector holds four
+// slots, so the damage a wrong voice count does depends on whether the
+// count crosses a multiple of four. Each voice opens on silence, the
+// way a recorded sample does: zero bytes read as an empty voice slot,
+// so a count that runs past the last slot walks straight into the audio
+// and drags the audio start a sector with it.
 func nVoiceSession(t *testing.T, n int) (*Session, []string) {
 	t.Helper()
 	fzf, names := nVoiceDump(t, n)
@@ -203,9 +201,9 @@ func TestAddAreaKeepsTheAudioWhereItIs(t *testing.T) {
 	}
 }
 
-// Deleting an area must not move the audio either. The reviewer's
-// reproduction deleted the highest voice's area on a five voice
-// instrument and every survivor then unpacked different audio.
+// Deleting an area must not move the audio either. Deleting the highest
+// voice's area on a five voice instrument otherwise leaves every
+// survivor unpacking different audio.
 func TestDeleteAreaKeepsTheAudioWhereItIs(t *testing.T) {
 	for _, n := range []int{4, 5, 8} {
 		t.Run(fmt.Sprintf("%d voices", n), func(t *testing.T) {
@@ -348,11 +346,10 @@ func TestAreaOpsOnAHardwareDumpLeaveTheAudioAlone(t *testing.T) {
 	assertVoiceAreaInvariant(t, before, readDumpGeometry(t, s), names)
 
 	// The two operations that take a voice slot outright rather than
-	// reserving an empty one have to work here too. Both grow the voice
-	// area, which on this shape means the walk has to still end where
-	// the operation put the audio.
-	// The clone carries the source's name, so the survivors are checked
-	// by sample range rather than by name here.
+	// reserving an empty one have to work here too: both grow the voice
+	// area, so the walk still has to end where the operation put the
+	// audio. The clone carries the source's name, so the survivors are
+	// checked by sample range rather than by name.
 	if _, cerr := s.DuplicateArea(0, 0); cerr != nil {
 		t.Fatalf("DuplicateArea: %v", cerr)
 	}
@@ -420,7 +417,6 @@ func TestSetAreaFieldRoundTripsAndClamps(t *testing.T) {
 		t.Fatalf("keyLow = %d, want 40", got)
 	}
 
-	// Out-of-range clamps to the field's range.
 	if _, cerr := s.SetAreaField(0, 0, "velHigh", 900); cerr != nil {
 		t.Fatalf("SetAreaField: %v", cerr)
 	}
@@ -536,10 +532,6 @@ func TestMapVoiceLandsPlayableDefaults(t *testing.T) {
 	if mapped.KeyHigh != 127 || mapped.VelLow != 1 || mapped.VelHigh != 127 {
 		t.Fatalf("mapped area defaults = %+v", mapped)
 	}
-	// The two fields the manual QA round called the only defect that
-	// wrote a wrong disk image, fixed then for the join path and not
-	// here. A zero gchn routes the area to no generator, so the sampler
-	// plays it silently; a zero root pitches every note from C-1.
 	if mapped.Output == 0 {
 		t.Errorf("mapped area routes to no output: %+v", mapped)
 	}
@@ -680,7 +672,6 @@ func TestDuplicateAreaRefusesWhenVoicesAreFull(t *testing.T) {
 	if !bytes.Equal(mustExport(t, s), before) {
 		t.Error("the refused duplicate must not touch the image")
 	}
-	// The instrument still parses with its own voices intact.
 	if got := len(instrument(t, s).Voices); got != voices {
 		t.Errorf("voices = %d, want %d", got, voices)
 	}

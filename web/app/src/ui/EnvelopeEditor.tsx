@@ -1,8 +1,8 @@
-// The mockup's envelope editor over the core's envelope shape (R16):
-// a draggable stage graph and a numeric grid, always in sync, with
-// sustain and end designations visible and editable on both. Rates
-// and stops speak the hardware display scale (0 to 99); a higher rate
-// is a faster stage, so the graph spaces stages by (100 - rate).
+// The envelope editor over the core's envelope shape (R16): a draggable
+// stage graph and a numeric grid, always in sync, with sustain and end
+// designations visible and editable on both. Rates and stops speak the
+// hardware display scale (0 to 99); a higher rate is a faster stage, so
+// the graph spaces stages by (100 - rate).
 import { useRef } from "react";
 import type { EnvelopeSnapshot } from "../boundary/contract";
 import { NumberCell } from "./NumberCell";
@@ -53,9 +53,8 @@ export function EnvelopeEditor({
   });
   const toY = (level: number) => H - PAD - (level / MAX) * (H - 2 * PAD);
 
-  // Only a stage the core doesn't already hold is an edit. A drag that
-  // runs into a rail otherwise writes the shape on screen. That lands a
-  // phantom undo step and lights the unexported marker.
+  // Only a stage the core doesn't already hold is an edit: a drag into
+  // a rail otherwise lands a phantom undo step and lights the marker.
   const setStage = (i: number, rate: number, stop: number) => {
     const nextRate = Math.round(clamp(rate, 0, MAX));
     const nextStop = Math.round(clamp(stop, 0, MAX));

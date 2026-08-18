@@ -1,6 +1,6 @@
-// The guards the ship review found missing: the tab close warning
-// (R3), the undo hotkey leaving text fields alone, and a dropped
-// folder behaving like the folder picker (R6).
+// The document guards: the tab close warning (R3), the undo hotkey
+// leaving text fields alone, and a dropped folder behaving like the
+// folder picker (R6).
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { createFakeCore } from "../src/core/fake";
@@ -110,8 +110,8 @@ describe("a dropped folder walks like the picker (R6)", () => {
 
   // The dropped folder's own name is not in the path, because the
   // folder picker's webkitRelativePath has it stripped. Leaving it in
-  // put every WAV one level below the root the conversion pipeline
-  // reads, and the import reported finding no WAV files at all.
+  // puts every WAV a level below the root the pipeline reads, and the
+  // import finds no WAV files at all.
   it("walks a nested folder into the paths the picker would give", async () => {
     const tree = dirEntry("MyKit", [
       fileEntry("kit.sfz"),
@@ -173,9 +173,8 @@ describe("a dropped folder walks like the picker (R6)", () => {
   });
 });
 
-// A real drop event through the app, which is what the earlier unit
-// tests could not see: they exercised the walk and never the wiring, so
-// a path shape the conversion pipeline rejects still looked correct.
+// A real drop event through the app: the unit tests above exercise the
+// walk and not the wiring, where a bad path shape still looks correct.
 describe("a dropped WAV folder reaches the core the way the picker does", () => {
   it("hands the core the folder's files at its root", async () => {
     const core = createFakeCore();
@@ -230,9 +229,8 @@ describe("a dropped WAV folder reaches the core the way the picker does", () => 
   });
 });
 
-// A range slider takes no typing, so it owns no undo stack of its own.
-// Treating every input alike left Cmd+Z dead after touching the
-// waveform's zoom.
+// A range slider takes no typing, so it owns no undo stack. Treating
+// every input alike leaves Cmd+Z dead after the waveform's zoom.
 describe("the undo guard covers typing, not every input", () => {
   it("still undoes from a range slider", async () => {
     const core = createFakeCore();

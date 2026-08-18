@@ -1,8 +1,8 @@
-// E5's other half: a core that can no longer answer. Every failing call
-// reports `${code}: ${message}` in the status bar, which for a fatal
-// envelope reads as a raw machine code with no explanation and no way
-// on. A crash gets the panel, the plain sentence, and a reload instead.
-// An ordinary refusal must keep the status bar line it has today.
+// E5's other half: a core that can no longer answer. A fatal envelope
+// in the status bar would read as a raw machine code with no
+// explanation and no way on, so a crash gets the panel, the plain
+// sentence, and a reload instead. An ordinary refusal keeps its status
+// bar line.
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Core, Snapshot } from "../src/boundary/contract";

@@ -61,11 +61,9 @@ func ParseImage(img *disk.Image) (*Listing, error) {
 	}
 
 	for i, e := range entries {
-		// `disk ls` is the diagnostic tool a user reaches for when a disk
-		// looks broken: one bad entry must not hide all good entries. If
-		// the DIS sector pointer is out of range or its contents fail to
-		// decode, emit a placeholder row with TypeName="(corrupt)" and
-		// continue with the next entry.
+		// An out-of-range DIS pointer, or one whose contents fail to
+		// decode, yields a CorruptTypeName placeholder row rather than a
+		// failed listing. See CorruptTypeName for why.
 		if int(e.DisSector) < disk.ReservedSectors || int(e.DisSector) >= disk.SectorCount {
 			log.Warn().
 				Str("name", e.NameString()).

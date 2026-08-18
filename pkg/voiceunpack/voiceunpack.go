@@ -1,19 +1,16 @@
 // Package voiceunpack implements the fizzle voice unpack command. It extracts
 // individual FZV voice files from an FZF full data dump.
 //
-// Hardware abstraction: the on-device DIR / COPY workflow.
+// It stands in for the on-device DIR / COPY workflow: on the sampler,
+// recovering voices from a full dump means loading the dump, then picking
+// each voice in the DIR menu and COPYing it back out, once per voice.
+// Unpack parses the bank sector (or sectors, for multi-bank dumps), decodes
+// each voice header in the voice area, slices its audio block out of the
+// audio area, and writes one .fzv per voice with the audio offsets rewritten
+// as if the voice had always been alone.
 //
-// On the sampler, recovering individual voices from a full dump means loading
-// the dump, navigating the DIR menu, selecting each voice by name, and using
-// the COPY function to write it back out as a separate file, once per voice.
-// voiceunpack.Unpack does the same thing in one operation: it parses the
-// bank sector (or sectors, for multi-bank dumps), decodes each voice header
-// in the voice area, slices its audio block out of the audio area, and writes
-// one .fzv per voice with the audio offsets rewritten as if the voice had
-// always been alone.
-//
-// Multi-disk dumps are handled by UnpackMultiDisk, which stitches disk 2's
-// audio continuation onto disk 1 before slicing.
+// UnpackMultiDisk handles multi-disk dumps, stitching disk 2's audio
+// continuation onto disk 1 before slicing.
 package voiceunpack
 
 import (
@@ -58,11 +55,10 @@ func Unpack(fzfPath, outputDir string) error {
 // the caller which slot each emitted FZV belongs to so per-voice bank
 // lookups stay aligned.
 //
-// Returning slot indices alongside the bytes is a load-bearing change: the
-// previous signature dropped silent placeholder slots and left callers to
-// index bank arrays by the *compacted* position, which silently mismapped
-// names, key ranges, and outputs when a dump started with NoSound slots
-// (see CASIO139.FZF / sfzexport's F6).
+// The slot indices are load-bearing: indexing bank arrays by the compacted
+// position instead silently mismaps names, key ranges, and outputs whenever
+// a dump opens with NoSound slots, as CASIO139.FZF does. sfzexport
+// tracks the export side of the same defect as F6.
 func UnpackData(fzfPath string) ([][]byte, []int, error) {
 	data, hdr, err := fzutil.ReadFZF(fzfPath)
 	if err != nil {
@@ -72,15 +68,15 @@ func UnpackData(fzfPath string) ([][]byte, []int, error) {
 }
 
 // UnpackBank reads the FZF full dump at fzfPath and writes only the voices
-// referenced by the bank at bankIdx's `vp[]` array (0-based). Multi-bank
-// dumps store one bank sector per bank, and each bank's vp[] maps its
-// key-split positions to voice-slot indices; those mappings can repeat
-// (one voice covering several splits) and the slot ranges across banks
-// overlap freely, so the legal voices for bankIdx are vp[0..bstep-1], not
-// a sequential slice of the unpacked array.
+// the bank at bankIdx references through its `vp[]` array (0-based).
+// Multi-bank dumps store one bank sector per bank, and each vp[] maps that
+// bank's key-split positions to voice-slot indices. Those mappings can repeat
+// (one voice covering several splits) and slot ranges can overlap across
+// banks, so the legal voices for bankIdx are vp[0..bstep-1], not a sequential
+// slice of the unpacked array.
 //
-// Duplicates in vp[] surface as a single emitted voice; the on-hardware
-// key-split sharing is informational only at the file-extraction level.
+// Duplicates in vp[] emit a single voice; key-split sharing lives in the
+// FZF, not at the file-extraction level.
 func UnpackBank(fzfPath, outputDir string, bankIdx int) error {
 	data, hdr, err := fzutil.ReadFZF(fzfPath)
 	if err != nil {
@@ -103,7 +99,7 @@ func UnpackBank(fzfPath, outputDir string, bankIdx int) error {
 		return err
 	}
 
-	// Build slot -> emitted voice index map so we can pick by vp[].
+	// Map each slot to its emitted voice index so vp[] can pick from it.
 	slotToVoice := make(map[int]int, len(slotIndices))
 	for i, s := range slotIndices {
 		slotToVoice[s] = i
@@ -237,17 +233,6 @@ func unpack(data []byte, hdr *fzutil.FZFHeader) ([][]byte, []int, error) {
 	voiceArea := data[voiceAreaStart:voiceAreaEnd]
 	audioArea := data[voiceAreaEnd:]
 
-	// Compute per-voice audio sizes by finding each voice's sample range.
-	// The audio area is the concatenation of all voice audio blocks. We
-	// determine each voice's block by looking at the waved field and the
-	// cumulative offset of preceding voices.
-	//
-	// Because the pointer fields in the packed voice headers are relative to
-	// the combined audio area we need to derive block boundaries from them.
-	// The simplest approach: for each voice, waved gives the end sample
-	// address relative to the combined area. The start of voice i's audio is
-	// the end of voice i-1's audio block (aligned to a sector boundary).
-
 	type voiceInfo struct {
 		hdr        []byte // 192-byte packed header
 		audioStart int    // byte offset into audioArea
@@ -265,14 +250,11 @@ func unpack(data []byte, hdr *fzutil.FZFHeader) ([][]byte, []int, error) {
 		infos[i].hdr = voiceHdr
 	}
 
-	// Derive per-voice audio block boundaries using waveStart and waveEnd
-	// directly from each voice header. waveStart is the absolute sample
-	// address of this voice's audio in the combined area, exactly as written
-	// by voicebuild. waveEnd is the absolute sample end.
-	//
-	// We cannot reconstruct block boundaries from waveEnd deltas because
-	// voicebuild pads blocks to sector boundaries but records unpadded
-	// waveEnd values, so the deltas don't equal the padded block sizes.
+	// The audio area is the concatenation of the per-voice blocks. Derive each
+	// voice's boundaries from its own waveStart and waveEnd, the absolute
+	// sample addresses in the combined area exactly as voicebuild wrote them.
+	// waveEnd deltas don't work: voicebuild pads blocks to sector boundaries
+	// but records unpadded waveEnd values, so a delta isn't the block size.
 	for i := range infos {
 		waveStart := int(binary.LittleEndian.Uint32(infos[i].hdr[disk.VoiceWaveStartOffset:disk.VoiceWaveEndOffset]))
 		waveEnd := int(binary.LittleEndian.Uint32(infos[i].hdr[disk.VoiceWaveEndOffset:disk.VoiceGenStartOffset]))
@@ -281,13 +263,12 @@ func unpack(data []byte, hdr *fzutil.FZFHeader) ([][]byte, []int, error) {
 			voiceSamples = 0
 		}
 		byteStart := waveStart * disk.BytesPerSample
-		// Zero-sample voices (waveEnd <= waveStart, e.g. NoSound placeholders
-		// or voices whose audio was wiped) own no audio bytes. Forcing a
-		// non-zero byteSize here would slice into the *next* voice's audio
-		// block, then re-packing would write that foreign audio back into
-		// the silent slot. Produce a header-only FZV in that case so the
-		// round-trip preserves silence; voicebuild.Build skips the audio
-		// copy when len(v) == SectorSize.
+		// Zero-sample voices (waveEnd <= waveStart: NoSound placeholders, or
+		// voices whose audio was wiped) own no audio bytes. Forcing a
+		// non-zero byteSize slices into the next voice's block, and
+		// re-packing then writes that foreign audio into the silent slot.
+		// A header-only FZV preserves silence across the round trip;
+		// voicebuild.Build skips the audio copy when len(v) == SectorSize.
 		byteSize := disk.PadToSector(voiceSamples * disk.BytesPerSample)
 		byteEnd := byteStart + byteSize
 		if byteEnd > len(audioArea) {
@@ -301,8 +282,8 @@ func unpack(data []byte, hdr *fzutil.FZFHeader) ([][]byte, []int, error) {
 	slotIndices := make([]int, 0, nvoice)
 	for slotIdx, info := range infos {
 		// Skip slots that aren't real voices: PlaybackModeNoSound placeholders
-		// (the spec allows them; see CASIO139.FZF) or garbage byte patterns
-		// that survived earlier-stage validation by accident.
+		// (the spec allows them, and CASIO139.FZF carries them) or garbage
+		// byte patterns that survived earlier validation by accident.
 		if !disk.IsPlausibleVoiceSlot(info.hdr) {
 			continue
 		}
@@ -315,19 +296,16 @@ func unpack(data []byte, hdr *fzutil.FZFHeader) ([][]byte, []int, error) {
 		}
 		audioBlock := audioArea[info.audioStart:info.audioEnd]
 
-		// Build a full 1024-byte voice header sector from the 192-byte packed
-		// header, then adjust sample pointer fields to be relative to this
-		// voice's own audio block rather than the combined area.
+		// Grow the 192-byte packed header into a full 1024-byte sector, then
+		// rebase its sample pointers onto this voice's own audio block.
 		hdr := make([]byte, disk.SectorSize)
 		copy(hdr, info.hdr)
-		// The name field requires 2 null terminator bytes after the 12-byte display name.
+		// The name field needs 2 null terminator bytes after the 12-byte name.
 		hdr[disk.VoiceNameOffset+disk.LabelSize] = 0
 		hdr[disk.VoiceNameOffset+disk.LabelSize+1] = 0
-		// Use the waveStart pointer from the header as the sample offset.
-		// it is the cumulative sample address at the start of this voice's
-		// audio in the combined area, which is what all other pointers are
-		// relative to. audioStart/2 diverges from waveStart because audio
-		// blocks are padded to sector boundaries but waveStart is not.
+		// waveStart is the cumulative sample address every other pointer is
+		// relative to, so it's the offset to subtract. audioStart/2 diverges
+		// from it: blocks are padded to sector boundaries, waveStart is not.
 		waveStart := int(binary.LittleEndian.Uint32(info.hdr[disk.VoiceWaveStartOffset:disk.VoiceWaveEndOffset]))
 		subtractSampleOffsets(hdr, waveStart)
 
@@ -347,11 +325,10 @@ func unpack(data []byte, hdr *fzutil.FZFHeader) ([][]byte, []int, error) {
 //
 // Loop-pointer fields reserve flag bits the address adjustment must not
 // disturb (spec §2-1: loopst[i] upper 8 bits = loop-fine, looped[i] MSB =
-// skip flag). For those fields the address bits are masked off the raw
-// 32-bit value before comparison and subtraction, and the preserved flag
-// bits are OR'd back in before writing. Comparing the raw 32-bit value
-// would misbehave for looped[i] with the skip flag set, since the MSB
-// would make the value larger than any plausible offset.
+// skip flag). For those fields, mask the address bits out of the raw 32-bit
+// value before comparing and subtracting, then OR the flag bits back in.
+// Comparing the raw value misbehaves for a looped[i] with the skip flag
+// set: the MSB makes it larger than any plausible offset.
 func subtractSampleOffsets(voice []byte, offsetSamples int) {
 	off := bitconv.NarrowU32(offsetSamples)
 	disk.ForEachSamplePointer(voice, func(field []byte, kind disk.SamplePointerKind) {
@@ -379,26 +356,23 @@ func subtractSampleOffsets(voice []byte, offsetSamples int) {
 	})
 }
 
-// sanitizeFilename replaces path separators in a voice name with underscores
-// so the result can be safely used as a single filename component. Real-world
-// voice names from FZF dumps sometimes contain '/' (e.g. "BRASS/BASS 2"),
-// which filepath.Join would otherwise interpret as a directory separator,
-// silently writing voices into subdirectories. The voice name embedded in
-// the FZV header bytes is left untouched; only the on-disk filename derived
-// from it is sanitized. Dedup collision counting is done on the sanitized
-// form so that two voices named "A/B" and "A_B" still produce distinct
-// filenames.
+// sanitizeFilename makes a voice name safe as one filename component. Real
+// FZF dumps carry names with '/' ("BRASS/BASS 2"), which filepath.Join reads
+// as a directory separator, silently writing voices into subdirectories.
+// Only the on-disk filename is sanitized; the name in the FZV header bytes
+// is untouched. Dedup counting runs on the sanitized form, so "A/B" and
+// "A_B" still produce distinct filenames.
 //
-// Names consisting entirely of dots (e.g. ".", ".." or "....") are rejected
-// and fall back to disk.DefaultVoiceName. The `.fzv` suffix appended by the
-// caller already prevents a bare `..` from escaping outputDir (it becomes
-// `...fzv`), but rejecting dot-only names removes the accidental defense.
+// Dot-only names (".", "..", "....") fall back to disk.DefaultVoiceName. The
+// `.fzv` suffix the caller appends already stops a bare `..` from escaping
+// outputDir (it becomes `...fzv`), so rejecting them makes the defence
+// deliberate rather than accidental.
 //
-// Unlike sfzexport.sanitizeFilename, which uses a strict allowlist because
-// it builds SFZ "sample=" references that downstream parsers split on
-// whitespace, this sanitizer preserves the voice name as faithfully as
-// possible. Path separators, Windows-illegal characters (* ? < > | " :),
-// and dot-only names are normalized; everything else passes through.
+// Unlike sfzexport.sanitizeFilename, which needs a strict allowlist because
+// its output lands in SFZ "sample=" references that parsers split on
+// whitespace, this one stays faithful to the voice name: path separators,
+// Windows-illegal characters (* ? < > | " :), and dot-only names are
+// normalized, and everything else passes through.
 func sanitizeFilename(name string) string {
 	if isDotOnly(name) {
 		return disk.DefaultVoiceName

@@ -1,6 +1,6 @@
-// Slice 9 gates: the unsupported browser notice, dismissible errors
-// where the user acted (E1), keyboard operability of the on-screen
-// keyboard (Q5), and the rendering error boundary (E5).
+// The shell's polish gates: the unsupported browser notice, dismissible
+// errors where the user acted (E1), keyboard operability of the
+// on-screen keyboard (Q5), and the rendering error boundary (E5).
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Core, CoreResult, Snapshot } from "../src/boundary/contract";
@@ -89,11 +89,10 @@ describe("rendering error boundary (E5)", () => {
 
   /**
    * A core whose revision is an object rather than a number. The status
-   * bar prints the revision, so the shell throws while it renders,
-   * outside the sidebar and the tab body the boundary used to wrap. It
-   * stands in for any rendering failure in the topbar, the status bar,
-   * a dialog, or the start screen: all four are the shell's own output,
-   * so only a boundary above the shell contains them.
+   * bar prints the revision, so the shell throws while rendering,
+   * outside the sidebar and the tab body. It stands in for any failure
+   * in the topbar, the bar, a dialog, or the start screen: all are the
+   * shell's own output, so only a boundary above it contains them.
    */
   function crashingStatusBarCore(): { core: Core; exports: () => number } {
     const inner = createFakeCore();

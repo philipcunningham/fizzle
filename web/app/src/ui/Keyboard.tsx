@@ -1,10 +1,9 @@
-// The on-screen keyboard (R20): plays at pitch, velocity from click
-// height, sustaining while held. Carried from the mockup's validated
-// design: SVG keys, range highlight, root dot on white and black keys.
-// Every key is a focusable button, so the keyboard plays from the
-// keyboard (Q5): Enter or Space holds a note at a fixed velocity.
-// Every colour comes from a token, because the piano is the one light
-// surface in a dark app and its marks need values of their own.
+// The on-screen keyboard (R20): SVG keys with a range highlight and a
+// root dot, playing at pitch with velocity from click height and
+// sustaining while held. Every key is a focusable button, so the
+// keyboard plays from the keyboard (Q5): Enter or Space holds a note at
+// a fixed velocity. Every colour comes from a token, because the piano
+// is the one light surface in a dark app and its marks need their own.
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useState } from "react";
 import { noteName } from "./notes";
@@ -40,10 +39,9 @@ export function Keyboard({
   onNoteOn,
   onNoteOff,
 }: KeyboardProps) {
-  // Which key holds focus. The ring is drawn rather than outlined: an
-  // outline on a full-height rect is clipped by the SVG to two
-  // hairlines in the gaps between keys, and the palette's white ring
-  // is 1.23 against a white key (Q5).
+  // Which key holds focus. The ring is drawn rather than outlined: the
+  // SVG clips an outline on a full-height rect to two hairlines in the
+  // gaps, and the palette's white ring is 1.23 on a white key (Q5).
   const [focusNote, setFocusNote] = useState<number | null>(null);
 
   const whites: { note: number; x: number }[] = [];
@@ -182,8 +180,7 @@ export function Keyboard({
       {focusBox && (
         // Two strokes, drawn last so they sit over the black keys and
         // inside the key's own bounds. No single colour clears 3:1 on
-        // both a plain white key and a highlighted black one, so the
-        // pair does it between them.
+        // both a plain white key and a highlighted black one.
         <g data-testid="key-focus-ring" style={{ pointerEvents: "none" }}>
           <rect
             x={focusBox.x + 1}

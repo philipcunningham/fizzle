@@ -12,9 +12,6 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/wav"
 )
 
-// Document-level operations the mockup UI exposes: disk rename, file
-// delete, per-file and per-slot extraction, and the empty instrument.
-
 // Close discards the open document and its history: back to the
 // start state, nothing written (N3: durable output is the exported
 // file, and the UI confirms unexported changes first).
