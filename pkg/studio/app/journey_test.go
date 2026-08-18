@@ -39,7 +39,7 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/studio/loader"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 	"github.com/philipcunningham/fizzle/pkg/studio/spaces/layout"
 	"github.com/philipcunningham/fizzle/pkg/studio/spaces/workspace"
 	"github.com/philipcunningham/fizzle/pkg/studio/widgets/minimap"

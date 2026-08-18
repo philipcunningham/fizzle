@@ -6,7 +6,7 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
-	"github.com/philipcunningham/fizzle/pkg/studio/model"
+	"github.com/philipcunningham/fizzle/pkg/model"
 	"github.com/philipcunningham/fizzle/pkg/voiceedit"
 )
 

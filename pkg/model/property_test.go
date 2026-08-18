@@ -10,7 +10,7 @@ import (
 // TestModel_ApplyUndoIsIdentity is the headline invariant for the
 // patch/undo system: apply any batch, then Undo, and the bytes must
 // equal what they were before the apply. If this ever fails, undo
-// is silently lossy and every editor in studio inherits the bug.
+// is silently lossy and every editor built on it inherits the bug.
 func TestModel_ApplyUndoIsIdentity(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		bufLen := rapid.IntRange(16, 2048).Draw(rt, "bufLen")

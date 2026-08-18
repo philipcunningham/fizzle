@@ -1,4 +1,4 @@
-// Package model is the studio in-memory representation of an
+// Package model is the in-memory representation of an
 // in-focus container (.img or .fzf). It owns the container's byte
 // representation, the undo and redo stacks, the dirty flag, and the
 // current file path. Edits commit through Apply or ApplyBatch; Undo
