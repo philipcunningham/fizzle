@@ -185,7 +185,7 @@ describe("keyboard range visibility", () => {
 describe("labels get room from their boxes", () => {
   it("the drop zone separates its prompt from the browse button", () => {
     expect(
-      parseInt(styleValue(mockup, ".start .dropzone .btn", "margin-top"), 10),
+      parseInt(styleValue(mockup, ".dropzone .btn", "margin-top"), 10),
     ).toBeGreaterThanOrEqual(12);
   });
 

@@ -149,17 +149,17 @@ table.term .btn.danger:focus-visible {
   display: flex;
   gap: 16px;
 }
-.start .dropzone {
+.dropzone {
   border: 1px dashed var(--fz-fg-dim);
   color: var(--fz-fg-dim);
   padding: 28px 48px;
   text-align: center;
   border-radius: var(--fz-radius);
 }
-.start .dropzone .btn {
+.dropzone .btn {
   margin-top: 14px;
 }
-.start .dropzone.over {
+.dropzone.over {
   border-color: var(--fz-accent-bright);
   color: var(--fz-accent-bright);
 }
