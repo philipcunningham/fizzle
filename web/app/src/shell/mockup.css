@@ -156,6 +156,9 @@ table.term .btn.danger:focus-visible {
   text-align: center;
   border-radius: var(--fz-radius);
 }
+.start .dropzone .btn {
+  margin-top: 14px;
+}
 .start .dropzone.over {
   border-color: var(--fz-accent-bright);
   color: var(--fz-accent-bright);
@@ -385,6 +388,9 @@ table.term.envgrid input {
 table.term.matrix td {
   border: 1px solid var(--fz-border-faint);
   padding: 0;
+}
+table.term.matrix td.matrixrow {
+  padding: 4px 10px;
 }
 table.term tbody tr:hover td {
   background: var(--fz-bg-panel);

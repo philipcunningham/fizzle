@@ -38,7 +38,7 @@ export function StartScreen({ onNewDisk, onBrowse, onDropFiles }: StartScreenPro
         Drop a disk image, WAVs, an SFZ folder, or FZ files here
         <br />
         <button className="btn small" onClick={onBrowse}>
-          Browse…
+          Browse
         </button>
       </div>
       <p className="hint">Nothing leaves this machine. Export writes the disk image.</p>

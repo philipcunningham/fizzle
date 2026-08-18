@@ -106,7 +106,7 @@ describe("the generation window commits through the shell", () => {
     };
     render(<App core={watched} />);
     const image = new File([new Uint8Array(IMAGE_SIZE)], "TECHNO.img");
-    fireEvent.click(await screen.findByRole("button", { name: "Browse…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
     fireEvent.change(screen.getByLabelText("fz files"), { target: { files: [image] } });
     await screen.findByText("[OPENED]");
 
