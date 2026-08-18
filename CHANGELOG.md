@@ -1,12 +1,18 @@
 # Changelog
 
-## Unreleased (last updated 2026-08-18)
+## Unreleased
+
+## v0.5.0 (2026-08-18)
+
+- The browser editor is live at [philipcunningham.github.io/fizzle](https://philipcunningham.github.io/fizzle/), with nothing to install. It runs the same Go core compiled to WebAssembly, so it writes the bytes the CLI writes. Create a disk or open an `.img`, import WAVs or an SFZ instrument, edit voices, banks, and areas, preview through Web Audio, then export the image for a floppy emulator. The page makes no network requests once loaded: samples and disk images never leave the machine. Desktop Chrome is the supported browser.
 
 - Remove `fizzle studio`, the interactive terminal UI: the subcommand, its packages, and its PTY feature specs are gone. The CLI and the browser editor are the two remaining front ends. The pure container and model packages the browser editor shares live on at `pkg/container` and `pkg/model`.
 
 - Remove the CycloneDX SBOM: `fizzle licenses --json`, `make sbom`, the `fizzle.cdx.json` release asset, and the `cyclonedx-gomod` tool are gone. `fizzle licenses` still prints the project license and the full third-party attribution the binary embeds.
 
 - `fizzle sfz convert` and `fizzle fzv import` refuse stereo WAV input, naming the file and asking for a mono source. Both used to accept it and write a voice of double length at half the pitch, with the two channels alternating sample by sample. Convert the file to mono first. The browser editor asks which side to keep instead: left, right, or the mix of the two.
+
+- Imported voices root at C4 (MIDI 60) instead of C5 (MIDI 72), so a WAV plays at its recorded pitch on C4 and matches the SFZ `pitch_keycenter` default. This changes the cent byte `fizzle fzv import` and `fizzle fzf build` write. Voices on existing disks keep the root they were built with; set one explicitly with `fzv edit --root`.
 
 ## v0.4.0 (2026-06-24)
 
