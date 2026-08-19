@@ -74,6 +74,15 @@ export const FAKE_SCHEMA: SchemaField[] = [
     max: 32767,
   },
   { id: "rootKey", label: "Root", group: "Identity and mapping", kind: "note", min: 0, max: 127 },
+  { id: "keyLow", label: "Key low", group: "Identity and mapping", kind: "note", min: 0, max: 127 },
+  {
+    id: "keyHigh",
+    label: "Key high",
+    group: "Identity and mapping",
+    kind: "note",
+    min: 0,
+    max: 127,
+  },
   { id: "cutoff", label: "Cutoff", group: "Filter", kind: "knob", min: 0, max: 127 },
   { id: "wobble", label: "Wobble", group: "Filter", kind: "hyper-dial", min: 0, max: 99 },
 ];
@@ -84,6 +93,8 @@ function defaultParams(): Record<string, number | string> {
     sampleRate: "18000",
     tune: 0,
     rootKey: 60,
+    keyLow: 36,
+    keyHigh: 96,
     cutoff: 127,
     wobble: 0,
   };

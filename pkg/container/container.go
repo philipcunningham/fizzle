@@ -7,9 +7,9 @@
 // Two mutation paradigms, split by whether the operation changes the
 // container's length:
 //   - Length-changing ops (CompactVoiceArea, CompactEmptyBanks, GrowBanks)
-//     rebuild and return the whole buffer; the caller Replaces it.
+//     rebuild and return the whole buffer, which replaces the caller's.
 //   - In-place ops (SwapAreaPatches, DeleteAreaPatches, DuplicateAreaPatches,
-//     and the *Patch helpers) return []model.Patch the caller ApplyBatches.
+//     and the *Patch helpers) return []model.Patch the caller applies.
 //
 // Operations with three or more same-typed parameters take a params struct
 // so a transposed argument is a named-field mismatch, not silent corruption.

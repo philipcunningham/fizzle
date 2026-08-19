@@ -97,3 +97,14 @@ describe("envelopes on a slot", () => {
     });
   });
 });
+
+// The voice list's Range column reads the voice's own key range from
+// the schema params. The fake used to omit them, so the column showed
+// its placeholder in every test and a regression there was invisible.
+describe("the voice list's key range", () => {
+  it("renders the range each voice carries", async () => {
+    await openInstrumentDisk();
+    const table = await screen.findByRole("table", { name: "instrument voices" });
+    expect(table.textContent).toContain("C2..C7");
+  });
+});
