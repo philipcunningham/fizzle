@@ -12,7 +12,7 @@ import (
 )
 
 // applyModelPatches applies container patches to raw dump
-// bytes, verifying each pre-image the way model.ApplyBatch does. A
+// bytes, verifying each pre-image before it writes. A
 // mismatch means the caller's read of the container went stale, which
 // must fail loudly rather than corrupt a bank sector.
 func applyModelPatches(data []byte, patches []model.Patch) error {

@@ -23,7 +23,7 @@ describe("fake core contract", () => {
     const core = createFakeCore();
     const r = await core.snapshot();
     expect(r.ok).toBe(true);
-    if (!r.ok) return;
+    if (!r.ok) throw new Error(r.error.message);
     expect(r.value.revision).toBe(0);
     expect(r.value.disk).toBeNull();
   });
@@ -32,7 +32,7 @@ describe("fake core contract", () => {
     const core = createFakeCore();
     const r = await core.newDisk("MY DISK");
     expect(r.ok).toBe(true);
-    if (!r.ok) return;
+    if (!r.ok) throw new Error(r.error.message);
     expect(r.value.disk?.label).toBe("MY DISK");
     expect(r.value.revision).toBe(1);
   });
@@ -57,7 +57,7 @@ describe("fake core contract", () => {
     expect(opened.ok).toBe(true);
     const out = await core.exportImage();
     expect(out.ok).toBe(true);
-    if (!out.ok) return;
+    if (!out.ok) throw new Error(out.error.message);
     expect(out.value.length).toBe(bytes.length);
     expect(firstDifference(out.value, bytes)).toBe(-1);
   });
@@ -118,7 +118,7 @@ describe("fake core schema editing", () => {
     const core = createFakeCore();
     const r = await core.schema();
     expect(r.ok).toBe(true);
-    if (!r.ok) return;
+    if (!r.ok) throw new Error(r.error.message);
     const kinds = new Set(r.value.map((f) => f.kind));
     for (const kind of ["knob", "stepper", "note", "select"]) {
       expect(kinds.has(kind)).toBe(true);
@@ -129,7 +129,7 @@ describe("fake core schema editing", () => {
     const core = await voiceCore();
     const r = await core.setSlotParamNumber(0, "cutoff", 900);
     expect(r.ok).toBe(true);
-    if (!r.ok) return;
+    if (!r.ok) throw new Error(r.error.message);
     expect(r.value.disk?.instrument?.voices[0]?.params?.["cutoff"]).toBe(127);
   });
 
@@ -146,18 +146,18 @@ describe("fake core schema editing", () => {
     await core.setSlotParamNumber(0, "cutoff", 90);
     const undone = await core.undo();
     expect(undone.ok).toBe(true);
-    if (!undone.ok) return;
+    if (!undone.ok) throw new Error(undone.error.message);
     expect(undone.value.disk?.instrument?.voices[0]?.params?.["cutoff"]).not.toBe(90);
     expect(undone.value.canRedo).toBe(true);
     const redone = await core.redo();
-    if (!redone.ok) return;
+    if (!redone.ok) throw new Error(redone.error.message);
     expect(redone.value.disk?.instrument?.voices[0]?.params?.["cutoff"]).toBe(90);
   });
 
   it("coalesces a gesture into one undo entry", async () => {
     const core = await voiceCore();
     const start = await core.snapshot();
-    if (!start.ok) return;
+    if (!start.ok) throw new Error(start.error.message);
     const before = start.value.disk?.instrument?.voices[0]?.params?.["cutoff"];
     await core.beginGesture();
     await core.setSlotParamNumber(0, "cutoff", 30);
@@ -165,7 +165,7 @@ describe("fake core schema editing", () => {
     await core.setSlotParamNumber(0, "cutoff", 90);
     await core.commitGesture();
     const undone = await core.undo();
-    if (!undone.ok) return;
+    if (!undone.ok) throw new Error(undone.error.message);
     expect(undone.value.disk?.instrument?.voices[0]?.params?.["cutoff"]).toBe(before);
   });
 });
@@ -175,7 +175,7 @@ describe("fake core placement matrix", () => {
     const core = createFakeCore();
     const r = await core.addVoice(new Uint8Array([1, 2, 3]));
     expect(r.ok).toBe(true);
-    if (!r.ok) return;
+    if (!r.ok) throw new Error(r.error.message);
     expect(r.value.disk?.label).toBe("FIZZLE");
     const inst = r.value.disk?.instrument;
     expect(inst?.voices).toHaveLength(1);
@@ -187,7 +187,7 @@ describe("fake core placement matrix", () => {
     const core = createFakeCore();
     await core.openImage(new Uint8Array(IMAGE_SIZE));
     const r = await core.addVoice(new Uint8Array([9]));
-    if (!r.ok) return;
+    if (!r.ok) throw new Error(r.error.message);
     const inst = r.value.disk?.instrument;
     expect(inst?.voices).toHaveLength(4);
     expect(inst?.voices[3]?.referenced).toBe(true);
@@ -197,11 +197,11 @@ describe("fake core placement matrix", () => {
     const core = createFakeCore();
     await core.openImage(new Uint8Array(IMAGE_SIZE));
     const small = await core.loadFzf(new Uint8Array(1024));
-    if (!small.ok) return;
+    if (!small.ok) throw new Error(small.error.message);
     expect(small.value.disk?.disks).toBe(1);
     expect(small.value.disk?.instrument?.voices[0]?.name).toBe("LOADED");
     const big = await core.loadFzf(new Uint8Array(1_400_000));
-    if (!big.ok) return;
+    if (!big.ok) throw new Error(big.error.message);
     expect(big.value.disk?.disks).toBe(2);
     const disk2 = await core.exportImageAt(1);
     expect(disk2.ok).toBe(true);
@@ -210,11 +210,11 @@ describe("fake core placement matrix", () => {
   it("addBank joins at a slot or becomes the instrument", async () => {
     const core = createFakeCore();
     const created = await core.addBank(new Uint8Array([1]), 0);
-    if (!created.ok) return;
+    if (!created.ok) throw new Error(created.error.message);
     expect(created.value.disk?.instrument?.banks[0]?.name).toBe("FZB BANK");
     await core.openImage(new Uint8Array(IMAGE_SIZE));
     const appended = await core.addBank(new Uint8Array([1]), 1);
-    if (!appended.ok) return;
+    if (!appended.ok) throw new Error(appended.error.message);
     expect(appended.value.disk?.instrument?.banks).toHaveLength(2);
     const skipped = await core.addBank(new Uint8Array([1]), 5);
     expect(skipped.ok).toBe(false);
@@ -224,7 +224,7 @@ describe("fake core placement matrix", () => {
     const core = createFakeCore();
     await core.openImage(new Uint8Array(IMAGE_SIZE));
     const r = await core.importWavToInstrument("Sub Bass.wav", new Uint8Array([1]), 18000, "mix");
-    if (!r.ok) return;
+    if (!r.ok) throw new Error(r.error.message);
     expect(r.value.disk?.instrument?.voices[3]?.name).toBe("SUB BASS");
   });
 });
@@ -244,10 +244,10 @@ describe("fake core split pairs", () => {
   it("a lone half names its missing twin", async () => {
     const core = createFakeCore();
     const first = await core.openImage(disk1());
-    if (!first.ok) return;
+    if (!first.ok) throw new Error(first.error.message);
     expect(first.value.disk?.missingDisk).toBe(2);
     const second = await core.openImage(disk2());
-    if (!second.ok) return;
+    if (!second.ok) throw new Error(second.error.message);
     expect(second.value.disk?.missingDisk).toBe(1);
   });
 
@@ -284,7 +284,7 @@ describe("fake core folder imports", () => {
     const core = createFakeCore();
     const r = await core.importSfz(sfzFiles(), "", 18000, false, false, "mix");
     expect(r.ok).toBe(true);
-    if (!r.ok) return;
+    if (!r.ok) throw new Error(r.error.message);
     expect(r.value.rate).toBe(18000);
     const inst = r.value.snapshot.disk?.instrument;
     expect(inst?.voices.map((v) => v.name)).toEqual(["KICK", "SNARE"]);
@@ -294,10 +294,10 @@ describe("fake core folder imports", () => {
   it("importSfz split yields a pair; fit steps the rate down", async () => {
     const core = createFakeCore();
     const split = await core.importSfz(sfzFiles(), "", 18000, false, true, "mix");
-    if (!split.ok) return;
+    if (!split.ok) throw new Error(split.error.message);
     expect(split.value.snapshot.disk?.disks).toBe(2);
     const fit = await core.importSfz(sfzFiles(), "", 18000, true, false, "mix");
-    if (!fit.ok) return;
+    if (!fit.ok) throw new Error(fit.error.message);
     expect(fit.value.rate).toBe(9000);
   });
 
@@ -338,7 +338,7 @@ describe("fake core folder imports", () => {
       false,
       "mix",
     );
-    if (!r.ok) return;
+    if (!r.ok) throw new Error(r.error.message);
     const areas = r.value.snapshot.disk?.instrument?.banks[0]?.areas;
     expect(areas?.map((a) => a.keyLow)).toEqual([36, 37]);
     expect(r.value.snapshot.disk?.instrument?.voices[0]?.name).toBe("01 KICK");

@@ -5,11 +5,25 @@ on:
     branches: [ "main" ]
     paths:
       - 'web/**'
+      # The browser runs the Go core compiled to WebAssembly, so a
+      # core change can break the front end checks and the smoke test
+      # even when no file under web/ moves.
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
       - '.github/workflows/web.yml'
   pull_request:
     branches: [ "main" ]
     paths:
       - 'web/**'
+      # The browser runs the Go core compiled to WebAssembly, so a
+      # core change can break the front end checks and the smoke test
+      # even when no file under web/ moves.
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
       - '.github/workflows/web.yml'
 
 jobs:

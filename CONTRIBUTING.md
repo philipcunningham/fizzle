@@ -22,6 +22,8 @@ If your issue includes a patch, please make sure that:
 - **Go 1.26+**: https://go.dev/dl/
 - **golangci-lint**: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest` (or see https://golangci-lint.run/welcome/install/)
 - **make**: included on macOS and Linux; on Windows, use `make` from Git for Windows or run the Go commands directly
+- **Node 22+ and npm**: https://nodejs.org. `make check` builds and checks the browser editor, so run `npm install` in `web/app` once before your first run
+- **vale**: `brew install vale`. `make check` lints the markdown prose
 
 ## Building
 
@@ -81,7 +83,8 @@ Linux, macOS, and Windows. No shell or Python required.
 
 ### Test layers
 
-fizzle uses three layers of automated tests:
+fizzle uses three layers of automated tests over the Go code, plus the
+front end's own suite:
 
 **Layer 1: Unit tests** (`pkg/*/_test.go`): individual package logic,
 edge cases, error paths, and boundary conditions. Run with `make test`.
@@ -96,6 +99,13 @@ the compiled binary end-to-end via `os/exec`, checking CLI output, exit
 codes, error messages, and flag handling. Gated behind the `integration`
 build tag. Run with `make integration-test`.
 
+**The front end** (`web/app/tests/`): vitest suites driving the shell
+against the hermetic fake core in `web/app/src/core/fake.ts`, plus a
+browser smoke test over the real WebAssembly core. `make check` runs
+the unit suites; see [web/app/README.md](web/app/README.md) for
+`npm run smoke` and the screenshot gate `npm run visual`, which CI
+skips because its baselines are per platform.
+
 ### When to write which test
 
 | Scenario | Test layer |
@@ -105,6 +115,7 @@ build tag. Run with `make integration-test`.
 | New CLI command, flag, or error message | Binary-executing test in `cli_test.go` |
 | New `--json` flag on a command | Both: package test for `RenderJSON`, CLI test for flag wiring |
 | Binary format parser robustness | Fuzz test in `pkg/<package>/fuzz_test.go` |
+| Browser editor behaviour | Front end test in `web/app/tests/`, against the fake core |
 
 ### JSON output testing
 

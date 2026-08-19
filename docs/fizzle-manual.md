@@ -33,7 +33,7 @@ For a copy-paste quickstart, see the [README](../README.md). The Casio spec at [
 
 ## Preface
 
-`fizzle` is a command-line tool. It prepares disk images, voice files, and full dumps. The sampler reads them from a floppy or a floppy emulator (such as a Gotek). It doesn't emulate the FZ-1; the hardware is still required.
+This manual documents fizzle's command-line tool. fizzle prepares disk images, voice files, and full dumps. The sampler reads them from a floppy or a floppy emulator (such as a Gotek). It doesn't emulate the FZ-1; the hardware is still required. The browser editor is the other front end over the same core; the README's Browser editor section covers it.
 
 This manual documents every flag and where on the sampler each parameter shows up. The README is the on-ramp.
 
