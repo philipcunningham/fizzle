@@ -187,16 +187,23 @@ function effective(env: EnvelopeSnapshot, scale?: Scaling): { rates: number[]; s
 }
 
 /**
- * The stages a held key runs, from silence to the sustain stage. The
- * last segment's level is where the note sits until it is released.
+ * The stages a held key runs. Note on caps the run at the lower of
+ * the sustain and end stages (F000:123B), so the last segment's level
+ * is where the note sits until it is released, and a sustain stage at
+ * or past the end stage never holds anything at all: the voice runs
+ * to its end stage, which note on forces to silence (F000:1351), and
+ * frees its own slot with the key still down. Sustain at or past end
+ * is how the format spells a one shot, and most factory voices are
+ * written that way.
  */
 export function attack(env: EnvelopeSnapshot, scale?: Scaling): Segment[] {
-  const sustain = clampStage(env.sustain);
+  const end = clampStage(env.end);
+  const last = Math.min(clampStage(env.sustain), end);
   const { rates, stops } = effective(env, scale);
   const out: Segment[] = [];
   let level = 0;
-  for (let stage = 0; stage <= sustain; stage++) {
-    const target = stops[stage] ?? 0;
+  for (let stage = 0; stage <= last; stage++) {
+    const target = stage === end ? 0 : (stops[stage] ?? 0);
     out.push({
       seconds: stageSecondsByte(level, target, rates[stage] ?? MIN_RATE),
       level: target / FULL_LEVEL,
@@ -207,11 +214,21 @@ export function attack(env: EnvelopeSnapshot, scale?: Scaling): Segment[] {
 }
 
 /**
- * The stages a released key runs. Ordinarily sustain plus one through
- * the end stage; a key that came up before the sustain stage was
- * reached jumps straight to the end stage and runs it alone
- * (F000:1512). The end stage always falls to silence, whatever the
- * file stores, because note on writes it that way (F000:1351).
+ * The stages a released key runs. Note off compares the stage counter
+ * with the sustain stage (F000:1525): a counter past it, which is the
+ * parked state a held note sits in, leaves the counter alone, so
+ * sustain plus one through the end stage run. A counter that has not
+ * passed it, which covers every stage still ramping including the
+ * sustain stage itself, is forced to the end stage, so that stage
+ * runs alone and the ones between are skipped. reachedSustain is the
+ * caller's answer to which happened.
+ *
+ * A voice whose sustain sits at or past its end stage never parks, so
+ * it has nothing left to run once its attack has finished.
+ *
+ * The end stage always falls to silence, whatever the file stores,
+ * because note on writes it that way (F000:1351). The stages before
+ * it keep their own stops, so a release can rise before it falls.
  *
  * fromLevel is where the note actually was when the key came up, since
  * that is where the first release stage starts from.
