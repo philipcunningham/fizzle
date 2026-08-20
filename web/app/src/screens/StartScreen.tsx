@@ -67,8 +67,9 @@ export function StartScreen({
             </option>
           ))}
         </select>{" "}
-        sampler. The FZ-1 shipped with 1 MB, the FZ-10M with 2 MB.
+        sampler. An FZ-1 has 1 MB unless the expansion card is fitted; the rack units have 2 MB.
       </p>
+      <p className="hint">Nothing leaves this machine. Export writes the disk image.</p>
     </div>
   );
 }

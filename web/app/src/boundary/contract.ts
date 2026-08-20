@@ -398,6 +398,10 @@ export interface ImportEstimate {
    * current disk count; a larger import may still land by splitting.
    */
   roomSeconds: number;
+  /** What the instrument would ask the sampler to hold after this. */
+  audioAfterBytes: number;
+  /** What the user says their sampler has (R27). */
+  memoryBytes: number;
   verdict: "fits" | "splits" | "wont-fit";
   reason: "sample-memory" | "disk-room" | "voice-limit" | "";
   /** At least one file carries a left and right to choose between. */

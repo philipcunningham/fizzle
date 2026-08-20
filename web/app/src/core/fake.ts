@@ -797,6 +797,8 @@ export function createFakeCore(): Core {
           bytes: 0,
           seconds: 0,
           roomSeconds: 0,
+          audioAfterBytes: 0,
+          memoryBytes,
           verdict: "fits",
           reason: "",
           anyStereo: shapes.some((s) => s.channels >= 2),
@@ -841,7 +843,14 @@ export function createFakeCore(): Core {
         return base;
       };
       const est = estimateAt(rate);
-      est.roomSeconds = Math.max(0, disks * FAKE_DUMP_MAX - dumpLen) / 2 / rate;
+      // The instrument's own audio, plus what this import adds.
+      const held = (state.instrument?.voices ?? []).reduce(
+        (sum, v) => sum + (v.sharesAudio ? 0 : (v.voice?.frames ?? 0) * 2),
+        0,
+      );
+      est.audioAfterBytes = held + est.bytes;
+      est.roomSeconds =
+        Math.min(disks * FAKE_DUMP_MAX - dumpLen, Math.max(0, memoryBytes - held)) / 2 / rate;
       if (est.verdict === "wont-fit") {
         est.fitsAtRates = SAMPLE_RATES.filter((r) => estimateAt(r).verdict !== "wont-fit").map(
           (r) => r,
