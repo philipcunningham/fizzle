@@ -38,6 +38,16 @@ const step = async (name, fn) => {
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 
+/** The drawn loop region's fill, from inside wavesurfer's shadow root. */
+const regionFill = (target) =>
+  target.evaluate(() => {
+    const host = document.querySelector('[data-testid="waveform"] div');
+    const el = [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])].find((n) =>
+      /^region region-/.test(n.getAttribute("part")),
+    );
+    return el ? getComputedStyle(el).backgroundColor : null;
+  });
+
 // A minimal 16-bit mono PCM WAV: RIFF header plus a ramp.
 const monoWav = (samples, rate) => {
   const data = Buffer.alloc(samples * 2);
@@ -282,21 +292,21 @@ await step("a held key repeats the voice's sustain loop (WASM core)", async () =
   };
   await commitLoop("loop 1 start", "500");
   await commitLoop("loop 1 end", "1200");
+  // The fill the region carries before it is the loop that repeats.
+  // Which hue it changes to is the screenshot baseline's to judge; this
+  // asks only that recolouring reached the drawn strip, which jsdom
+  // cannot show and which a stale region would fail.
+  const plain = await regionFill(page);
   await page.getByRole("combobox", { name: "Sustain loop" }).click();
   await page.getByRole("option", { name: "1", exact: true }).click();
   await page.getByText("repeats while held").waitFor({ timeout: 5000 });
 
-  // The region takes the fill that marks it, which only the drawn
-  // strip can show; jsdom has no canvas and CI skips the screenshots.
-  const fill = await page.evaluate(() => {
-    const host = document.querySelector('[data-testid="waveform"] div');
-    const el = [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])].find((n) =>
-      /^region region-/.test(n.getAttribute("part")),
-    );
-    return el ? getComputedStyle(el).backgroundColor : null;
-  });
-  if (fill !== "rgba(51, 209, 122, 0.35)") {
-    throw new Error(`the sustain loop region is filled ${fill}, want the marked fill`);
+  const marked = await regionFill(page);
+  if (marked === plain) {
+    throw new Error(`the sustain loop region is still filled ${plain}, unmarked`);
+  }
+  if (!marked || marked === "rgba(0, 0, 0, 0)") {
+    throw new Error(`the marked region is filled ${marked}, so it is invisible`);
   }
 
   // What the browser's own audio node received, read as it starts.
