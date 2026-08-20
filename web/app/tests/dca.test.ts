@@ -204,6 +204,13 @@ describe("scaling by velocity and key", () => {
   });
 
   // Key follow is (key - centre) scaled: >>4 for level, >>7 for rate.
+  it("takes the keyboard follow as the panel shows it, eight to a byte", () => {
+    const env = envelope({ sustain: 0, stops: [50, 0, 0, 0, 0, 0, 0, 0] });
+    // A panel 1 is byte 8: (36 * 8) >> 4 is 18, not (36 * 1) >> 4.
+    const one = attack(env, { ...NO_SCALING, note: 96, levelKF: 1 });
+    expect(one[0]?.level).toBeCloseTo((127 + 18) / 255, 6);
+  });
+
   it("follows the keyboard away from the voice's centre", () => {
     const env = envelope();
     const atCentre = attack(env, { ...NO_SCALING, levelKF: 15 });
@@ -217,16 +224,19 @@ describe("scaling by velocity and key", () => {
   // number the firmware arrives at.
   describe("the arithmetic note on performs", () => {
     // Stops are scaled by ((key - centre) * dca_kf) >> 4, an arithmetic
-    // shift, added to the stop byte and clamped to 0 to 255.
+    // shift, added to the stop byte and clamped to 0 to 255. The
+    // firmware multiplies by the stored byte, which is eight times the
+    // -15 to 15 the panel and the schema show.
     it("shifts the key follow on a stop by four places, and floors it", () => {
       const env = envelope({ sustain: 0, stops: [50, 0, 0, 0, 0, 0, 0, 0] });
-      // stopByte(50) is 127. Three octaves up: (36 * 15) >> 4 is 33.
-      const up = attack(env, { ...NO_SCALING, note: 96, levelKF: 15 });
-      expect(up[0]?.level).toBeCloseTo((127 + 33) / 255, 6);
-      // Three octaves down: (-36 * 15) >> 4 is -34, not -33. An
-      // arithmetic shift floors where a division truncates.
-      const down = attack(env, { ...NO_SCALING, note: 24, levelKF: 15 });
-      expect(down[0]?.level).toBeCloseTo((127 - 34) / 255, 6);
+      // stopByte(50) is 127. A panel 3 is byte 24, and 35 keys up:
+      // (35 * 24) >> 4 is 52, where 52.5 is the exact quotient.
+      const up = attack(env, { ...NO_SCALING, note: 95, levelKF: 3 });
+      expect(up[0]?.level).toBeCloseTo((127 + 52) / 255, 6);
+      // The same distance down is -53, not -52. An arithmetic shift
+      // floors where a division truncates.
+      const down = attack(env, { ...NO_SCALING, note: 25, levelKF: 3 });
+      expect(down[0]?.level).toBeCloseTo((127 - 53) / 255, 6);
     });
 
     // Velocity enters as min(velocity + 0x10, 0x7F), and the stop term
@@ -279,9 +289,9 @@ describe("scaling by velocity and key", () => {
     // rather than four, so the same key follow moves a rate far less.
     it("shifts the key follow on a rate by seven places", () => {
       const env = envelope({ sustain: 0, rates: [50, 0, 0, 0, 0, 0, 0, 0] });
-      // Rate byte 64, plus (36 * 15) >> 7 which is 4, is byte 68. The
+      // Rate byte 64, plus (36 * 16) >> 7 which is 4, is byte 68. The
       // panel value that maps to byte 68 is 53.
-      const up = attack(env, { ...NO_SCALING, note: 96, rateKF: 15 });
+      const up = attack(env, { ...NO_SCALING, note: 96, rateKF: 2 });
       expect(up[0]?.seconds).toBeCloseTo(stageSeconds(0, 255, 53), 9);
     });
 

@@ -69,6 +69,11 @@ const FULL_LEVEL = 255;
 const LINEAR_TOP = 0x9f;
 const CODE_BASE = 0xe0;
 
+/** Mirrors disk.KFDisplayToByte: the panel's -15 to 15 to a byte. */
+function kfByte(display: number): number {
+  return display * 8;
+}
+
 /** Mirrors disk.RateDisplayToByte: the panel's 0 to 99 to a rate byte. */
 function rateByte(display: number): number {
   return display <= 0 ? 0 : Math.floor((display * 128 + 99) / 100);
@@ -145,7 +150,11 @@ export interface Scaling {
   /** The note played, and the voice's own centre. */
   note: number;
   centre: number;
-  /** dcaLevelKF and dcaRateKF, the keyboard follows, -15 to 15. */
+  /**
+   * dcaLevelKF and dcaRateKF, the keyboard follows, on the panel's
+   * -15 to 15. The firmware multiplies by the stored byte, which is
+   * eight times that (disk.KFDisplayToByte).
+   */
   levelKF: number;
   rateKF: number;
   /** velDcaKF and velDcaRS, the velocity follows, -127 to 127. */
@@ -174,10 +183,10 @@ function effective(env: EnvelopeSnapshot, scale?: Scaling): { rates: number[]; s
     let stop = stopByte(env.stops[stage] ?? 0);
     if (scale) {
       rate +=
-        ((fromCentre * scale.rateKF) >> 7) +
+        ((fromCentre * kfByte(scale.rateKF)) >> 7) +
         ((((velocity * scale.velRate * 2) >> 8) + 1 - Math.max(0, scale.velRate)) >> 1);
       stop +=
-        ((fromCentre * scale.levelKF) >> 4) +
+        ((fromCentre * kfByte(scale.levelKF)) >> 4) +
         2 * (((velocity * scale.velLevel * 2) >> 8) - Math.max(0, scale.velLevel));
     }
     rates.push(Math.max(MIN_RATE, Math.min(INSTANT_RATE, rate)));
