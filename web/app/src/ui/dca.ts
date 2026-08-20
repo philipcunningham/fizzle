@@ -14,6 +14,9 @@ import type { EnvelopeSnapshot } from "../boundary/contract";
  * The 128 entry rate table at F000:0490 to F000:058F. Higher index,
  * larger step per update, so a higher rate is a faster stage. Index 0
  * is zero, which is why note on clamps an effective rate up to 1.
+ *
+ * A verified Go copy shipped in this repo before, in the studio TUI,
+ * and survives in git history at pkg/studio/widgets/envelopevisual/.
  */
 const RATE_TABLE = [
   0x0000, 0x0003, 0x0006, 0x0009, 0x000d, 0x0010, 0x0014, 0x0018, 0x001c, 0x0021, 0x0025, 0x002a,
@@ -66,10 +69,14 @@ const FULL_LEVEL = 255;
 const LINEAR_TOP = 0x9f;
 const CODE_BASE = 0xe0;
 
-/** Mirrors disk.RateDisplayToByte: the panel's 0 to 99 to a table index. */
+/** Mirrors disk.RateDisplayToByte: the panel's 0 to 99 to a rate byte. */
+function rateByte(display: number): number {
+  return display <= 0 ? 0 : Math.floor((display * 128 + 99) / 100);
+}
+
+/** The same, clamped as note on clamps an effective rate (F000:12E9). */
 function rateIndex(display: number): number {
-  const byte = display <= 0 ? 0 : Math.floor((display * 128 + 99) / 100);
-  return Math.max(MIN_RATE, Math.min(INSTANT_RATE, byte));
+  return Math.max(MIN_RATE, Math.min(INSTANT_RATE, rateByte(display)));
 }
 
 /** The code the output stage carries for a level byte (F000:214C). */
@@ -101,7 +108,16 @@ function stageSecondsByte(from: number, to: number, rateByte: number): number {
 
 const STAGES = 8;
 
-/** One stage: ramp to this level, from where the last one left off. */
+/**
+ * One stage: ramp to this level, from where the last one left off.
+ *
+ * The level is the envelope's own level as a fraction of full scale,
+ * and the preview plays it as amplitude directly. That last step is a
+ * choice rather than a reproduction: the firmware maps a level to an
+ * output code (see levelCode), and how that code becomes loudness is
+ * unmeasured. Only the two lines that divide by FULL_LEVEL below make
+ * it, so a measurement can replace the law in one place.
+ */
 export interface Segment {
   seconds: number;
   /** The stage's stop level, 0 to 1. */
@@ -152,7 +168,9 @@ function effective(env: EnvelopeSnapshot, scale?: Scaling): { rates: number[]; s
   const velocity = scale ? Math.min(Math.max(scale.velocity, 0) + 0x10, 0x7f) : 0;
   const fromCentre = scale ? scale.note - scale.centre : 0;
   for (let stage = 0; stage < STAGES; stage++) {
-    let rate = rateIndex(env.rates[stage] ?? 0);
+    // Unclamped here: the firmware clamps the effective rate, after
+    // the scaling terms are in (F000:12E9).
+    let rate = rateByte(env.rates[stage] ?? 0);
     let stop = stopByte(env.stops[stage] ?? 0);
     if (scale) {
       rate +=
@@ -218,6 +236,28 @@ export function release(
     level = target;
   }
   return out;
+}
+
+/**
+ * Where a run of stages sits `elapsed` seconds in, interpolating along
+ * the stage it is in. A key released mid stage has to release from
+ * here: Web Audio's own parameter reads back the stop before the ramp
+ * in flight, not the level the note reached.
+ */
+export function levelAt(segments: Segment[], elapsed: number): number {
+  let level = 0;
+  let t = 0;
+  for (const segment of segments) {
+    const stops = t + segment.seconds;
+    if (elapsed >= stops) {
+      level = segment.level;
+      t = stops;
+      continue;
+    }
+    const travelled = segment.seconds > 0 ? (elapsed - t) / segment.seconds : 1;
+    return level + (segment.level - level) * Math.max(0, travelled);
+  }
+  return level;
 }
 
 /** How long a run of stages takes, for scheduling what follows. */

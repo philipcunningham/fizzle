@@ -5,7 +5,7 @@
 // pins whatever bug the implementation has.
 import { describe, expect, it } from "vitest";
 import type { EnvelopeSnapshot } from "../src/boundary/contract";
-import { attack, release, stageSeconds } from "../src/ui/dca";
+import { attack, levelAt, release, stageSeconds } from "../src/ui/dca";
 
 /** The full 0 to 255 span, which is what the worked figures describe. */
 const FULL = 255;
@@ -196,5 +196,39 @@ describe("scaling by velocity and key", () => {
         }
       }
     }
+  });
+});
+
+// Where a run of stages sits partway through. A key released mid
+// attack starts its release from the level the envelope had reached,
+// so the engine has to be able to ask for it rather than read a value
+// back out of the scheduler.
+describe("the level partway through a run of stages", () => {
+  const stages = [
+    { seconds: 2, level: 1 },
+    { seconds: 4, level: 0.5 },
+  ];
+
+  it("starts at silence", () => {
+    expect(levelAt(stages, 0)).toBe(0);
+  });
+
+  it("interpolates along the stage it is in", () => {
+    expect(levelAt(stages, 1)).toBeCloseTo(0.5, 6);
+    expect(levelAt(stages, 2)).toBeCloseTo(1, 6);
+    expect(levelAt(stages, 4)).toBeCloseTo(0.75, 6);
+  });
+
+  it("holds the last stop once the run is over", () => {
+    expect(levelAt(stages, 6)).toBeCloseTo(0.5, 6);
+    expect(levelAt(stages, 600)).toBeCloseTo(0.5, 6);
+  });
+
+  it("passes an instant stage instantly", () => {
+    expect(levelAt([{ seconds: 0, level: 1 }, ...stages], 0)).toBe(1);
+  });
+
+  it("is silent for a run with no stages", () => {
+    expect(levelAt([], 3)).toBe(0);
   });
 });
