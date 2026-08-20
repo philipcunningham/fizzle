@@ -52,6 +52,9 @@ Conventions: [AGENTS.md](AGENTS.md).
 
 - [Casio FZ-1 Data Structures spec](sources/casio-spec.md): the 1987
   primary spec; reading conventions and known errors.
+- [Casio service manuals and books](sources/casio-service-manuals.md): the
+  hardware documents behind the DCA chip, the playback path, and the
+  fitted memory.
 - [FZ-1 firmware reverse engineering](sources/firmware.md): ROM
   address anchors; outranks the spec.
 - [Fixture corpus](sources/corpus.md): 235 real full dumps under

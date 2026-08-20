@@ -98,28 +98,33 @@ function levelCode(level: number): number {
  * reaches it through two 16 bit converters; the envelope never
  * touches the samples.
  *
- * The chip's documented range is 0 to -87.75 dB over a control word
- * the CPU writes as two registers, the gain word carrying its top two
- * bits and the amplitude word its low eight. The firmware drives that
- * pair as one monotone 16 bit number, stepping it by one on the slew
- * and by four on the fade it runs when a voice ends, straight across
- * the boundaries between the two registers. A code step is therefore
- * 87.75 / 1023 dB.
+ * The chip's control word is a gain word and an amplitude word, which
+ * the firmware drives as one monotone number: it steps the pair by
+ * one on the slew and by four on the fade a voice ends with, straight
+ * across the boundary between the two registers. That fade cuts out a
+ * quarter of the way up the range, which would click under a law
+ * linear in amplitude, so the code is dB-like.
  *
- * That last figure is the one thing here nobody has sourced from the
- * chip itself. The shape below is the firmware's and is exact; the
- * scale is the manual's range spread evenly over the word.
+ * Which levels are loud relative to which is therefore the firmware's
+ * own map, below, and it is exact. How many dB the range covers is
+ * not. The chip's documented 0 to -87.75 dB over the full 10 bit word
+ * would put 57.6 dB across the codes the firmware uses, which spreads
+ * one velocity sensitive voice over 46 dB and leaves ordinary playing
+ * inaudible. No gain table for the chip has been found, so the span
+ * below is tuned by ear until a measurement settles it.
  */
-const DB_PER_CODE = 87.75 / 1023;
+const SPAN_DB = 36;
 
-/** The loudest code the firmware ever writes, which is full scale here. */
+/** The quietest and loudest codes the firmware writes. */
+const QUIETEST_CODE = 224;
 const LOUDEST_CODE = 895;
+const DB_PER_CODE = SPAN_DB / (LOUDEST_CODE - QUIETEST_CODE);
 
 /**
  * What a level sounds like, as a linear amplitude. A stop of zero is
- * code 224 rather than silence, which is 57 dB down and inaudible;
- * the chip's own mute is a control word of zero, which the firmware
- * writes only when it frees the voice.
+ * code 224 rather than silence, which is far enough down to be
+ * inaudible; the chip's own mute is a control word of zero, which the
+ * firmware writes only when it frees the voice.
  */
 export function amplitude(level: number): number {
   const code = levelCode(Math.max(0, Math.min(1, level)) * FULL_LEVEL);

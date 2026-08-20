@@ -70,3 +70,16 @@ is dB-like.
 A code step is 0.0858 dB under the manual's range. That per-step
 figure stays open. So does the tie from the chip's select pins to the
 port address bits.
+
+## [2026-08-20] ingest | Service manuals, and what they don't settle
+
+New source page for the Casio service manuals and the third-party
+books. The manuals establish the DCA part, its range, and its two
+control words. The books corroborate the one shot envelope, the forced
+end stage, and the instant rate from the player's side.
+
+Three open questions added to envelope timing. The competing law that
+the firmware's even stepping rules out. The 46 dB velocity span that
+an even spread implies, which is wide for an instrument. What the
+hardware does when a stage's stored direction disagrees with where its
+stop sits.

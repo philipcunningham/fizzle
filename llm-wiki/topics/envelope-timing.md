@@ -6,7 +6,7 @@ tags: [fzv, envelope, dca, dcf, firmware]
 updated: 2026-08-20
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
-  - Casio FZ-20M service manual, circuit explanation (DCF MB87186, playback circuit) and FZ-1 service manual parts list
+  - llm-wiki/sources/casio-service-manuals.md
   - FZ-1 ROM (rate table F000:0490; output table F000:0590; handlers F000:2039, F000:218B, F000:20BD; slew F000:0A49; service loop F000:1CD8; note on F000:12B4; note off F000:1512)
 status: confirmed-firmware
 ---
@@ -95,6 +95,8 @@ Rates are then clamped to 1 to 0x7F and stops to 0 to 255, both signed and satur
 
 ## Open questions
 
-- The dB per code step is inferred from the chip's total range, not read from a control table. Settling it needs the MB87186's own gain table, or a recording of one voice stepped through the code range.
+- The dB per code step is inferred from the chip's total range, not read from a control table. Settling it needs the MB87186's own gain table, or a recording of one voice stepped through the code range. One competing law fits chips of that era: the two gain bits could pick four coarse ranges, with the eight bit word linear in amplitude inside each. The firmware's stepping argues against it. A slew that moves the combined word one step at a time, and a fade that moves it four at a time across the register boundary, only sound even if the steps are even in dB. A mantissa and exponent pair would jump at every boundary.
+- Spreading the chip's range evenly is what the figure above assumes. It puts 46 dB between a soft press and a hard one on a voice with ordinary velocity sensitivity. Such a span is wide for an instrument, which is the strongest hint that the even spread is wrong somewhere.
 - The tie from F/A and FC/Q to the port address bits is inferred from which registers the firmware writes where. A board schematic would confirm it.
+- A rate byte carries its direction in bit 7, and note on rewrites the end stage falling. Whether note on also rewrites the other stages' directions is unrecorded, so what the hardware does when a stored direction disagrees with where the stop sits is unknown. A stage could run away from its stop rather than toward it. Real dumps can store either.
 - The 125 Hz figure is measured in an emulator running the ROM, not against hardware.
