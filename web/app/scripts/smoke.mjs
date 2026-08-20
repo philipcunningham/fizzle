@@ -268,44 +268,71 @@ await step("a held key repeats the voice's sustain loop (WASM core)", async () =
   // Loop 1 takes bounds the assertion can recognise, then the select
   // makes it the sustain loop. The caption is the core's answer coming
   // back: the waveform only marks a loop the document really names.
-  const start = page.getByLabel("loop 1 start");
-  await start.fill("400");
-  await start.press("Enter");
-  const end = page.getByLabel("loop 1 end");
-  await end.fill("1200");
-  await end.press("Enter");
-  await page.waitForFunction(
-    () => document.querySelector('[aria-label="loop 1 end"]')?.value === "1200",
-    undefined,
-    { timeout: 5000 },
-  );
+  // Bounds of its own, not the ones the step above left behind, so an
+  // edit there can't quietly become this step's premise.
+  const commitLoop = async (label, value) => {
+    const field = page.getByLabel(label);
+    await field.fill(value);
+    await field.press("Enter");
+    await page.waitForFunction(
+      ([l, v]) => document.querySelector(`[aria-label="${l}"]`)?.value === v,
+      [label, value],
+      { timeout: 5000 },
+    );
+  };
+  await commitLoop("loop 1 start", "500");
+  await commitLoop("loop 1 end", "1200");
   await page.getByRole("combobox", { name: "Sustain loop" }).click();
   await page.getByRole("option", { name: "1", exact: true }).click();
   await page.getByText("repeats while held").waitFor({ timeout: 5000 });
 
+  // The region takes the fill that marks it, which only the drawn
+  // strip can show; jsdom has no canvas and CI skips the screenshots.
+  const fill = await page.evaluate(() => {
+    const host = document.querySelector('[data-testid="waveform"] div');
+    const el = [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])].find((n) =>
+      /^region region-/.test(n.getAttribute("part")),
+    );
+    return el ? getComputedStyle(el).backgroundColor : null;
+  });
+  if (fill !== "rgba(51, 209, 122, 0.35)") {
+    throw new Error(`the sustain loop region is filled ${fill}, want the marked fill`);
+  }
+
   // What the browser's own audio node received, read as it starts.
   await page.evaluate(() => {
     window.__auditionLoops = [];
-    const started = AudioBufferSourceNode.prototype.start;
+    window.__auditionStart = AudioBufferSourceNode.prototype.start;
     AudioBufferSourceNode.prototype.start = function (...args) {
       window.__auditionLoops.push({ on: this.loop, start: this.loopStart, end: this.loopEnd });
-      return started.apply(this, args);
+      return window.__auditionStart.apply(this, args);
     };
   });
 
-  const key = page.locator('[data-testid="key-48"]');
-  await key.dispatchEvent("pointerdown", { clientY: 10, pointerId: 1 });
-  await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 5000 });
-  await key.dispatchEvent("pointerup", { pointerId: 1 });
+  let played;
+  try {
+    const key = page.locator('[data-testid="key-48"]');
+    await key.dispatchEvent("pointerdown", { clientY: 10, pointerId: 1 });
+    await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 5000 });
+    await key.dispatchEvent("pointerup", { pointerId: 1 });
+    played = await page.evaluate(() => window.__auditionLoops);
+  } finally {
+    // The steps after this one share the page, so the patch comes off.
+    await page.evaluate(() => {
+      AudioBufferSourceNode.prototype.start = window.__auditionStart;
+      delete window.__auditionStart;
+      delete window.__auditionLoops;
+    });
+  }
 
   const rateText = await page.getByRole("combobox", { name: "Sample rate (Hz)" }).textContent();
   const rate = Number(/\d+/.exec(rateText ?? "")?.[0]);
-  const played = await page.evaluate(() => window.__auditionLoops);
+  if (!Number.isFinite(rate)) throw new Error(`the sample rate reads ${rateText}`);
   const last = played.at(-1);
   if (!last) throw new Error("the press started no source");
   if (!last.on) throw new Error("the source plays straight through, with no loop");
   // Buffer seconds: the frames the fields hold over the voice's rate.
-  const want = { start: 400 / rate, end: 1200 / rate };
+  const want = { start: 500 / rate, end: 1200 / rate };
   if (Math.abs(last.start - want.start) > 1e-6 || Math.abs(last.end - want.end) > 1e-6) {
     throw new Error(
       `loop ${last.start} to ${last.end} at ${rate} Hz, want ${want.start} to ${want.end}`,

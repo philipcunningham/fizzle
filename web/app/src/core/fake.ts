@@ -108,7 +108,10 @@ function defaultVoiceDetail(frames: number): VoiceDetail {
     genEnd: frames,
     loopSustain: 8,
     loopRelease: 8,
-    loops: Array.from({ length: 8 }, () => ({ start: 0, end: frames, xf: 0, tm: 0 })),
+    // What an import writes: every loop parked at the generation end
+    // with no width, and no loop named. A fake that handed out full
+    // width loops would hide the shape the editor actually meets.
+    loops: Array.from({ length: 8 }, () => ({ start: frames, end: frames, xf: 0, tm: 0 })),
     dca: {
       sustain: 7,
       end: 7,
@@ -241,10 +244,13 @@ function refreshReferenced(inst: InstrumentSnapshot): void {
   for (const v of inst.voices) v.referenced = used.has(v.slot);
 }
 
-function fakeAudition(): AuditionData {
-  const pcm = new Int16Array(1024);
+// The core decodes a voice's whole wave, so the payload holds one
+// sample per declared frame. A fixed length here would let a test pin
+// loop bounds the buffer cannot reach.
+function fakeAudition(frames: number, sampleRate: number): AuditionData {
+  const pcm = new Int16Array(frames);
   for (let i = 0; i < pcm.length; i++) pcm[i] = Math.round(12000 * Math.sin(i / 6));
-  return { sampleRate: 18000, root: 60, pcm };
+  return { sampleRate, root: 60, pcm };
 }
 
 // Mirrors the core's historyCap, which R24 floors at 100. A fake that
@@ -634,7 +640,9 @@ export function createFakeCore(): Core {
     auditionSlot(slot: number): Promise<CoreResult<AuditionData>> {
       const voice = state.instrument?.voices.find((v) => v.slot === slot);
       if (!voice) return Promise.resolve(err("invalid-value", `no voice slot ${slot}`));
-      return Promise.resolve(ok(fakeAudition()));
+      return Promise.resolve(
+        ok(fakeAudition(voice.voice?.frames ?? 1024, voice.voice?.sampleRate ?? 18000)),
+      );
     },
 
     exportImage(): Promise<CoreResult<Uint8Array>> {

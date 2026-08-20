@@ -106,9 +106,11 @@ export function createAudition(
       source.buffer = buffer;
       source.playbackRate.value = playbackRate(options.note, options.root);
       // Web Audio loops the buffer itself, in buffer seconds, so the
-      // playback rate carries the loop along with the pitch. An end at
-      // or below the start is the shape a one shot import writes, and
-      // it means no loop rather than an empty or reversed one.
+      // playback rate carries the loop along with the pitch. Bounds
+      // that don't rise are dropped here rather than handed on: Web
+      // Audio reads an end at or below the start as no bounds at all
+      // and repeats the whole sample, which is further from the truth
+      // than not looping.
       if (options.loop && options.loop.end > options.loop.start) {
         source.loopStart = options.loop.start / options.sampleRate;
         source.loopEnd = options.loop.end / options.sampleRate;

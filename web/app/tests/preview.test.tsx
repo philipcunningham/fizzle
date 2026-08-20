@@ -180,6 +180,24 @@ describe("the preview repeats the sustain loop", () => {
     expect(recorded.loops.at(-1)).toBeNull();
   });
 
+  // Naming a loop is one action and giving it width is another, so a
+  // voice can name the loop an import parked at the generation end.
+  it("plays straight through when the named loop has no width", async () => {
+    const recorded = stubAudioContext();
+    const core = createFakeCore();
+    await openInstrumentDisk(core);
+    await core.setSlotLoopSelect(0, 0, 8);
+    // Loop 2 carries the edit, so loop 1 keeps the width it imported
+    // with. The refetch it forces brings the designation with it.
+    await setField("loop 2 start", "100");
+    await waitFor(() => {
+      playMiddleC();
+      expect(recorded.rates.length).toBeGreaterThan(0);
+    });
+    expect(recorded.loops.at(-1)).toBeNull();
+    expect(screen.queryByText(/repeats while held/)).toBeNull();
+  });
+
   it("follows a loop edit instead of the cached payload", async () => {
     const recorded = stubAudioContext();
     const core = createFakeCore();
@@ -197,6 +215,101 @@ describe("the preview repeats the sustain loop", () => {
     await setField("loop 1 end", "2000");
     playMiddleC();
     expect(recorded.loops.at(-1)?.end).toBeCloseTo(2000 / 18000, 10);
+  });
+});
+
+// Switching voices leaves the previous voice's PCM on screen while the
+// new one decodes. Playing it would pair one voice's samples with
+// another's loop, and a loop past the shorter buffer plays nothing at
+// all, so the press waits.
+describe("the preview never plays one voice through another's payload", () => {
+  it("stays silent until the switched-to voice's samples arrive", async () => {
+    const recorded = stubAudioContext();
+    const inner = createFakeCore();
+    let open: (() => void) | null = null;
+    const core: Core = {
+      ...inner,
+      auditionSlot: (slot) =>
+        slot === 1
+          ? new Promise((resolve) => {
+              open = () => {
+                void inner.auditionSlot(slot).then(resolve);
+              };
+            })
+          : inner.auditionSlot(slot),
+    };
+    await openInstrumentDisk(core);
+    await waitFor(() => {
+      playMiddleC();
+      expect(recorded.rates.length).toBeGreaterThan(0);
+    });
+    const before = recorded.rates.length;
+
+    fireEvent.click((await screen.findAllByText("SNARE"))[0] as HTMLElement);
+    await screen.findByText(/4,352 frames/);
+    playMiddleC();
+    expect(recorded.rates.length).toBe(before);
+
+    (open as (() => void) | null)?.();
+    await waitFor(() => {
+      playMiddleC();
+      expect(recorded.rates.length).toBeGreaterThan(before);
+    });
+  });
+});
+
+// A sustain loop has no natural end, so a note the page abandons would
+// sound until the tab closed. The pointer up that would have released
+// it goes wherever the focus went.
+describe("a held note survives nothing", () => {
+  /** Presses and holds middle C, waiting for the sound to land. */
+  async function holdMiddleC(recorded: Recorded) {
+    const key = screen.getByTestId("key-60");
+    await waitFor(() => {
+      fireEvent.pointerDown(key, { pointerId: 1, clientY: 0 });
+      expect(recorded.rates.length).toBeGreaterThan(0);
+    });
+  }
+
+  it("releases what is held when the page is hidden", async () => {
+    const recorded = stubAudioContext();
+    await openInstrumentDisk();
+    await holdMiddleC(recorded);
+    const before = recorded.stops.length;
+
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    try {
+      fireEvent(document, new Event("visibilitychange"));
+    } finally {
+      Reflect.deleteProperty(document, "visibilityState");
+    }
+    expect(recorded.stops.length).toBeGreaterThan(before);
+    expect(document.querySelector("[data-auditioning]")).toBeNull();
+  });
+
+  // The release lives in a closure the keyboard's own pointer up
+  // calls. Take the keyboard away mid-press and that pointer up lands
+  // on an element that no longer exists.
+  it("releases what is held when the keyboard goes away", async () => {
+    const recorded = stubAudioContext();
+    await openInstrumentDisk();
+    await holdMiddleC(recorded);
+    const before = recorded.stops.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Eject" }));
+    await screen.findByRole("button", { name: "New disk" });
+    expect(recorded.stops.length).toBeGreaterThan(before);
+  });
+
+  it("releases what is held when the window loses focus", async () => {
+    const recorded = stubAudioContext();
+    await openInstrumentDisk();
+    await holdMiddleC(recorded);
+    const before = recorded.stops.length;
+
+    fireEvent.blur(window);
+    expect(recorded.stops.length).toBeGreaterThan(before);
+    expect(document.querySelector("[data-auditioning]")).toBeNull();
   });
 });
 
@@ -358,6 +471,37 @@ describe("the banks tab keyboard plays the key mapping", () => {
     const loop = recorded.loops.at(-1);
     expect(loop?.start).toBeCloseTo(300 / 18000, 10);
     expect(loop?.end).toBeCloseTo(900 / 18000, 10);
+  });
+
+  it("layers two slots and gives each its own loop", async () => {
+    const recorded = stubAudioContext();
+    const core = createFakeCore();
+    await openInstrumentDisk(core);
+    // KICK repeats; the duplicate that layers over it doesn't.
+    await core.setSlotLoopSelect(0, 0, 8);
+    await setField("loop 1 start", "100");
+    await setField("loop 1 end", "900");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Banks and Areas" }));
+    await screen.findByRole("table", { name: "areas" });
+    fireEvent.click(screen.getByRole("button", { name: "duplicate area 1" }));
+    await waitFor(() => {
+      const table = screen.getByRole("table", { name: "areas" });
+      expect(within(table).getAllByRole("row")).toHaveLength(4);
+    });
+
+    const key = screen.getByTestId("key-40");
+    fireEvent.pointerDown(key, { pointerId: 1, clientY: 0 });
+    await waitFor(() => {
+      expect(recorded.loops.length).toBeGreaterThanOrEqual(2);
+    });
+    fireEvent.pointerUp(key, { pointerId: 1 });
+
+    const sounded = recorded.loops.slice(-2);
+    expect(sounded.filter((l) => l === null)).toHaveLength(1);
+    const looped = sounded.find((l) => l !== null);
+    expect(looped?.start).toBeCloseTo(100 / 18000, 10);
+    expect(looped?.end).toBeCloseTo(900 / 18000, 10);
   });
 
   it("pitches from the area's root, not the voice's", async () => {
