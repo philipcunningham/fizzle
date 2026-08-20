@@ -5,7 +5,7 @@
 // pins whatever bug the implementation has.
 import { describe, expect, it } from "vitest";
 import type { EnvelopeSnapshot } from "../src/boundary/contract";
-import { attack, levelAt, release, stageSeconds } from "../src/ui/dca";
+import { amplitude, attack, levelAt, release, stageSeconds } from "../src/ui/dca";
 
 /** The full 0 to 255 span, which is what the worked figures describe. */
 const FULL = 255;
@@ -361,5 +361,50 @@ describe("the level partway through a run of stages", () => {
 
   it("is silent for a run with no stages", () => {
     expect(levelAt([], 3)).toBe(0);
+  });
+});
+
+// The loudness law. The DCA is an analog amplifier inside the filter
+// chip (MB87186, which the FZ-1 parts list calls FM-1 and fits four
+// of, two channels each). Its documented range is 0 to -87.75 dB over
+// a 10 bit control word, and the firmware drives that word as one
+// monotone number: the gain byte is its top two bits and the
+// amplitude byte its low eight. So a code step is 87.75 / 1023 dB.
+describe("what a level sounds like", () => {
+  const dbOf = (level: number) => 20 * Math.log10(amplitude(level));
+
+  it("puts the loudest code the firmware writes at full scale", () => {
+    expect(amplitude(1)).toBeCloseTo(1, 9);
+  });
+
+  // A stop of zero is code 224, which is 671 steps below the loudest
+  // code. The FZ's envelope floor is not digital silence: the chip's
+  // own mute is a control word of zero, which the firmware writes
+  // only when it frees the voice.
+  it("floors at the code a stop of zero writes, not at silence", () => {
+    expect(dbOf(0)).toBeCloseTo(-57.56, 1);
+    expect(amplitude(0)).toBeGreaterThan(0);
+  });
+
+  // The level to code map spends 159 of its 671 steps on the bottom
+  // 62.5% of the level range and the rest on the top, so the scale is
+  // steeply top weighted. Half level is nowhere near half loudness.
+  it("is steeply top weighted, as the expansion table makes it", () => {
+    expect(dbOf(0.5)).toBeCloseTo(-46.6, 1);
+    expect(dbOf(159 / 255)).toBeCloseTo(-43.9, 1);
+  });
+
+  it("rises with the level, without a step backwards", () => {
+    let last = -Infinity;
+    for (let byte = 0; byte <= 255; byte++) {
+      const db = dbOf(byte / 255);
+      expect(db).toBeGreaterThan(last);
+      last = db;
+    }
+  });
+
+  it("holds a level outside the range to the ends of it", () => {
+    expect(amplitude(-1)).toBe(amplitude(0));
+    expect(amplitude(2)).toBe(amplitude(1));
   });
 });

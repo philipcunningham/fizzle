@@ -5,7 +5,7 @@
 // audio failure never blocks editing.
 import type { EnvelopeSnapshot } from "../boundary/contract";
 import type { Scaling } from "./dca";
-import { attack, levelAt, release, totalSeconds } from "./dca";
+import { amplitude, attack, levelAt, release, totalSeconds } from "./dca";
 
 /**
  * The longest release the preview holds a source open for. The
@@ -54,6 +54,7 @@ export interface AudioContextLike {
       value: number;
       setValueAtTime(value: number, time: number): void;
       linearRampToValueAtTime(value: number, time: number): void;
+      exponentialRampToValueAtTime(value: number, time: number): void;
       cancelScheduledValues(time: number): void;
     };
     connect(node: unknown): void;
@@ -147,16 +148,25 @@ export function createAudition(
       // master level would square the dynamics, so it only stands in
       // when there is no envelope to carry it.
       const level = scaling ? 1 : Math.max(0.05, options.velocity / 127);
-      gain.gain.setValueAtTime(0, now);
       const attackStages = options.dca ? attack(options.dca, scaling) : [];
       const attackSeconds = totalSeconds(attackStages);
       if (options.dca) {
+        // The chip's amplifier is calibrated in dB, so a ramp that is
+        // exponential in amplitude is the linear one the firmware's
+        // accumulator runs. It also cannot start from silence, which
+        // suits: the envelope's own zero is a code 57 dB down rather
+        // than the chip's mute.
+        gain.gain.setValueAtTime(amplitude(0) * level, now);
         let t = now;
         for (const stage of attackStages) {
           t += stage.seconds;
-          gain.gain.linearRampToValueAtTime(stage.level * level, Math.max(t, now + 0.001));
+          gain.gain.exponentialRampToValueAtTime(
+            amplitude(stage.level) * level,
+            Math.max(t, now + 0.001),
+          );
         }
       } else {
+        gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(level, now + 0.005);
       }
 
@@ -175,7 +185,7 @@ export function createAudition(
           // flight, so a read back here gives the stop before it.
           const from = options.dca ? levelAt(attackStages, at - now) : 1;
           gain.gain.cancelScheduledValues(at);
-          gain.gain.setValueAtTime(from * level, at);
+          gain.gain.setValueAtTime((options.dca ? amplitude(from) : from) * level, at);
           // A key that comes up before the envelope reached its sustain
           // stage runs the end stage alone, so the engine has to know
           // which happened.
@@ -184,7 +194,10 @@ export function createAudition(
           let t = at;
           for (const stage of releaseStages) {
             t += stage.seconds;
-            gain.gain.linearRampToValueAtTime(stage.level * level, Math.max(t, at + 0.001));
+            gain.gain.exponentialRampToValueAtTime(
+              amplitude(stage.level) * level,
+              Math.max(t, at + 0.001),
+            );
           }
           // A voice with no release stages keeps the short fade, which
           // is also what stops the click on a voice with no envelope.

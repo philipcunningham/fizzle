@@ -43,6 +43,7 @@ function stubAudioContext(): Recorded {
           value: 1,
           setValueAtTime: () => undefined,
           linearRampToValueAtTime: () => undefined,
+          exponentialRampToValueAtTime: () => undefined,
           cancelScheduledValues: () => undefined,
         },
         connect: () => undefined,

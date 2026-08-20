@@ -4,7 +4,7 @@
 // says test the scheduling and the fallback, not the sound.
 import { describe, expect, it } from "vitest";
 import { createAudition, playbackRate } from "../src/ui/audition";
-import { release as releaseStages, totalSeconds } from "../src/ui/dca";
+import { amplitude, release as releaseStages, totalSeconds } from "../src/ui/dca";
 
 describe("playback rate maths", () => {
   it("is exact per equal temperament", () => {
@@ -21,7 +21,7 @@ interface Scheduled {
   stopped: boolean;
   gains: number[];
   /** Every gain event in order, with the time it was scheduled for. */
-  events: { kind: "hold" | "ramp"; value: number; time: number }[];
+  events: { kind: "hold" | "ramp" | "exp"; value: number; time: number }[];
   loop: boolean;
   loopStart: number;
   loopEnd: number;
@@ -53,6 +53,10 @@ function fakeContext(record: Scheduled) {
       linearRampToValueAtTime: (v: number, t: number) => {
         record.gains.push(v);
         record.events.push({ kind: "ramp", value: v, time: t });
+      },
+      exponentialRampToValueAtTime: (v: number, t: number) => {
+        record.gains.push(v);
+        record.events.push({ kind: "exp", value: v, time: t });
       },
       cancelScheduledValues: () => undefined,
     },
@@ -310,6 +314,7 @@ describe("release fades before stopping", () => {
           value: 1,
           setValueAtTime: () => undefined,
           linearRampToValueAtTime: () => undefined,
+          exponentialRampToValueAtTime: () => undefined,
           cancelScheduledValues: () => undefined,
         },
         connect: () => undefined,
@@ -384,7 +389,7 @@ describe("the DCA envelope reaches the scheduler", () => {
       dca: sweep,
     });
     // Silence at note on, then a ramp per stage to the sustain point.
-    expect(record.events.map((e) => e.kind)).toEqual(["hold", "ramp", "ramp"]);
+    expect(record.events.map((e) => e.kind)).toEqual(["hold", "exp", "exp"]);
     expect(record.events[0]?.time).toBe(0);
     expect(record.events[1]?.time).toBeCloseTo(0.387, 2);
     expect(record.events[2]?.time).toBeCloseTo(0.387 + 2.301, 2);
@@ -430,6 +435,7 @@ describe("the DCA envelope reaches the scheduler", () => {
           value: 0.5,
           setValueAtTime: () => undefined,
           linearRampToValueAtTime: () => undefined,
+          exponentialRampToValueAtTime: () => undefined,
           cancelScheduledValues: () => undefined,
         },
         connect: () => undefined,
@@ -471,6 +477,52 @@ describe("the DCA envelope reaches the scheduler", () => {
     expect(stopArgs[0]).toBeGreaterThan(0.5);
   });
 
+  // The chip's amplifier is calibrated in dB, so a level is a long way
+  // from a loudness. The law is pinned in dca.test.ts; these say the
+  // engine puts it on the gain node.
+  it("schedules the loudness a level makes, not the level", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    engine.play({
+      pcm: new Int16Array(64),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 127,
+      dca: {
+        sustain: 0,
+        end: 1,
+        rates: [50, 50, 0, 0, 0, 0, 0, 0],
+        stops: [50, 0, 0, 0, 0, 0, 0, 0],
+      },
+    });
+    // A panel 50 stop is byte 127, which is far down the dB scale.
+    const peak = record.events.at(-1);
+    expect(peak?.value).toBeCloseTo(amplitude(127 / 255), 9);
+    expect(peak?.value ?? 1).toBeLessThan(0.02);
+  });
+
+  // A ramp that is exponential in amplitude is linear in dB, which is
+  // what the firmware's accumulator does over the linear part of the
+  // level to code map.
+  it("ramps in dB rather than in amplitude", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    engine.play({
+      pcm: new Int16Array(64),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 127,
+      dca: sweep,
+    });
+    expect(record.events.map((e) => e.kind)).toEqual(["hold", "exp", "exp"]);
+    // The note opens at the floor the chip's own zero code sits at,
+    // because an exponential ramp cannot start from silence and the
+    // hardware does not start there either.
+    expect(record.events[0]?.value).toBeCloseTo(amplitude(0), 9);
+  });
+
   // A context whose clock the test moves, so a key can come up partway
   // through a stage.
   function clocked(record: Scheduled, currentTime: { now: number }) {
@@ -503,8 +555,11 @@ describe("the DCA envelope reaches the scheduler", () => {
     clock.now = 0.1935;
     record.events.length = 0;
     stop();
+    // Half way up by the clock, so half way up in level. The stage's
+    // exact seconds are the model's, so compare as a ratio rather
+    // than pinning a figure this test would have to recompute.
     const hold = record.events.find((e) => e.kind === "hold");
-    expect(hold?.value).toBeCloseTo(0.5, 2);
+    expect((hold?.value ?? 0) / amplitude(0.5)).toBeCloseTo(1, 1);
   });
 
   // A stored rate of zero runs a stage for 174 s, and velocity rate
@@ -546,6 +601,7 @@ describe("the DCA envelope reaches the scheduler", () => {
           value: 1,
           setValueAtTime: () => undefined,
           linearRampToValueAtTime: () => undefined,
+          exponentialRampToValueAtTime: () => undefined,
           cancelScheduledValues: () => undefined,
         },
         connect: () => undefined,
