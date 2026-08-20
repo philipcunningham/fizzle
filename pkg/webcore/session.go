@@ -128,11 +128,14 @@ type Session struct {
 	// memoryBytes is the sampler's sample memory as the user declared
 	// it. Zero means they haven't, so sampleMemory supplies the default.
 	memoryBytes int
-	label       string
-	image       []byte
-	image2      []byte // disk 2 of a split pair; nil for one disk documents
-	used        int
-	files       []FileSnapshot
+	// audioBytes is the open instrument's audio area, measured when the
+	// document changes rather than on every snapshot.
+	audioBytes int
+	label      string
+	image      []byte
+	image2     []byte // disk 2 of a split pair; nil for one disk documents
+	used       int
+	files      []FileSnapshot
 
 	instrument  *InstrumentSnapshot
 	missingDisk int // 1 or 2 when one half of a pair was opened alone
@@ -164,7 +167,7 @@ func (s *Session) Snapshot() Snapshot {
 			Label:         s.label,
 			UsedBytes:     s.used,
 			CapacityBytes: disks * disk.ImageSize,
-			AudioBytes:    s.instrumentAudioBytes(),
+			AudioBytes:    s.audioBytes,
 			MemoryBytes:   s.sampleMemory(),
 			Disks:         disks,
 			MissingDisk:   s.missingDisk,
@@ -208,23 +211,22 @@ func (s *Session) SetSampleMemory(bytes int) (Snapshot, *Error) {
 	return s.Snapshot(), nil
 }
 
-// instrumentAudioBytes totals the audio the open instrument asks the
-// sampler to hold. A dump loads as a unit, so this is one load; loose
-// files on the same disk are loaded separately and aren't counted. A
-// velocity switch clone points at an earlier slot's samples, so it
-// costs nothing and is skipped.
-func (s *Session) instrumentAudioBytes() int {
-	if s.instrument == nil {
+// dumpAudioBytes totals the audio a dump asks the sampler to hold: the
+// area past its bank and voice header sectors. That is what the
+// sampler loads and what the disk's own wave sector count records, so
+// it counts audio no voice header claims and the sector padding that
+// loads with it. The estimate measures the same way, which is why the
+// reading and the import dialog agree.
+//
+// A per voice sum cannot do this. It drops slots the voice list hides,
+// such as one set to make no sound, whose samples stay in the dump and
+// still load, and it counts frames where the dump pads to a sector.
+func dumpAudioBytes(fzf []byte) int {
+	d, cerr := newDumpState(fzf)
+	if cerr != nil {
 		return 0
 	}
-	total := 0
-	for _, v := range s.instrument.Voices {
-		if v.Voice == nil || v.SharesAudio {
-			continue
-		}
-		total += v.Voice.Frames * disk.BytesPerSample
-	}
-	return total
+	return len(d.fzf) - d.audioStart
 }
 
 // NewDisk replaces the session's disk with a blank formatted image.
@@ -683,6 +685,14 @@ func (s *Session) adoptState(img *disk.Image, img2 []byte) (Snapshot, *Error) {
 	}
 	s.files = files
 	s.missingDisk = missingDiskOf(img, img2)
+	// Measured once here, where the document changes and both images
+	// are in hand, so a snapshot stays a plain read.
+	s.audioBytes = 0
+	if inst != nil {
+		if fzf, cerr := s.stitchedDump(img); cerr == nil {
+			s.audioBytes = dumpAudioBytes(fzf)
+		}
+	}
 	s.revision++
 	return s.Snapshot(), nil
 }

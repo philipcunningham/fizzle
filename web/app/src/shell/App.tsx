@@ -574,9 +574,11 @@ function Shell({ core }: { core: Core }) {
     } catch {
       saved = 0;
     }
-    if (saved > 0) {
-      setMemoryBytes(saved);
-      void core.setSampleMemory(saved).then(apply);
+    // Only a machine that exists. A figure from a build with other
+    // choices, or a hand edited profile, would be refused by the core
+    // and reported to a user who did nothing to cause it.
+    if (MEMORY_CHOICES.some((c) => c.bytes === saved)) {
+      setMemory(saved);
     }
     // Once, at boot, before the first estimate can be asked for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
