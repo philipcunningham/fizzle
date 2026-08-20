@@ -3,7 +3,7 @@ type: topic
 title: Multi-disk full dumps
 description: Disk 1 carries all metadata for the whole instrument; disk 2 is pure audio continuation. Confirmed on FZ-10M hardware.
 tags: [disk, fzf, multi-disk]
-updated: 2026-07-11
+updated: 2026-08-20
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 1-3
   - FZ-10M hardware (2-disk save inspected byte by byte)
@@ -13,9 +13,11 @@ status: confirmed-hardware
 # Multi-disk full dumps
 
 The spec (section 1-3) allows a full dump to span 2 floppies via the
-directory entry's disk number (`disknum` 0 and 1). Two disks is also
-the hardware maximum: the FZ series has 2 MB of sample RAM. Saving a
-2-disk instrument from a real FZ-10M and inspecting the output shows:
+directory entry's disk number (`disknum` 0 and 1). That single bit is
+what caps a dump at two disks. The memory ceiling is a separate limit
+that varies by machine, and it binds first on a stock FZ-1: see
+[Sample memory per machine](sample-memory.md). Saving a 2-disk
+instrument from a real FZ-10M and inspecting the output shows:
 
 **Disk 1** (`disknum = 0`) holds the entire instrument's metadata:
 

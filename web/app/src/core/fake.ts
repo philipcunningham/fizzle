@@ -701,7 +701,12 @@ export function createFakeCore(): Core {
       }
       const next = clone(state);
       next.label ??= "FIZZLE";
-      return Promise.resolve(ok(mutate(joinVoice(next, `VOICE ${voiceCount(next) + 1}`))));
+      // A voice file is a header sector plus its samples, which is
+      // what the core adds to the dump's audio area.
+      const frames = Math.max(0, Math.round((bytes.length - 1024) / 2));
+      return Promise.resolve(
+        ok(mutate(joinVoice(next, `VOICE ${voiceCount(next) + 1}`, { frames, rate: 18000 }))),
+      );
     },
 
     addBank(bytes: Uint8Array, slot: number): Promise<CoreResult<Snapshot>> {
@@ -928,11 +933,16 @@ export function createFakeCore(): Core {
       next.label ??= "FIZZLE";
       next.missingDisk = 0;
       next.bytes2 = split ? new Uint8Array(IMAGE_SIZE) : null;
-      const voices = referenced.map((sample, i) => ({
-        slot: i,
-        name: voiceName(sample),
-        referenced: true,
-      }));
+      const voices = referenced.map((sample, i) => {
+        const shape = wavShape(files[sample] ?? new Uint8Array());
+        const frames = shape ? Math.round((shape.frames * rate) / shape.rate) : 0;
+        return {
+          slot: i,
+          name: voiceName(sample),
+          referenced: true,
+          voice: { ...defaultVoiceDetail(frames), sampleRate: rate },
+        };
+      });
       next.instrument = {
         fileName: "FULL-DATA-FZ",
         banks: [

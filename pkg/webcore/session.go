@@ -180,10 +180,11 @@ func (s *Session) Snapshot() Snapshot {
 
 // SampleMemoryMin and SampleMemoryMax bound what an FZ can hold. The
 // FZ-1 shipped with 1 MB and reaches 2 MB with Casio's expansion card;
-// the rack units shipped with 2 MB. Reverse engineering the FZ-1
-// firmware shows the memory probe at F000:07D4 counting 64 KB banks
-// from a floor of 16, and only five bits of the bank register reach
-// memory, so 32 banks is the ceiling the hardware imposes.
+// the rack units shipped with 2 MB. The machine discovers which it has
+// at power on: the wave memory probe at F000:07D4 counts 64 KB banks
+// from a floor of 16, and length_limit at F000:7A74 spends what it
+// found. Only five bits of the bank register reach memory, so 32 banks
+// is the ceiling. See llm-wiki/topics/sample-memory.md.
 const (
 	SampleMemoryMin = 1 << 20
 	SampleMemoryMax = 2 << 20
