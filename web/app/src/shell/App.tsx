@@ -15,6 +15,7 @@ import type {
   Core,
   CoreError,
   CoreResult,
+  InstrumentVoice,
   SampleRate,
   Snapshot,
 } from "../boundary/contract";
@@ -339,6 +340,23 @@ function Shell({ core }: { core: Core }) {
       queryFn: () => core.auditionSlot(slot),
     });
 
+  /**
+   * The four fields that bend a voice's envelope by the press and the
+   * key, read from its schema parameters (R14). Absent leaves the
+   * envelope running as stored.
+   */
+  const dcaFollow = (voice: InstrumentVoice | null | undefined) => {
+    const params = voice?.params;
+    if (!params) return undefined;
+    const read = (id: string): number => (typeof params[id] === "number" ? params[id] : 0);
+    return {
+      levelKF: read("dcaLevelKF"),
+      rateKF: read("dcaRateKF"),
+      velLevel: read("velDcaKF"),
+      velRate: read("velDcaRS"),
+    };
+  };
+
   const noteOn = (note: number, velocity: number, fromMIDI = false) => {
     // The banks tab plays the mapping (R12): the pressed key resolves
     // through the bank's areas by key and velocity range, every match
@@ -355,6 +373,7 @@ function Shell({ core }: { core: Core }) {
         // Each sounding slot repeats its own sustain loop, so a layered
         // key can hold one voice looping and another playing out.
         const loop = sustainLoop(slotVoice?.voice);
+        const slotFollow = dcaFollow(slotVoice);
         void slotPCM(matched.voiceSlot, slotVoice?.audioKey ?? "").then((r) => {
           if (!r.ok || released) return;
           releases.push(
@@ -365,6 +384,7 @@ function Shell({ core }: { core: Core }) {
               note,
               velocity,
               ...(slotVoice?.voice ? { dca: slotVoice.voice.dca } : {}),
+              ...(slotFollow ? { dcaFollow: slotFollow } : {}),
               ...(loop ? { loop } : {}),
             }),
           );
@@ -387,6 +407,7 @@ function Shell({ core }: { core: Core }) {
     // root key, the rate, or a loop leaves the PCM untouched and its
     // copy stale (R20).
     const loop = sustainLoop(focusVoice?.voice);
+    const follow = dcaFollow(focusVoice);
     const release = audition.play({
       pcm: auditionData.pcm,
       sampleRate: focusVoice?.voice?.sampleRate ?? auditionData.sampleRate,
@@ -394,6 +415,7 @@ function Shell({ core }: { core: Core }) {
       note,
       velocity,
       ...(focusVoice?.voice ? { dca: focusVoice.voice.dca } : {}),
+      ...(follow ? { dcaFollow: follow } : {}),
       ...(loop ? { loop } : {}),
     });
     heldNotes.current.set(note, { release, fromMIDI });
