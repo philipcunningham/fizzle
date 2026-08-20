@@ -4,7 +4,8 @@
 // test: a test that reads its expectations out of the implementation
 // pins whatever bug the implementation has.
 import { describe, expect, it } from "vitest";
-import { stageSeconds } from "../src/ui/dca";
+import type { EnvelopeSnapshot } from "../src/boundary/contract";
+import { attack, release, stageSeconds } from "../src/ui/dca";
 
 /** The full 0 to 255 span, which is what the worked figures describe. */
 const FULL = 255;
@@ -60,5 +61,72 @@ describe("how long a stage takes", () => {
 
   it("costs nothing when the level does not move", () => {
     expect(stageSeconds(120, 120, 40)).toBe(0);
+  });
+});
+
+/** A voice's envelope, in the display units the snapshot carries. */
+function envelope(over: Partial<EnvelopeSnapshot> = {}): EnvelopeSnapshot {
+  return {
+    sustain: 1,
+    end: 2,
+    rates: [99, 60, 60, 50, 50, 50, 50, 50],
+    stops: [99, 70, 0, 0, 0, 0, 0, 0],
+    ...over,
+  };
+}
+
+describe("the stages a held key runs", () => {
+  it("runs stage zero through the sustain stage, and stops there", () => {
+    const segments = attack(envelope({ sustain: 2 }));
+    expect(segments).toHaveLength(3);
+  });
+
+  // Stops are display units; the level a segment reaches is that stop
+  // as a fraction of full scale.
+  it("reaches each stage's own stop level", () => {
+    const [first, second] = attack(envelope());
+    expect(first?.level).toBeCloseTo(1, 2);
+    expect(second?.level).toBeCloseTo(70 / 99, 1);
+  });
+
+  it("holds nothing back for a voice whose sustain is stage zero", () => {
+    expect(attack(envelope({ sustain: 0 }))).toHaveLength(1);
+  });
+});
+
+describe("the stages a released key runs", () => {
+  // The ordinary case: sustain plus one through the end stage.
+  it("runs from after the sustain stage to the end stage", () => {
+    const segments = release(envelope({ sustain: 1, end: 3 }), 0.7, true);
+    expect(segments).toHaveLength(2);
+  });
+
+  // Note on forces the end stage falling to silence at F000:1351,
+  // whatever the file stores for it.
+  it("always ends at silence, whatever the stored stop says", () => {
+    const env = envelope({ sustain: 1, end: 2, stops: [99, 70, 88, 0, 0, 0, 0, 0] });
+    const segments = release(env, 0.7, true);
+    expect(segments.at(-1)?.level).toBe(0);
+  });
+
+  // A sustain pointer past the end stage leaves nothing to run, which
+  // the factory piano does with Sus 7 and End 4.
+  it("has no stages when the sustain sits past the end", () => {
+    expect(release(envelope({ sustain: 7, end: 4 }), 0.5, true)).toHaveLength(0);
+  });
+
+  // Released before the sustain stage was reached, the firmware jumps
+  // straight to the end stage at F000:1512 and runs it alone.
+  it("runs the end stage alone when the key came up early", () => {
+    const segments = release(envelope({ sustain: 1, end: 3 }), 0.4, false);
+    expect(segments).toHaveLength(1);
+    expect(segments[0]?.level).toBe(0);
+  });
+
+  it("times the first release stage from where the note actually was", () => {
+    const env = envelope({ sustain: 0, end: 1, rates: [99, 30, 60, 50, 50, 50, 50, 50] });
+    const fromHigh = release(env, 1, true)[0]?.seconds ?? 0;
+    const fromLow = release(env, 0.25, true)[0]?.seconds ?? 0;
+    expect(fromLow).toBeLessThan(fromHigh);
   });
 });
