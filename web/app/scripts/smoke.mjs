@@ -403,6 +403,11 @@ await step("a press schedules the firmware's envelope (WASM core)", async () => 
       window.__env.push({ kind: "ramp", value, time });
       return window.__ramp.call(this, value, time);
     };
+    window.__exp = AudioParam.prototype.exponentialRampToValueAtTime;
+    AudioParam.prototype.exponentialRampToValueAtTime = function (value, time) {
+      window.__env.push({ kind: "ramp", value, time });
+      return window.__exp.call(this, value, time);
+    };
   });
 
   let log;
@@ -441,13 +446,18 @@ await step("a press schedules the firmware's envelope (WASM core)", async () => 
     await page.evaluate(() => {
       AudioParam.prototype.setValueAtTime = window.__hold;
       AudioParam.prototype.linearRampToValueAtTime = window.__ramp;
+      AudioParam.prototype.exponentialRampToValueAtTime = window.__exp;
       delete window.__hold;
       delete window.__ramp;
+      delete window.__exp;
       delete window.__env;
     });
   }
 
-  const start = log.find((e) => e.kind === "hold" && e.value === 0);
+  // The note opens at the code a stop of zero writes, which is 57 dB
+  // down rather than silence, so the note on is the first hold event
+  // rather than a zero.
+  const start = log.find((e) => e.kind === "hold");
   const ramps = log.filter((e) => e.kind === "ramp");
   if (!start) throw new Error("the press scheduled no note on");
   if (ramps.length !== 2) {
