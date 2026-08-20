@@ -37,15 +37,15 @@ which is 32 banks, so 2 MB is the hardware's ceiling.
 
 Everything that spends memory then measures against `memsize`.
 `length_limit` at `F000:7A74` computes the remaining recording time as
-`memsize << 15` samples, less what is used. It converts that to tenths
-of a second by dividing by 360, which is 36,000 samples per second
-times 0.01.
+`memsize << 15` samples, less what is used. It converts that to
+hundredths of a second by dividing by 360, which is 36,000 samples per
+second times 0.01. The Casio spec calls the same unit 10 ms.
 
 ## The published times are that arithmetic
 
 Casio's own figures are 14.5 seconds at 36 kHz for 1 MB and 29.1 for
-2 MB. At 16 banks the firmware's calculation gives 14.56, and at 32 it
-gives 29.13. The usable ceiling is therefore the whole nominal byte
+2 MB. At 16 banks the firmware returns 1,456 hundredths, which is
+14.56 seconds, and at 32 banks 2,913, which is 29.13. The usable ceiling is therefore the whole nominal byte
 count, with nothing held back, so a tool can measure against it exactly.
 
 ## What the hardware reported
