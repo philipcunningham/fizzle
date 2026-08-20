@@ -5,6 +5,17 @@
 // left, so neither ever reads past 100 and full is always zero.
 import { IMAGE_SIZE } from "../boundary/contract";
 
+/**
+ * What an FZ can hold. The FZ-1 shipped with 1 MB and reaches 2 MB with
+ * Casio's expansion card; the rack units shipped with 2 MB. Nothing
+ * holds more: only five bits of the wave memory bank register reach
+ * memory, which is 32 banks of 64 KB.
+ */
+export const MEMORY_CHOICES = [
+  { bytes: 1024 * 1024, label: "1 MB" },
+  { bytes: 2 * 1024 * 1024, label: "2 MB" },
+];
+
 interface Props {
   usedBytes: number;
   disks: number;

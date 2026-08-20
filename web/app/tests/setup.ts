@@ -52,3 +52,31 @@ Element.prototype.hasPointerCapture = function hasPointerCapture(
 ): boolean {
   return captured.get(this)?.has(pointerId) ?? false;
 };
+
+// jsdom serves the document from an opaque origin, which has no web
+// storage at all, so a preference the browser keeps would be untestable
+// and every test would exercise only the path taken when storage is
+// refused. A minimal implementation stands in, and the code that uses
+// it still guards, because a locked down profile does refuse.
+// jsdom declares the property and leaves it undefined on an opaque
+// origin, so the test is on the value rather than the key.
+if (typeof globalThis.localStorage === "undefined") {
+  const entries = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return entries.size;
+    },
+    clear: () => {
+      entries.clear();
+    },
+    getItem: (key) => entries.get(key) ?? null,
+    key: (i) => [...entries.keys()][i] ?? null,
+    removeItem: (key) => {
+      entries.delete(key);
+    },
+    setItem: (key, value) => {
+      entries.set(key, value);
+    },
+  };
+  Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
+}

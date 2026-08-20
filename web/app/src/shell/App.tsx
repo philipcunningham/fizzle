@@ -27,7 +27,10 @@ import { EffectsScreen } from "../screens/EffectsScreen";
 import { NoInstrumentPanel } from "../screens/NoInstrumentPanel";
 import { StartScreen } from "../screens/StartScreen";
 import { VoiceEditor } from "../screens/VoiceEditor";
-import { CapacityBar } from "../ui/CapacityBar";
+import { CapacityBar, MEMORY_CHOICES } from "../ui/CapacityBar";
+
+/** Where the declared machine is kept between sessions. */
+const MEMORY_KEY = "fizzle.sampleMemory";
 import { Keyboard } from "../ui/Keyboard";
 import { createAudition } from "../ui/audition";
 import { clamp, formatBytes } from "../ui/format";
@@ -543,6 +546,41 @@ function Shell({ core }: { core: Core }) {
     if (apply(result)) setDirty(true);
     return result.ok;
   };
+
+  // The sampler's memory is a fact about the machine, not an edit to
+  // the document, so it neither dirties nor enters history. It outlives
+  // the session in local storage, which never leaves the browser, where
+  // a cookie would ride every asset request to the host (Q4). Storage
+  // that refuses costs the memory of the choice and nothing else.
+  const [memoryBytes, setMemoryBytes] = useState(MEMORY_CHOICES[0]?.bytes ?? 1024 * 1024);
+  const setMemory = (bytes: number) => {
+    setMemoryBytes(bytes);
+    try {
+      localStorage.setItem(MEMORY_KEY, String(bytes));
+    } catch {
+      // A locked down profile just means it isn't remembered.
+    }
+    void core.setSampleMemory(bytes).then((r) => {
+      // The figure changes no bytes, so the core keeps the revision the
+      // snapshot query is keyed by. The reading is the core's answer,
+      // so it still has to be re-read.
+      if (apply(r)) void queryClient.invalidateQueries({ queryKey: ["snapshot"] });
+    });
+  };
+  useEffect(() => {
+    let saved = 0;
+    try {
+      saved = Number(localStorage.getItem(MEMORY_KEY) ?? 0);
+    } catch {
+      saved = 0;
+    }
+    if (saved > 0) {
+      setMemoryBytes(saved);
+      void core.setSampleMemory(saved).then(apply);
+    }
+    // Once, at boot, before the first estimate can be asked for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Undo and redo move the document away from what was last written, so
   // they dirty it too, or a redone edit is discarded silently at close.
@@ -1463,6 +1501,8 @@ function Shell({ core }: { core: Core }) {
             }}
             onBrowse={() => anyRef.current?.click()}
             onDropFiles={placeDrop}
+            memoryBytes={memoryBytes}
+            onSetMemory={setMemory}
           />
         ) : (
           <ErrorBoundary onExport={exportImage}>
