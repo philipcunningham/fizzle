@@ -356,6 +356,98 @@ await step("a held key repeats the voice's sustain loop (WASM core)", async () =
   await page.getByText("repeats while held").waitFor({ state: "detached", timeout: 5000 });
 });
 
+await step("a press schedules the firmware's envelope (WASM core)", async () => {
+  // The plan's own verification step. A known envelope goes in through
+  // the grid, and what comes back is what the browser's own AudioParam
+  // was told. Nothing here recomputes the model: 0.387 s is the
+  // disassembly's figure for a full sweep at panel 50, so a wrong
+  // stepper fails this even when its unit tests agree with it.
+  const commit = async (label, value) => {
+    const field = page.getByLabel(label);
+    await field.fill(value);
+    await field.press("Enter");
+    await page.waitForFunction(
+      ([l, v]) => document.querySelector(`[aria-label="${l}"]`)?.value === v,
+      [label, value],
+      { timeout: 5000 },
+    );
+  };
+  // Stage 1 sweeps to full at panel 50, stage 2 holds there, and the
+  // sustain sits on stage 2, so a held key runs exactly two stages.
+  await commit("DCA envelope stage 1 rate", "50");
+  await commit("DCA envelope stage 1 level", "99");
+  await commit("DCA envelope stage 2 rate", "50");
+  await commit("DCA envelope stage 2 level", "99");
+  // The mark is a document edit, so the press has to wait for the core
+  // to answer or it plays the envelope as it was.
+  await page.getByRole("button", { name: "DCA envelope set sustain stage 2" }).click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".marked-sus")?.getAttribute("aria-label") ===
+      "DCA envelope set sustain stage 2",
+    undefined,
+    { timeout: 5000 },
+  );
+
+  // Note on holds at zero, then ramps once per stage, so one ordered
+  // log carries both the start time and the stages.
+  await page.evaluate(() => {
+    window.__env = [];
+    window.__hold = AudioParam.prototype.setValueAtTime;
+    window.__ramp = AudioParam.prototype.linearRampToValueAtTime;
+    AudioParam.prototype.setValueAtTime = function (value, time) {
+      window.__env.push({ kind: "hold", value, time });
+      return window.__hold.call(this, value, time);
+    };
+    AudioParam.prototype.linearRampToValueAtTime = function (value, time) {
+      window.__env.push({ kind: "ramp", value, time });
+      return window.__ramp.call(this, value, time);
+    };
+  });
+
+  let log;
+  try {
+    const key = page.locator('[data-testid="key-48"]');
+    // The key reads velocity off click height, and the envelope's own
+    // velocity scaling bends every stop below full at a light press.
+    // The bottom of the key is the full press this figure describes.
+    const box = await key.boundingBox();
+    if (!box) throw new Error("the keyboard has no key 48");
+    await key.dispatchEvent("pointerdown", {
+      clientY: box.y + box.height - 2,
+      clientX: box.x + box.width / 2,
+      pointerId: 1,
+    });
+    await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 5000 });
+    log = await page.evaluate(() => window.__env);
+    await key.dispatchEvent("pointerup", { pointerId: 1 });
+  } finally {
+    await page.evaluate(() => {
+      AudioParam.prototype.setValueAtTime = window.__hold;
+      AudioParam.prototype.linearRampToValueAtTime = window.__ramp;
+      delete window.__hold;
+      delete window.__ramp;
+      delete window.__env;
+    });
+  }
+
+  const start = log.find((e) => e.kind === "hold" && e.value === 0);
+  const ramps = log.filter((e) => e.kind === "ramp");
+  if (!start) throw new Error("the press scheduled no note on");
+  if (ramps.length !== 2) {
+    throw new Error(`the press scheduled ${ramps.length} attack ramps, want 2`);
+  }
+  const first = ramps[0].time - start.time;
+  if (Math.abs(first - 0.387) > 0.03) {
+    throw new Error(`stage 1 takes ${first.toFixed(3)} s, want 0.387 s at panel 50`);
+  }
+  // Stage 2 starts where stage 1 stopped, so it holds rather than moves.
+  if (Math.abs(ramps[1].value - ramps[0].value) > 1e-9) {
+    throw new Error("stage 2 holds the sustain level, so it should not move");
+  }
+  await page.getByRole("button", { name: "Undo" }).click();
+});
+
 await step("the import estimate names the machine (WASM core)", async () => {
   // The estimate crosses the boundary through a map built field by
   // field, so a figure the fake supplies can be absent in the browser
