@@ -1247,10 +1247,6 @@ function Shell({ core }: { core: Core }) {
       closeDialog();
       anyRef.current?.click();
     },
-    onImportFolder: () => {
-      closeDialog();
-      folderRef.current?.click();
-    },
     onDropImport: (transfer) => {
       // Routes like the workspace drop; any prompt it needs replaces
       // the import dialog.
