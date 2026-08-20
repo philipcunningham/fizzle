@@ -179,6 +179,95 @@ describe("scaling by velocity and key", () => {
     expect(wayUp.at(-1)?.level).not.toBeCloseTo(atCentre.at(-1)?.level ?? 0, 3);
   });
 
+  // The coefficients themselves, each figure worked from the note on
+  // arithmetic rather than from this module. Directional assertions
+  // pass whichever way a shift or a sign goes, so these state the
+  // number the firmware arrives at.
+  describe("the arithmetic note on performs", () => {
+    // Stops are scaled by ((key - centre) * dca_kf) >> 4, an arithmetic
+    // shift, added to the stop byte and clamped to 0 to 255.
+    it("shifts the key follow on a stop by four places, and floors it", () => {
+      const env = envelope({ sustain: 0, stops: [50, 0, 0, 0, 0, 0, 0, 0] });
+      // stopByte(50) is 127. Three octaves up: (36 * 15) >> 4 is 33.
+      const up = attack(env, { ...NO_SCALING, note: 96, levelKF: 15 });
+      expect(up[0]?.level).toBeCloseTo((127 + 33) / 255, 6);
+      // Three octaves down: (-36 * 15) >> 4 is -34, not -33. An
+      // arithmetic shift floors where a division truncates.
+      const down = attack(env, { ...NO_SCALING, note: 24, levelKF: 15 });
+      expect(down[0]?.level).toBeCloseTo((127 - 34) / 255, 6);
+    });
+
+    // Velocity enters as min(velocity + 0x10, 0x7F), and the stop term
+    // is 2 * (((vel * vel_dca_kf * 2) >> 8) - vel_dca_kf).
+    it("doubles the velocity term on a stop, and normalises it away at zero", () => {
+      const env = envelope({ sustain: 0, stops: [99, 0, 0, 0, 0, 0, 0, 0] });
+      // A press of 1 enters as 17: ((17 * 80 * 2) >> 8) is 10, less 80
+      // is -70, doubled is -140, from a full 255.
+      const soft = attack(env, { ...NO_SCALING, velocity: 1, velLevel: 80 });
+      expect(soft[0]?.level).toBeCloseTo((255 - 140) / 255, 6);
+      // A full press lands one doubled step short of the stored stop,
+      // because this path carries no rounding correction: 79 less 80,
+      // doubled, is -2.
+      const hard = attack(env, { ...NO_SCALING, velocity: 127, velLevel: 80 });
+      expect(hard[0]?.level).toBeCloseTo((255 - 2) / 255, 6);
+    });
+
+    it("saturates the velocity offset rather than wrapping it", () => {
+      const env = envelope({ sustain: 0, stops: [99, 0, 0, 0, 0, 0, 0, 0] });
+      // Without the 0x10 offset a press of 1 would land on 255 - 254.
+      const soft = attack(env, { ...NO_SCALING, velocity: 1, velLevel: 127 });
+      expect(soft[0]?.level).toBeCloseTo((255 - 222) / 255, 6);
+    });
+
+    // A negative sensitivity skips the normalising subtraction, which
+    // inverts the curve: the softer press is the louder one. The shift
+    // stays arithmetic over a negative product, so it floors.
+    it("inverts the press for a negative sensitivity", () => {
+      const env = envelope({ sustain: 0, stops: [99, 0, 0, 0, 0, 0, 0, 0] });
+      // ((17 * -80 * 2) >> 8) is -11, doubled is -22.
+      const soft = attack(env, { ...NO_SCALING, velocity: 1, velLevel: -80 });
+      expect(soft[0]?.level).toBeCloseTo((255 - 22) / 255, 6);
+      // ((127 * -80 * 2) >> 8) is -80, doubled is -160.
+      const hard = attack(env, { ...NO_SCALING, velocity: 127, velLevel: -80 });
+      expect(hard[0]?.level).toBeCloseTo((255 - 160) / 255, 6);
+      expect(soft[0]?.level ?? 0).toBeGreaterThan(hard[0]?.level ?? 0);
+    });
+
+    it("inverts the rate for a negative sensitivity too", () => {
+      const env = envelope({ sustain: 0, rates: [50, 0, 0, 0, 0, 0, 0, 0] });
+      // (-11 + 1) >> 1 is -5, so byte 64 becomes 59, panel 46.
+      const soft = attack(env, { ...NO_SCALING, velocity: 1, velRate: -80 });
+      expect(soft[0]?.seconds).toBeCloseTo(stageSeconds(0, 255, 46), 9);
+      // (-80 + 1) >> 1 is -40, so byte 64 becomes 24, panel 18.
+      const hard = attack(env, { ...NO_SCALING, velocity: 127, velRate: -80 });
+      expect(hard[0]?.seconds).toBeCloseTo(stageSeconds(0, 255, 18), 9);
+    });
+
+    // Rates are scaled by ((key - centre) * dca_rs) >> 7, seven places
+    // rather than four, so the same key follow moves a rate far less.
+    it("shifts the key follow on a rate by seven places", () => {
+      const env = envelope({ sustain: 0, rates: [50, 0, 0, 0, 0, 0, 0, 0] });
+      // Rate byte 64, plus (36 * 15) >> 7 which is 4, is byte 68. The
+      // panel value that maps to byte 68 is 53.
+      const up = attack(env, { ...NO_SCALING, note: 96, rateKF: 15 });
+      expect(up[0]?.seconds).toBeCloseTo(stageSeconds(0, 255, 53), 9);
+    });
+
+    // The rate term is (((vel * vel_dca_rs * 2) >> 8) + 1 - vel_dca_rs)
+    // >> 1. The + 1 makes a full press exact, so the stored rate is
+    // what a full press runs.
+    it("leaves a full press on the stored rate, and slows a soft one", () => {
+      const env = envelope({ sustain: 0, rates: [50, 0, 0, 0, 0, 0, 0, 0] });
+      const hard = attack(env, { ...NO_SCALING, velocity: 127, velRate: 80 });
+      expect(hard[0]?.seconds).toBeCloseTo(stageSeconds(0, 255, 50), 9);
+      // A press of 1: ((17 * 80 * 2) >> 8) is 10, plus 1 less 80 is
+      // -69, halved with an arithmetic shift is -35. Byte 64 - 35 is
+      // 29, which the panel shows as 22.
+      const soft = attack(env, { ...NO_SCALING, velocity: 1, velRate: 80 });
+      expect(soft[0]?.seconds).toBeCloseTo(stageSeconds(0, 255, 22), 9);
+    });
+  });
+
   it("never lets a scaled stage stall or overflow", () => {
     const env = envelope({
       rates: [1, 1, 1, 1, 1, 1, 1, 1],
