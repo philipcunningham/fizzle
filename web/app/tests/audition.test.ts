@@ -19,6 +19,21 @@ interface Scheduled {
   started: boolean;
   stopped: boolean;
   gains: number[];
+  loop: boolean;
+  loopStart: number;
+  loopEnd: number;
+}
+
+function blank(): Scheduled {
+  return {
+    rate: 0,
+    started: false,
+    stopped: false,
+    gains: [],
+    loop: false,
+    loopStart: 0,
+    loopEnd: 0,
+  };
 }
 
 function fakeContext(record: Scheduled) {
@@ -53,6 +68,24 @@ function fakeContext(record: Scheduled) {
           record.rate = v;
         },
       },
+      get loop() {
+        return record.loop;
+      },
+      set loop(v: boolean) {
+        record.loop = v;
+      },
+      get loopStart() {
+        return record.loopStart;
+      },
+      set loopStart(v: number) {
+        record.loopStart = v;
+      },
+      get loopEnd() {
+        return record.loopEnd;
+      },
+      set loopEnd(v: number) {
+        record.loopEnd = v;
+      },
       connect: () => undefined,
       start: () => {
         record.started = true;
@@ -68,7 +101,7 @@ function fakeContext(record: Scheduled) {
 describe("audition engine", () => {
   it("creates the context only on the first play, not on construction", () => {
     let created = 0;
-    const record: Scheduled = { rate: 0, started: false, stopped: false, gains: [] };
+    const record = blank();
     const engine = createAudition(() => {
       created += 1;
       return fakeContext(record);
@@ -93,7 +126,7 @@ describe("audition engine", () => {
   });
 
   it("schedules the source at the exact playback rate and starts it", () => {
-    const record: Scheduled = { rate: 0, started: false, stopped: false, gains: [] };
+    const record = blank();
     const engine = createAudition(() => fakeContext(record));
     engine.play({
       pcm: new Int16Array(64),
@@ -108,7 +141,7 @@ describe("audition engine", () => {
   });
 
   it("release stops the source", () => {
-    const record: Scheduled = { rate: 0, started: false, stopped: false, gains: [] };
+    const record = blank();
     const engine = createAudition(() => fakeContext(record));
     const release = engine.play({
       pcm: new Int16Array(64),
@@ -133,6 +166,82 @@ describe("audition engine", () => {
       velocity: 1,
     });
     release();
+  });
+});
+
+// A voice that names a sustain loop repeats it for as long as the key
+// is held, which is what the sampler does. Loop positions arrive in
+// voice-relative frames; Web Audio wants seconds into the buffer.
+describe("the sustain loop repeats while the key is held", () => {
+  it("hands Web Audio the loop bounds in seconds", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    engine.play({
+      pcm: new Int16Array(18000),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      loop: { start: 4000, end: 12000 },
+    });
+    expect(record.loop).toBe(true);
+    expect(record.loopStart).toBeCloseTo(4000 / 18000, 10);
+    expect(record.loopEnd).toBeCloseTo(12000 / 18000, 10);
+  });
+
+  it("plays a voice with no sustain loop straight through", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    engine.play({
+      pcm: new Int16Array(18000),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+    });
+    expect(record.loop).toBe(false);
+  });
+
+  // A freshly imported one shot carries start equal to end, so this is
+  // the common shape rather than a corner case.
+  it("ignores a loop whose end sits at or below its start", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    engine.play({
+      pcm: new Int16Array(18000),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      loop: { start: 9000, end: 9000 },
+    });
+    expect(record.loop).toBe(false);
+    engine.play({
+      pcm: new Int16Array(18000),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      loop: { start: 9000, end: 200 },
+    });
+    expect(record.loop).toBe(false);
+  });
+
+  // Looping doesn't change the release: the fade still ends the note,
+  // and a source left looping would sound forever.
+  it("still stops on release", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    const release = engine.play({
+      pcm: new Int16Array(18000),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      loop: { start: 4000, end: 12000 },
+    });
+    release();
+    expect(record.stopped).toBe(true);
   });
 });
 
