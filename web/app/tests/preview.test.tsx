@@ -597,12 +597,17 @@ describe("the envelope follows the press", () => {
       return Math.max(...recorded.gains);
     };
 
-    // Stored sensitivity is zero, so the press cannot bend anything.
+    // An imported voice carries the hardware's own default
+    // sensitivity, so the press already bends the envelope.
+    expect(await peakOf(20)).toBeLessThan(await peakOf(120));
+
+    // Turned off, it cannot: the press reaches the envelope only
+    // through this field.
+    await commitField("To amplitude", "0");
     expect(await peakOf(20)).toBeCloseTo(await peakOf(120), 6);
 
-    await commitField("To amplitude", "90");
-
-    // Now it can, and a soft press is quieter than a hard one.
+    // And turned up again it bends further than the default did.
+    await commitField("To amplitude", "120");
     const soft = await peakOf(20);
     const hard = await peakOf(120);
     expect(soft).toBeLessThan(hard);

@@ -494,6 +494,69 @@ await step("a press schedules the firmware's envelope (WASM core)", async () => 
   );
 });
 
+await step("velocity bends the envelope over the real core (WASM core)", async () => {
+  // The preview reads four schema ids by name to bend a note by the
+  // press and the key. Both the fake and the shell can agree on a
+  // stale name, so only a press over the real core catches a rename
+  // on the Go side. A full press and a soft one have to differ, and
+  // they only differ through this field.
+  // The label is shared with the stepper's own controls, so this
+  // takes the field itself.
+  const field = page.locator('input[aria-label="To amplitude"]');
+  await field.fill("100");
+  await field.press("Enter");
+  await page.waitForFunction(
+    () => document.querySelector('input[aria-label="To amplitude"]')?.value === "100",
+    undefined,
+    { timeout: 5000 },
+  );
+
+  const peakAt = async (fraction) => {
+    await page.evaluate(() => {
+      window.__peak = 0;
+      window.__hold = AudioParam.prototype.setValueAtTime;
+      window.__exp = AudioParam.prototype.exponentialRampToValueAtTime;
+      const see = (v) => {
+        window.__peak = Math.max(window.__peak, v);
+      };
+      AudioParam.prototype.setValueAtTime = function (v, t) {
+        see(v);
+        return window.__hold.call(this, v, t);
+      };
+      AudioParam.prototype.exponentialRampToValueAtTime = function (v, t) {
+        see(v);
+        return window.__exp.call(this, v, t);
+      };
+    });
+    const key = page.locator('[data-testid="key-48"]');
+    const box = await key.boundingBox();
+    if (!box) throw new Error("the keyboard has no key 48");
+    await key.dispatchEvent("pointerdown", {
+      clientX: box.x + box.width / 2,
+      clientY: box.y + box.height * fraction,
+      pointerId: 1,
+    });
+    await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 5000 });
+    await key.dispatchEvent("pointerup", { pointerId: 1 });
+    return page.evaluate(() => {
+      const peak = window.__peak;
+      AudioParam.prototype.setValueAtTime = window.__hold;
+      AudioParam.prototype.exponentialRampToValueAtTime = window.__exp;
+      delete window.__hold;
+      delete window.__exp;
+      delete window.__peak;
+      return peak;
+    });
+  };
+
+  const soft = await peakAt(0.08);
+  const hard = await peakAt(0.99);
+  if (!(soft < hard)) {
+    throw new Error(`a soft press peaked at ${soft} against ${hard} for a hard one`);
+  }
+  await page.getByRole("button", { name: "Undo" }).click();
+});
+
 await step("the import estimate names the machine (WASM core)", async () => {
   // The estimate crosses the boundary through a map built field by
   // field, so a figure the fake supplies can be absent in the browser
