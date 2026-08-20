@@ -36,11 +36,9 @@ Casio's own figures are 14.5 seconds at 36 kHz for 1 MB and 29.1 for 2 MB. At 16
 
 An FZ-1 owner's disk held one voice of 33 seconds at 18 kHz, which is 1,188,000 bytes of audio. The sampler refused it with `NO MEMORY SPACE`. The instrument sits 139,424 bytes past 1 MB and well inside 2 MB, so the machine was unexpanded. The voice block loader at `F000:C626` computes `memsize << 15` as its first act and tracks the load against it. The error came from that comparison.
 
-## What fizzle implements
+## A disk isn't a load
 
-`pkg/webcore` takes the figure from the user, defaulting to 1 MB because a disk built for 1 MB loads on any FZ. It bounds what fizzle reports and never what it refuses: `disk.MaxSampleRAM` remains the hardware's 2 MB and still gates `voicebuild.SplitDump`.
-
-The reading measures the dump's audio area, which is what loads as a unit. Loose voice files on the same floppy are loaded separately. A disk can therefore hold more than the machine has resident.
+A full dump loads as a unit, so the audio area of that one file is what has to fit. Loose voice files and bank dumps on the same floppy are loaded separately. A floppy can therefore carry more audio than the machine holds at once.
 
 ## Open questions
 
