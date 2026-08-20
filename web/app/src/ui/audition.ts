@@ -5,7 +5,13 @@
 // audio failure never blocks editing.
 import type { EnvelopeSnapshot } from "../boundary/contract";
 import type { Scaling } from "./dca";
-import { attack, release, totalSeconds } from "./dca";
+import { attack, levelAt, release, totalSeconds } from "./dca";
+
+/**
+ * The longest release the preview holds a source open for. The
+ * envelope model is faithful past this; the scheduler is not.
+ */
+const MAX_TAIL_SECONDS = 30;
 
 /** Equal temperament: exact, and unit tested (the plan asks). */
 export function playbackRate(note: number, root: number): number {
@@ -123,11 +129,7 @@ export function createAudition(
       }
 
       const gain = ctx.createGain();
-      const level = Math.max(0.05, options.velocity / 127);
       const now = ctx.currentTime;
-      gain.gain.setValueAtTime(0, now);
-      // The envelope's own scaling covers the press, so velocity is
-      // only a level when the voice carries no envelope at all.
       const scaling: Scaling | undefined =
         options.dca && options.dcaFollow
           ? {
@@ -137,6 +139,12 @@ export function createAudition(
               ...options.dcaFollow,
             }
           : undefined;
+      // Velocity reaches a voice through its own sensitivity fields,
+      // which scale every stop at note on. Applying it again here as a
+      // master level would square the dynamics, so it only stands in
+      // when there is no envelope to carry it.
+      const level = scaling ? 1 : Math.max(0.05, options.velocity / 127);
+      gain.gain.setValueAtTime(0, now);
       const attackStages = options.dca ? attack(options.dca, scaling) : [];
       const attackSeconds = totalSeconds(attackStages);
       if (options.dca) {
@@ -159,16 +167,17 @@ export function createAudition(
         released = true;
         try {
           const at = ctx.currentTime;
+          // Where the envelope had got to, from the model rather than
+          // from the parameter: cancelScheduledValues drops the ramp in
+          // flight, so a read back here gives the stop before it.
+          const from = options.dca ? levelAt(attackStages, at - now) : 1;
           gain.gain.cancelScheduledValues(at);
-          const from = gain.gain.value;
-          gain.gain.setValueAtTime(from, at);
+          gain.gain.setValueAtTime(from * level, at);
           // A key that comes up before the envelope reached its sustain
           // stage runs the end stage alone, so the engine has to know
           // which happened.
           const reached = at - now >= attackSeconds;
-          const releaseStages = options.dca
-            ? release(options.dca, from / Math.max(level, 0.0001), reached, scaling)
-            : [];
+          const releaseStages = options.dca ? release(options.dca, from, reached, scaling) : [];
           let t = at;
           for (const stage of releaseStages) {
             t += stage.seconds;
@@ -176,7 +185,13 @@ export function createAudition(
           }
           // A voice with no release stages keeps the short fade, which
           // is also what stops the click on a voice with no envelope.
-          const tail = releaseStages.length > 0 ? totalSeconds(releaseStages) : 0.05;
+          // The cap is the preview's own: a stage stored at a rate of
+          // zero runs for 174 s, and holding a source open that long
+          // for every soft press is not what a preview is for.
+          const tail =
+            releaseStages.length > 0
+              ? Math.min(totalSeconds(releaseStages), MAX_TAIL_SECONDS)
+              : 0.05;
           if (releaseStages.length === 0) gain.gain.linearRampToValueAtTime(0, at + 0.05);
           // Stop after the fade lands, and detach only once the source
           // ends: an immediate stop cuts at the current gain and clicks

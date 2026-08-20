@@ -20,9 +20,12 @@ interface Scheduled {
   started: boolean;
   stopped: boolean;
   gains: number[];
+  /** Every gain event in order, with the time it was scheduled for. */
+  events: { kind: "hold" | "ramp"; value: number; time: number }[];
   loop: boolean;
   loopStart: number;
   loopEnd: number;
+  stopAt: number | undefined;
 }
 
 function blank(): Scheduled {
@@ -31,9 +34,11 @@ function blank(): Scheduled {
     started: false,
     stopped: false,
     gains: [],
+    events: [],
     loop: false,
     loopStart: 0,
     loopEnd: 0,
+    stopAt: undefined,
   };
 }
 
@@ -41,8 +46,14 @@ function fakeContext(record: Scheduled) {
   const gainNode = {
     gain: {
       value: 1,
-      setValueAtTime: (v: number) => record.gains.push(v),
-      linearRampToValueAtTime: (v: number) => record.gains.push(v),
+      setValueAtTime: (v: number, t: number) => {
+        record.gains.push(v);
+        record.events.push({ kind: "hold", value: v, time: t });
+      },
+      linearRampToValueAtTime: (v: number, t: number) => {
+        record.gains.push(v);
+        record.events.push({ kind: "ramp", value: v, time: t });
+      },
       cancelScheduledValues: () => undefined,
     },
     connect: () => undefined,
@@ -91,8 +102,9 @@ function fakeContext(record: Scheduled) {
       start: () => {
         record.started = true;
       },
-      stop: () => {
+      stop: (at?: number) => {
         record.stopped = true;
+        record.stopAt = at;
       },
       onended: null,
     }),
@@ -349,11 +361,18 @@ describe("the DCA envelope reaches the scheduler", () => {
     stops: [99, 60, 0, 0, 0, 0, 0, 0],
   };
 
-  function ramps(record: Scheduled) {
-    return record.gains.length;
-  }
+  // The figures are the disassembly's, not this engine's: a full sweep
+  // takes 0.387 s at panel 50 and 2.301 s at panel 25. A ramp per stage
+  // is a count the old approximation also produced, so the assertion is
+  // when each ramp lands.
+  const sweep = {
+    sustain: 1,
+    end: 2,
+    rates: [50, 25, 50, 50, 50, 50, 50, 50],
+    stops: [99, 0, 0, 0, 0, 0, 0, 0],
+  };
 
-  it("schedules one ramp per attack stage", () => {
+  it("schedules each attack stage at the time the firmware takes", () => {
     const record = blank();
     const engine = createAudition(() => fakeContext(record));
     engine.play({
@@ -361,12 +380,39 @@ describe("the DCA envelope reaches the scheduler", () => {
       sampleRate: 18000,
       root: 60,
       note: 60,
-      velocity: 100,
-      dca: pluck,
+      velocity: 127,
+      dca: sweep,
     });
-    // One setValueAtTime to open at silence, then a ramp per stage to
-    // the sustain point.
-    expect(ramps(record)).toBe(1 + 2);
+    // Silence at note on, then a ramp per stage to the sustain point.
+    expect(record.events.map((e) => e.kind)).toEqual(["hold", "ramp", "ramp"]);
+    expect(record.events[0]?.time).toBe(0);
+    expect(record.events[1]?.time).toBeCloseTo(0.387, 2);
+    expect(record.events[2]?.time).toBeCloseTo(0.387 + 2.301, 2);
+  });
+
+  // Velocity reaches the envelope through the voice's own sensitivity
+  // fields, which scale every stop at note on. Applying it a second
+  // time as a master level would square the dynamics.
+  it("does not scale by velocity a second time", () => {
+    const flat = { levelKF: 0, rateKF: 0, velLevel: 0, velRate: 0 };
+    const peak = (velocity: number) => {
+      const record = blank();
+      const engine = createAudition(() => fakeContext(record));
+      engine.play({
+        pcm: new Int16Array(64),
+        sampleRate: 18000,
+        root: 60,
+        note: 60,
+        velocity,
+        dca: sweep,
+        dcaFollow: flat,
+      });
+      return Math.max(...record.gains);
+    };
+    // A voice with no velocity sensitivity plays at one loudness,
+    // which is what the hardware does.
+    expect(peak(1)).toBeCloseTo(1, 6);
+    expect(peak(127)).toBeCloseTo(1, 6);
   });
 
   it("holds the note until its release stages finish", () => {
@@ -415,11 +461,74 @@ describe("the DCA envelope reaches the scheduler", () => {
     release();
     // The source stops when the release finishes, not during it. The
     // model is tested on its own, so the assertion is that the engine
-    // honours whatever it says rather than a figure copied here.
-    const stages = releaseStages(pluck, 0.5 / (100 / 127), true);
+    // honours whatever it says rather than a figure copied here. This
+    // context's clock never moves, so the key comes up at note on:
+    // the first stage is instant, which puts the note at full, and
+    // nothing has reached the sustain stage yet.
+    const stages = releaseStages(pluck, 1, false);
     expect(stopArgs[0]).toBeCloseTo(totalSeconds(stages) + 0.01, 3);
     // And that is far beyond the fixed 60 ms fade it used to take.
     expect(stopArgs[0]).toBeGreaterThan(0.5);
+  });
+
+  // A context whose clock the test moves, so a key can come up partway
+  // through a stage.
+  function clocked(record: Scheduled, currentTime: { now: number }) {
+    const base = fakeContext(record);
+    return {
+      ...base,
+      get currentTime() {
+        return currentTime.now;
+      },
+    };
+  }
+
+  // Web Audio's cancelScheduledValues drops the ramp in flight, so the
+  // parameter's value reads back as the stop before it rather than the
+  // level the note had reached. The model knows where the envelope is,
+  // and that is what the release has to start from.
+  it("releases from the level the envelope had reached", () => {
+    const record = blank();
+    const clock = { now: 0 };
+    const engine = createAudition(() => clocked(record, clock));
+    const stop = engine.play({
+      pcm: new Int16Array(64),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 127,
+      dca: sweep,
+    });
+    // Halfway up a stage that the firmware takes 0.387 s to climb.
+    clock.now = 0.1935;
+    record.events.length = 0;
+    stop();
+    const hold = record.events.find((e) => e.kind === "hold");
+    expect(hold?.value).toBeCloseTo(0.5, 2);
+  });
+
+  // A stored rate of zero runs a stage for 174 s, and velocity rate
+  // scaling can stretch an ordinary one nearly as far. The preview
+  // holds a source open for the release, so it caps how long that is.
+  it("caps how long a release can hold the source open", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    const stop = engine.play({
+      pcm: new Int16Array(64),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 127,
+      dca: {
+        sustain: 0,
+        end: 1,
+        rates: [99, 0, 0, 0, 0, 0, 0, 0],
+        stops: [99, 0, 0, 0, 0, 0, 0, 0],
+      },
+    });
+    stop();
+    expect(record.stopAt).toBeGreaterThan(1);
+    expect(record.stopAt).toBeLessThanOrEqual(30.01);
   });
 
   it("keeps the short fade for a voice with no envelope", () => {
