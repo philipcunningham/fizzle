@@ -41,6 +41,8 @@ func snapshotJS(s webcore.Snapshot) map[string]any {
 			"label":         s.Disk.Label,
 			"usedBytes":     s.Disk.UsedBytes,
 			"capacityBytes": s.Disk.CapacityBytes,
+			"audioBytes":    s.Disk.AudioBytes,
+			"memoryBytes":   s.Disk.MemoryBytes,
 			"disks":         s.Disk.Disks,
 			"files":         files,
 		}
@@ -429,6 +431,9 @@ func main() {
 	})
 	core["setSlotLoopAttr"] = method(func(args []js.Value) map[string]any {
 		return snapOrErr(session.SetSlotLoopAttr(args[0].Int(), args[1].Int(), args[2].Int(), args[3].Int()))
+	})
+	core["setSampleMemory"] = method(func(args []js.Value) map[string]any {
+		return snapOrErr(session.SetSampleMemory(args[0].Int()))
 	})
 	core["setSlotLoopSelect"] = method(func(args []js.Value) map[string]any {
 		return snapOrErr(session.SetSlotLoopSelect(args[0].Int(), args[1].Int(), args[2].Int()))

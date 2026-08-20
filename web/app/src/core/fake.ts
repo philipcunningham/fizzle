@@ -296,6 +296,8 @@ export const fakeCalls: { wavFolderChannel: Channel | null; sfzChannel: Channel 
 
 export function createFakeCore(): Core {
   let revision = 0;
+  // The core's default: the machine Casio sold most of.
+  let memoryBytes = 1024 * 1024;
   let state: FakeState = emptyState();
   fakeCalls.wavFolderChannel = null;
   fakeCalls.sfzChannel = null;
@@ -329,6 +331,13 @@ export function createFakeCore(): Core {
         : {
             label: state.label,
             usedBytes: state.used,
+            // A clone shares an earlier slot's samples, so it costs the
+            // sampler nothing and is not counted twice.
+            audioBytes: (state.instrument?.voices ?? []).reduce(
+              (sum, v) => sum + (v.sharesAudio ? 0 : (v.voice?.frames ?? 0) * 2),
+              0,
+            ),
+            memoryBytes,
             capacityBytes: (state.bytes2 ? 2 : 1) * IMAGE_SIZE,
             disks: state.bytes2 ? 2 : 1,
             ...(state.missingDisk ? { missingDisk: state.missingDisk } : {}),
@@ -733,11 +742,11 @@ export function createFakeCore(): Core {
       }
       const next = clone(state);
       next.label ??= "FIZZLE";
-      joinVoice(next, voiceName(filename));
       // The dump grows by the converted audio, so a later estimate
       // sees the room this import used up, as the core's would.
       const shape = wavShape(wav);
       const grown = shape ? convertedBytes(shape, rate) : wav.length;
+      joinVoice(next, voiceName(filename), { frames: Math.round(grown / 2), rate });
       const dump = next.files.find((f) => f.type === "full");
       if (dump) dump.sizeBytes += grown;
       next.used += grown;
@@ -1041,6 +1050,20 @@ export function createFakeCore(): Core {
       return Promise.resolve(commit(next));
     },
 
+    setSampleMemory(bytes: number) {
+      if (bytes < 1024 * 1024 || bytes > 2 * 1024 * 1024) {
+        return Promise.resolve(
+          err(
+            "invalid-value",
+            `sample memory ${String(bytes)} is outside the 1 MB to 2 MB an FZ holds`,
+          ),
+        );
+      }
+      // The machine is not the document: no revision, no history.
+      memoryBytes = bytes;
+      return Promise.resolve(ok(snap()));
+    },
+
     setSlotLoopSelect(slot: number, sustain: number, release: number) {
       const next = clone(state);
       const detail = next.instrument?.voices.find((v) => v.slot === slot)?.voice;
@@ -1248,18 +1271,33 @@ function convertedBytes(shape: { rate: number; frames: number }, rate: number): 
  * mapped to a fresh area (membership is reference on the FZ format),
  * creating the instrument when the document has none.
  */
-function joinVoice(next: FakeState, name: string): FakeState {
+function joinVoice(
+  next: FakeState,
+  name: string,
+  audio?: { frames: number; rate: number },
+): FakeState {
+  // The core's imported voice carries its own audio, and the memory
+  // reading is the sum of it, so a voice landed without detail here
+  // would let a test pin a figure the product never reports.
+  const detail = audio
+    ? { ...defaultVoiceDetail(audio.frames), sampleRate: audio.rate }
+    : undefined;
   if (!next.instrument) {
     next.instrument = {
       fileName: "FULL-DATA-FZ",
       banks: [{ name: "BANK A", areas: [fakeArea(0, name)] }],
-      voices: [{ slot: 0, name, referenced: true }],
+      voices: [{ slot: 0, name, referenced: true, ...(detail ? { voice: detail } : {}) }],
     };
     next.files = [{ name: "FULL-DATA-FZ", type: "full", sizeBytes: 4096 }];
     return next;
   }
   const slot = next.instrument.voices.length;
-  next.instrument.voices.push({ slot, name, referenced: true });
+  next.instrument.voices.push({
+    slot,
+    name,
+    referenced: true,
+    ...(detail ? { voice: detail } : {}),
+  });
   const bank = next.instrument.banks[0];
   if (bank) bank.areas.push(fakeArea(slot, name));
   refreshReferenced(next.instrument);

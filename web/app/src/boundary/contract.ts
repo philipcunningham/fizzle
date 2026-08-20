@@ -207,6 +207,10 @@ export interface InstrumentSnapshot {
 export interface DiskSnapshot {
   label: string;
   usedBytes: number;
+  /** What the instrument asks the sampler's memory to hold (R27). */
+  audioBytes: number;
+  /** What the user says their sampler has; 1 MB until they say. */
+  memoryBytes: number;
   /** Covers the whole document: two disks double it (R23). */
   capacityBytes: number;
   /** 1, or 2 when a split instrument spans an image pair (R5). */
@@ -335,6 +339,8 @@ export interface Core {
     tm: number,
   ): Promise<CoreResult<Snapshot>>;
   setSlotLoopSelect(slot: number, sustain: number, release: number): Promise<CoreResult<Snapshot>>;
+  /** Declares the sampler's sample memory in bytes, 1 MB to 2 MB. */
+  setSampleMemory(bytes: number): Promise<CoreResult<Snapshot>>;
   setSlotEnvelope(
     slot: number,
     which: "dca" | "dcf",
