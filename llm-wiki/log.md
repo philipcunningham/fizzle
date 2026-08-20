@@ -27,3 +27,12 @@ which at power on. Corrected multi-disk-dumps.md, which derived the two
 disk cap from a series wide 2 MB; the cap comes from the `disknum` bit.
 One open question logged: what a load does to resident memory.
 
+## [2026-08-20] ingest | Envelope timing, corrected and extended
+
+The page's tick figure was wrong by a factor of three. It derived 25 ms
+from a stale 6.4 ms IRQ estimate. The chain is a 4 kHz IRQ, a 500 Hz
+voice service, and 125 Hz per DCA stage, so a stage steps every 8 ms.
+Added the slew limit, the instant rate at panel 99, and the level to
+code mapping through the table at F000:0590. Added the note on scaling
+and the release rules. The code to loudness law stays open.
+
