@@ -39,8 +39,9 @@ Conventions: [AGENTS.md](AGENTS.md).
   all metadata, disk 2 is pure audio; FULL-DATA-FZ naming.
 - [Voice-area sizing](topics/voice-area-sizing.md): vn from the DIS or
   a validated slot walk bounded by summed bstep.
-- [Envelope timing](topics/envelope-timing.md): the firmware rate
-  table and tick model behind the 8-stage envelopes.
+- [Envelope timing](topics/envelope-timing.md): the rate table, the
+  125 Hz stepper, the output slew, and the release rules behind the
+  8-stage envelopes.
 - [Front-panel display scales](topics/display-scales.md): raw bytes to
   the front panel's 0 to 99 and -15 to +15 displays.
 - [Voice authoring defaults](topics/voice-authoring-defaults.md): the
