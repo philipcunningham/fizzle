@@ -106,15 +106,19 @@ export function createAudition(
       source.buffer = buffer;
       source.playbackRate.value = playbackRate(options.note, options.root);
       // Web Audio loops the buffer itself, in buffer seconds, so the
-      // playback rate carries the loop along with the pitch. Bounds
-      // that don't rise are dropped here rather than handed on: Web
-      // Audio reads an end at or below the start as no bounds at all
-      // and repeats the whole sample, which is further from the truth
-      // than not looping.
-      if (options.loop && options.loop.end > options.loop.start) {
-        source.loopStart = options.loop.start / options.sampleRate;
-        source.loopEnd = options.loop.end / options.sampleRate;
-        source.loop = true;
+      // playback rate carries the loop along with the pitch. The bounds
+      // are judged against the buffer just built rather than trusted,
+      // because Web Audio answers a loop it can't honour by playing
+      // something worse than no loop: an end at or below the start
+      // repeats the whole sample, and a start past the buffer plays
+      // total silence, first pass included.
+      if (options.loop) {
+        const end = Math.min(options.loop.end, options.pcm.length);
+        if (options.loop.start < options.pcm.length && end > options.loop.start) {
+          source.loopStart = options.loop.start / options.sampleRate;
+          source.loopEnd = end / options.sampleRate;
+          source.loop = true;
+        }
       }
 
       const gain = ctx.createGain();

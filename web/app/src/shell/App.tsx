@@ -259,7 +259,10 @@ function Shell({ core }: { core: Core }) {
   // per revision, the engine created lazily on the first gesture.
   const audition = useMemo(() => createAudition(), []);
   const queryClient = useQueryClient();
-  const heldNotes = useRef(new Map<number, () => void>());
+  // Keyed by note, and tagged with where the press came from: a note
+  // a MIDI device holds outlives a click on another window, where one
+  // this page started cannot be released once the page loses it.
+  const heldNotes = useRef(new Map<number, { release: () => void; fromMIDI: boolean }>());
   const [auditioning, setAuditioning] = useState(false);
   const auditionQuery = useQuery({
     queryKey: ["audition", focusVoice?.slot ?? -1, focusVoice?.audioKey ?? ""],
@@ -328,7 +331,7 @@ function Shell({ core }: { core: Core }) {
       queryFn: () => core.auditionSlot(slot),
     });
 
-  const noteOn = (note: number, velocity: number) => {
+  const noteOn = (note: number, velocity: number, fromMIDI = false) => {
     // The banks tab plays the mapping (R12): the pressed key resolves
     // through the bank's areas by key and velocity range, every match
     // sounds (the hardware layers overlaps), and each sounds at its
@@ -336,7 +339,7 @@ function Shell({ core }: { core: Core }) {
     if (tab === "banks" && bank) {
       const matches = matchAreas(bank.areas, note, velocity);
       if (matches.length === 0) return;
-      heldNotes.current.get(note)?.();
+      heldNotes.current.get(note)?.release();
       const releases: (() => void)[] = [];
       let released = false;
       for (const matched of matches) {
@@ -359,15 +362,18 @@ function Shell({ core }: { core: Core }) {
           );
         });
       }
-      heldNotes.current.set(note, () => {
-        released = true;
-        for (const release of releases) release();
+      heldNotes.current.set(note, {
+        fromMIDI,
+        release: () => {
+          released = true;
+          for (const release of releases) release();
+        },
       });
       setAuditioning(true);
       return;
     }
     if (!auditionData) return;
-    heldNotes.current.get(note)?.();
+    heldNotes.current.get(note)?.release();
     // Pitch and loop come from the snapshot, not the cached payload:
     // the query above is keyed by audio identity, so an edit to the
     // root key, the rate, or a loop leaves the PCM untouched and its
@@ -382,11 +388,11 @@ function Shell({ core }: { core: Core }) {
       ...(focusVoice?.voice ? { dca: focusVoice.voice.dca } : {}),
       ...(loop ? { loop } : {}),
     });
-    heldNotes.current.set(note, release);
+    heldNotes.current.set(note, { release, fromMIDI });
     setAuditioning(true);
   };
   const noteOff = (note: number) => {
-    heldNotes.current.get(note)?.();
+    heldNotes.current.get(note)?.release();
     heldNotes.current.delete(note);
     if (heldNotes.current.size === 0) setAuditioning(false);
   };
@@ -397,7 +403,7 @@ function Shell({ core }: { core: Core }) {
   useEffect(() => {
     return subscribeMIDI({
       onNoteOn: (n, v) => {
-        noteOnRef.current(n, v);
+        noteOnRef.current(n, v, true);
       },
       onNoteOff: (n) => {
         noteOffRef.current(n);
@@ -408,37 +414,48 @@ function Shell({ core }: { core: Core }) {
   // A sustain loop has no natural end, and a note's release lives in a
   // closure only the key that started it calls. Anything that takes
   // that key away, or the page with it, strands the sound.
-  const releaseAll = () => {
-    for (const release of heldNotes.current.values()) release();
-    heldNotes.current.clear();
-    setAuditioning(false);
+  const releaseHeld = (which: (held: { fromMIDI: boolean }) => boolean) => {
+    for (const [note, held] of heldNotes.current) {
+      if (!which(held)) continue;
+      held.release();
+      heldNotes.current.delete(note);
+    }
+    if (heldNotes.current.size === 0) setAuditioning(false);
   };
-  const releaseAllRef = useRef(releaseAll);
-  releaseAllRef.current = releaseAll;
+  const releaseHeldRef = useRef(releaseHeld);
+  releaseHeldRef.current = releaseHeld;
 
   useEffect(() => {
-    const away = () => {
-      releaseAllRef.current();
+    // Losing focus takes the page's own pointer up and key up with it,
+    // so those notes end. A note a MIDI device holds is the device's
+    // to end, and it still reaches a window nobody is looking at, so a
+    // held chord survives a click on another window.
+    const onBlur = () => {
+      releaseHeldRef.current((held) => !held.fromMIDI);
+    };
+    const releaseEverything = () => {
+      releaseHeldRef.current(() => true);
     };
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") away();
+      if (document.visibilityState === "hidden") releaseEverything();
     };
     document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("blur", away);
-    window.addEventListener("pagehide", away);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("pagehide", releaseEverything);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("blur", away);
-      window.removeEventListener("pagehide", away);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("pagehide", releaseEverything);
     };
   }, []);
 
   // Ejecting the disk, or an undo that drops the instrument, unmounts
-  // the keyboard under the finger holding a key.
+  // the keyboard under the finger holding a key. A MIDI note goes too:
+  // there is no longer a voice for it to be sounding.
   const keyboardUp = instrument !== null && focusVoice !== null;
   useEffect(() => {
     if (keyboardUp) return;
-    releaseAllRef.current();
+    releaseHeldRef.current(() => true);
   }, [keyboardUp]);
 
   // Status messages expire after five seconds, the mockup's rule.

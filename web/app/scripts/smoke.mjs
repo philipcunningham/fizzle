@@ -338,6 +338,12 @@ await step("a held key repeats the voice's sustain loop (WASM core)", async () =
       `loop ${last.start} to ${last.end} at ${rate} Hz, want ${want.start} to ${want.end}`,
     );
   }
+
+  // The designation is document state, not this step's to leave behind:
+  // a later step reading the select would meet it far from here.
+  await page.getByRole("combobox", { name: "Sustain loop" }).click();
+  await page.getByRole("option", { name: "none", exact: true }).click();
+  await page.getByText("repeats while held").waitFor({ state: "detached", timeout: 5000 });
 });
 
 await step("R14's Sample group reads and edits over the WASM core", async () => {

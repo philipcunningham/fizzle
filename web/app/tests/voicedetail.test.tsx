@@ -3,7 +3,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { createFakeCore } from "../src/core/fake";
-import { openInstrumentDisk } from "./helpers";
+import { commitField, openInstrumentDisk } from "./helpers";
 
 describe("loops on a slot", () => {
   it("edits start and end in the loops table, clamped to the frames", async () => {
@@ -58,12 +58,7 @@ describe("loops on a slot", () => {
     expect(screen.queryByText(/repeats while held/)).toBeNull();
 
     await core.setSlotLoopSelect(0, 0, 8);
-    const start = screen.getByLabelText("loop 1 start");
-    fireEvent.change(start, { target: { value: "100" } });
-    fireEvent.blur(start);
-    await waitFor(() => {
-      expect(screen.getByLabelText<HTMLInputElement>("loop 1 start").value).toBe("100");
-    });
+    await commitField("loop 1 start", "100");
     expect(screen.getByText(/repeats while held/)).toBeTruthy();
   });
 });
