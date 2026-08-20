@@ -1329,7 +1329,13 @@ function Shell({ core }: { core: Core }) {
                 </button>
               )}
             </span>
-            <CapacityBar usedBytes={disk.usedBytes} disks={disk.disks} alarm={barError !== null} />
+            <CapacityBar
+              usedBytes={disk.usedBytes}
+              disks={disk.disks}
+              alarm={barError !== null}
+              audioBytes={disk.audioBytes}
+              memoryBytes={disk.memoryBytes}
+            />
           </>
         )}
 

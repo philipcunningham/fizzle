@@ -472,6 +472,23 @@ table.term input {
   }
 }
 
+/* The two readings sit side by side, their bars at matching width so
+   neither looks weightier than the other. */
+.capacitystack {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.capacitystack .capacity {
+  min-width: 0;
+}
+.capacitystack .capacity .bar {
+  flex: 0 0 110px;
+}
+.capacitystack .capacity .label {
+  white-space: nowrap;
+}
+
 .capacity {
   display: flex;
   align-items: center;
