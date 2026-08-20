@@ -36,3 +36,19 @@ Added the slew limit, the instant rate at panel 99, and the level to
 code mapping through the table at F000:0590. Added the note on scaling
 and the release rules. The code to loudness law stays open.
 
+
+## [2026-08-20] ingest | Envelope timing, the stage walk and the scaling arithmetic
+
+Reverse engineering settled two things the page carried loosely.
+
+The stage walk: note on caps the run at the lower of the sustain and
+end stages. A voice whose sustain sits at or past its end therefore
+never holds, and terminates with the key still down. Note off compares
+the counter with the sustain stage. A note released mid stage skips to
+the end stage; a parked one runs the stages between.
+
+The note on scaling now carries each term's exact arithmetic, its ROM
+address, and the shift kind. Added the `bvol` subtraction on stops.
+Corrected the slew citation to the loop head at F000:0A49. Split the
+level to code map at F000:214C from the composition at F000:20BD, and
+recorded that velocity never reaches that routine.
