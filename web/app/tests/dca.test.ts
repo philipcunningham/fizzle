@@ -5,7 +5,7 @@
 // pins whatever bug the implementation has.
 import { describe, expect, it } from "vitest";
 import type { EnvelopeSnapshot } from "../src/boundary/contract";
-import { amplitude, attack, levelAt, release, stageSeconds } from "../src/ui/dca";
+import { amplitude, amplitudeAt, attack, levelAt, release, stageSeconds } from "../src/ui/dca";
 
 /** The full 0 to 255 span, which is what the worked figures describe. */
 const FULL = 255;
@@ -414,5 +414,29 @@ describe("what a level sounds like", () => {
   it("holds a level outside the range to the ends of it", () => {
     expect(amplitude(-1)).toBe(amplitude(0));
     expect(amplitude(2)).toBe(amplitude(1));
+  });
+});
+
+// The engine schedules a stage as a ramp that is straight in dB, so
+// where a release starts has to be read off that same line. Reading
+// the level's own straight line instead lands somewhere else, and the
+// note steps as the key comes up.
+describe("the loudness partway through a run of stages", () => {
+  const stages = [{ seconds: 2, level: 1 }];
+
+  it("is halfway in dB at the halfway point", () => {
+    const floor = 20 * Math.log10(amplitude(0));
+    const top = 20 * Math.log10(amplitude(1));
+    const half = 20 * Math.log10(amplitudeAt(stages, 1));
+    expect(half).toBeCloseTo((floor + top) / 2, 6);
+  });
+
+  it("meets the level's own reading at the ends of a stage", () => {
+    expect(amplitudeAt(stages, 0)).toBeCloseTo(amplitude(levelAt(stages, 0)), 9);
+    expect(amplitudeAt(stages, 2)).toBeCloseTo(amplitude(levelAt(stages, 2)), 9);
+  });
+
+  it("holds the last stop once the run is over", () => {
+    expect(amplitudeAt(stages, 99)).toBeCloseTo(amplitude(1), 9);
   });
 });

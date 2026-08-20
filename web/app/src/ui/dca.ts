@@ -326,6 +326,31 @@ export function levelAt(segments: Segment[], elapsed: number): number {
   return level;
 }
 
+/**
+ * The loudness a run of stages has reached, interpolated along the
+ * same straight line in dB that the engine schedules. levelAt walks
+ * the envelope's own level, which is what the firmware ramps and what
+ * the release stages are timed from; this walks what a listener
+ * hears, so a release starts where the note actually is.
+ */
+export function amplitudeAt(segments: Segment[], elapsed: number): number {
+  let from = 0;
+  let t = 0;
+  for (const segment of segments) {
+    const stops = t + segment.seconds;
+    if (elapsed >= stops) {
+      from = segment.level;
+      t = stops;
+      continue;
+    }
+    const travelled = segment.seconds > 0 ? Math.max(0, (elapsed - t) / segment.seconds) : 1;
+    const a = amplitude(from);
+    const b = amplitude(segment.level);
+    return a * Math.pow(b / a, travelled);
+  }
+  return amplitude(from);
+}
+
 /** How long a run of stages takes, for scheduling what follows. */
 export function totalSeconds(segments: Segment[]): number {
   return segments.reduce((total, segment) => total + segment.seconds, 0);
