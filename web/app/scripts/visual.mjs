@@ -90,24 +90,37 @@ for (const [name, selector] of shots) {
 
 // The same strip once loop 1 is the loop the voice repeats: the region
 // changes hue, which only a screenshot can hold. Shot last, so the
-// three above keep the state their baselines were taken in. The wait
-// is on the drawn fill rather than a stopwatch, since the region is
-// rebuilt to recolour it and a slow machine would shoot the old one.
-await page.getByRole("combobox", { name: "Sustain loop" }).click();
-await page.getByRole("option", { name: "1", exact: true }).click();
-await page.getByText("repeats while held").waitFor({ timeout: 5000 });
-await page.waitForFunction(
-  (want) => {
+// three above keep the state their baselines were taken in.
+const regionFill = () =>
+  page.evaluate(() => {
     const host = document.querySelector('[data-testid="waveform"] div');
     const el = [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])].find((n) =>
       /^region region-/.test(n.getAttribute("part")),
     );
-    return el ? getComputedStyle(el).backgroundColor === want : false;
-  },
-  "rgba(51, 209, 122, 0.35)",
-  { timeout: 5000 },
-);
-await compare("waveform-sustain", '[data-testid="waveform"]');
+    return el ? getComputedStyle(el).backgroundColor : null;
+  });
+
+const plain = await regionFill();
+await page.getByRole("combobox", { name: "Sustain loop" }).click();
+await page.getByRole("option", { name: "1", exact: true }).click();
+await page.getByText("repeats while held").waitFor({ timeout: 5000 });
+
+// Waits on the drawn fill rather than a stopwatch, since recolouring
+// rebuilds the region and a slow machine would shoot the old one. The
+// hue itself is what the baseline judges, so this only asks that the
+// fill moved, and says what it stalled on if it never does.
+const deadline = Date.now() + 5000;
+let fill = plain;
+while (fill === plain && Date.now() < deadline) {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  fill = await regionFill();
+}
+if (fill === plain) {
+  console.log(`FAIL waveform-sustain: the region is still filled ${plain}, unmarked`);
+  failed = true;
+} else {
+  await compare("waveform-sustain", '[data-testid="waveform"]');
+}
 
 await browser.close();
 await server.close();

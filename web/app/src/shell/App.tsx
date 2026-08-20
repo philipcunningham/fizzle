@@ -259,9 +259,14 @@ function Shell({ core }: { core: Core }) {
   // per revision, the engine created lazily on the first gesture.
   const audition = useMemo(() => createAudition(), []);
   const queryClient = useQueryClient();
-  // Keyed by note, and tagged with where the press came from: a note
-  // a MIDI device holds outlives a click on another window, where one
-  // this page started cannot be released once the page loses it.
+  // Keyed by note, and tagged with where the press came from: a note a
+  // MIDI device holds outlives a click on another window, where one
+  // this page started cannot be released once the page loses it. One
+  // entry per note is the design (a second press on a pitch replaces
+  // the sound of the first), so the tag follows the latest press: click
+  // a pitch a device is already holding and a blur will stop it, and
+  // the device's note off then lands on nothing. A stopped note at the
+  // margin, and cheaper than sounding a pitch twice.
   const heldNotes = useRef(new Map<number, { release: () => void; fromMIDI: boolean }>());
   const [auditioning, setAuditioning] = useState(false);
   const auditionQuery = useQuery({
