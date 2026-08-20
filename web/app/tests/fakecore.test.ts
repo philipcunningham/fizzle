@@ -705,3 +705,60 @@ describe("fake core parity, second pass", () => {
     expect(areas[0]?.voiceName).toBe("SNARE");
   });
 });
+
+// The sampler's memory (R27). These hold for the WASM module too: it
+// sits behind the same contract, and its snapshot converter builds the
+// disk map field by field, so a field missing there fails here.
+describe("fake core sampler memory", () => {
+  it("assumes the machine Casio sold most of, until told", async () => {
+    const core = createFakeCore();
+    const r = await core.newDisk("MEM");
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.disk?.memoryBytes).toBe(1024 * 1024);
+  });
+
+  it("records the machine the user declares", async () => {
+    const core = createFakeCore();
+    await core.newDisk("MEM");
+    const r = await core.setSampleMemory(2 * 1024 * 1024);
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.disk?.memoryBytes).toBe(2 * 1024 * 1024);
+  });
+
+  it("refuses a figure no FZ holds", async () => {
+    const core = createFakeCore();
+    await core.newDisk("MEM");
+    for (const bytes of [0, 512 * 1024, 4 * 1024 * 1024]) {
+      const r = await core.setSampleMemory(bytes);
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  // The machine is not the document, so declaring it is not an edit.
+  it("moves no revision and lands no undo step", async () => {
+    const core = createFakeCore();
+    const made = await core.newDisk("MEM");
+    if (!made.ok) throw new Error(made.error.message);
+    const r = await core.setSampleMemory(2 * 1024 * 1024);
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.revision).toBe(made.value.revision);
+    expect(r.value.canUndo).toBe(made.value.canUndo);
+  });
+
+  it("reports what the instrument asks the sampler to hold", async () => {
+    const core = createFakeCore();
+    await core.newDisk("MEM");
+    const empty = await core.snapshot();
+    if (!empty.ok) throw new Error(empty.error.message);
+    expect(empty.value.disk?.audioBytes).toBe(0);
+
+    const r = await core.importWavToInstrument(
+      "pad.wav",
+      wavFixture(1, 18000, 40000),
+      18000,
+      "mix",
+    );
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.disk?.audioBytes).toBeGreaterThan(0);
+  });
+});

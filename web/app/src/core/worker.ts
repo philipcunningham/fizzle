@@ -68,6 +68,7 @@ interface FizzleCore {
   setSlotLoop(slot: number, index: number, start: number, end: number): CoreResult<Snapshot>;
   setSlotLoopAttr(slot: number, index: number, xf: number, tm: number): CoreResult<Snapshot>;
   setSlotLoopSelect(slot: number, sustain: number, release: number): CoreResult<Snapshot>;
+  setSampleMemory(bytes: number): CoreResult<Snapshot>;
   setSlotEnvelope(
     slot: number,
     which: string,
@@ -176,6 +177,7 @@ export interface WorkerRequest {
     | "setSlotLoop"
     | "setSlotLoopAttr"
     | "setSlotLoopSelect"
+    | "setSampleMemory"
     | "setSlotEnvelope"
     | "renameVoiceSlot"
     | "slotPeaks"
@@ -409,6 +411,10 @@ function dispatch(request: WorkerRequest): CoreResult<unknown> | undefined {
     case "setSlotLoopAttr": {
       const p = request.payload as AreaArgs;
       return core().setSlotLoopAttr(p[0] ?? 0, p[1] ?? 0, p[2] ?? 0, p[3] ?? 0);
+    }
+    case "setSampleMemory": {
+      const p = request.payload as number[];
+      return core().setSampleMemory(p[0] ?? 0);
     }
     case "setSlotLoopSelect": {
       const p = request.payload as AreaArgs;

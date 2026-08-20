@@ -208,6 +208,7 @@ export function createWasmCore(): Core {
       call<Snapshot>("setSlotLoopAttr", [slot, index, xf, tm]),
     setSlotLoopSelect: (slot, sustain, release) =>
       call<Snapshot>("setSlotLoopSelect", [slot, sustain, release]),
+    setSampleMemory: (bytes) => call<Snapshot>("setSampleMemory", [bytes]),
     setSlotEnvelope: (slot, which, sustain, end, rates, stops) =>
       call<Snapshot>("setSlotEnvelope", { slot, which, sustain, end, rates, stops }),
     renameVoiceSlot: (slot, name) => call<Snapshot>("renameVoiceSlot", { slot, name }),
