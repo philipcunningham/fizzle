@@ -11,3 +11,8 @@ export function sustainLoop(detail: VoiceDetail | undefined): LoopSnapshot | und
   if (!loop || loop.end <= loop.start) return undefined;
   return loop;
 }
+
+/** The same rule, asked of one loop: the waveform marks the drawn one. */
+export function isSustainLoop(detail: VoiceDetail | undefined, index: number): boolean {
+  return detail?.loopSustain === index && sustainLoop(detail) !== undefined;
+}

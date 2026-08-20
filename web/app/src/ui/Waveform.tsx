@@ -17,6 +17,8 @@ interface Props {
   peaks: Int16Array | null;
   loopIndex: number;
   loop: LoopSnapshot;
+  /** The drawn loop is the one the voice repeats while a key is held. */
+  sustain: boolean;
   onSetLoop: (start: number, end: number) => void;
   onGestureBegin?: () => void;
   onGestureCommit?: () => void;
@@ -25,6 +27,13 @@ interface Props {
 // One synthetic second regardless of frame count keeps the maths in
 // frame space: frame f sits at time f/frames.
 const DURATION = 1;
+
+// Amber for the loop under edit, green for the one that sounds: a
+// different hue says a different thing, where a denser amber would
+// read as the same region lit up. The caption carries the same fact in
+// words, so the colour is never the only thing saying it.
+const LOOP_FILL = "rgba(255, 176, 0, 0.35)";
+const SUSTAIN_FILL = "rgba(51, 209, 122, 0.35)";
 
 // Moves a frame to the centre of the nearest peak bucket that crosses
 // zero, searching at most 5 percent of the span: a snap assists, it
@@ -53,6 +62,7 @@ export function Waveform({
   peaks,
   loopIndex,
   loop,
+  sustain,
   onSetLoop,
   onGestureBegin,
   onGestureCommit,
@@ -78,6 +88,8 @@ export function Waveform({
   framesRef.current = frames;
   const peaksRef = useRef(peaks);
   peaksRef.current = peaks;
+  const sustainRef = useRef(sustain);
+  sustainRef.current = sustain;
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const onGestureCommitRef = useRef(onGestureCommit);
@@ -136,7 +148,7 @@ export function Waveform({
       const region = regions.addRegion({
         start,
         end,
-        color: "rgba(255, 176, 0, 0.35)",
+        color: sustainRef.current ? SUSTAIN_FILL : LOOP_FILL,
         drag: true,
         resize: true,
       });
@@ -236,6 +248,12 @@ export function Waveform({
     region.setOptions({ start, end });
   }, [loop.start, loop.end, frames, loopIndex]);
 
+  // The designation moves without the loop moving (another loop takes
+  // it, or this one gains it), so the fill follows on its own.
+  useEffect(() => {
+    regionRef.current?.setOptions({ color: sustain ? SUSTAIN_FILL : LOOP_FILL });
+  }, [sustain, loopIndex]);
+
   // Re-applied on remount as well as on change: a new peaks payload
   // rebuilds wavesurfer, and the strip would otherwise snap back to 1x
   // while the slider still read 8x.
@@ -257,6 +275,7 @@ export function Waveform({
       {!failed && <div ref={containerRef} className="waveform" data-testid="waveform" />}
       <div className="loopnums">
         <span className="loopname">Loop {loopIndex + 1}</span>
+        {sustain && <span className="loopsustain">sustain · repeats while held</span>}
         <span>
           Start{" "}
           <NumberCell

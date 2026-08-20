@@ -2,6 +2,7 @@
 // slots (R16, R17), through the voice editor's tables.
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { createFakeCore } from "../src/core/fake";
 import { openInstrumentDisk } from "./helpers";
 
 describe("loops on a slot", () => {
@@ -44,6 +45,26 @@ describe("loops on a slot", () => {
     await openInstrumentDisk();
     const trigger = await screen.findByRole("combobox", { name: "Sustain loop" });
     expect(trigger.textContent).toContain("none");
+  });
+
+  // The waveform draws the selected loop; when that loop is the one the
+  // voice repeats, the caption beside it says so. The designation is a
+  // Radix select these tests can't drive, so it goes through the core
+  // and the field commit below refetches the snapshot carrying it.
+  it("says which loop repeats when the drawn one is the sustain loop", async () => {
+    const core = createFakeCore();
+    await openInstrumentDisk(core);
+    await screen.findByLabelText("loop 1 start");
+    expect(screen.queryByText(/repeats while held/)).toBeNull();
+
+    await core.setSlotLoopSelect(0, 0, 8);
+    const start = screen.getByLabelText("loop 1 start");
+    fireEvent.change(start, { target: { value: "100" } });
+    fireEvent.blur(start);
+    await waitFor(() => {
+      expect(screen.getByLabelText<HTMLInputElement>("loop 1 start").value).toBe("100");
+    });
+    expect(screen.getByText(/repeats while held/)).toBeTruthy();
   });
 });
 
