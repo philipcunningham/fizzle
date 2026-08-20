@@ -6,6 +6,7 @@ tags: [fzv, envelope, dca, dcf, firmware]
 updated: 2026-08-20
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
+  - Casio FZ-20M service manual, circuit explanation (DCF MB87186, playback circuit) and FZ-1 service manual parts list
   - FZ-1 ROM (rate table F000:0490; output table F000:0590; handlers F000:2039, F000:218B, F000:20BD; slew F000:0A49; service loop F000:1CD8; note on F000:12B4; note off F000:1512)
 status: confirmed-firmware
 ---
@@ -59,7 +60,17 @@ One case escapes it. A rate magnitude of 0x7F, which the panel shows as 99, writ
 
 One routine spans F000:20BD to F000:2172. Its first half composes the level with the LFO, the modulation sources, and per-channel main volume. Its tail at F000:214C maps the result to the code the output stage carries. Up to 0x9F the code is the level plus 0xE0, giving 224 to 383. Above it, a 96-entry table at F000:0590 expands, its slope rising from 1 to about 16, giving 384 to 895. The value 223 is the sentinel described above.
 
-How that code becomes loudness is unknown. A log-domain converter wouldn't need an expansion table, which argues against an exponential law, and nobody has measured the real thing.
+## The amplifier the code drives
+
+The DCA is an analog amplifier inside the filter chip, not a digital multiply. The FZ-20M service manual names it MB87186 and gives it two DCF and two DCA sections. The FZ-1 parts list carries four of the same part as FM-1, two channels each for eight voices. Sample data reaches it through two 16-bit converters (PCM54HP), fed alternately by gate array GAX, so the envelope never touches the samples.
+
+The manual's block diagram gives the DCA range as 0 to -87.75 dB. Its pin table splits the control across two writes. With F/A low and FC/Q high the upper 2 bits are gain data; with both low the 8 bits are the amplitude value. Port 0x90 + 2i carries the gain word and 0x80 + 2i the amplitude word (F000:2094, F000:0A65, F000:1CCA, F000:2324, F000:2646).
+
+The firmware drives the pair as one monotone 16-bit number rather than as a coarse and a fine control. It steps the combined value by one on the slew and by four on the fade at F000:2330. Both cross the boundaries between the two registers with no special handling, and F000:0A55 orders codes by unsigned compare. The high byte is never above 3.
+
+That fade also settles the law's shape. It ramps down only to 0x017C, about a quarter of the way up the range, then cuts to zero. Under a law linear in amplitude that cut lands near half scale and clicks, so the code is dB-like.
+
+A code step is therefore 87.75 dB spread over the 10-bit word, or 0.0858 dB. That figure is inference from the manual's range rather than a sourced per-step table. It is the one number here nobody has confirmed against the chip.
 
 Velocity never reaches this routine. Its only route into the amplitude is the note on scaling below, which arrives here as the envelope accumulator.
 
@@ -84,5 +95,6 @@ Rates are then clamped to 1 to 0x7F and stops to 0 to 255, both signed and satur
 
 ## Open questions
 
-- The code to loudness law is unmeasured. Settling it needs a hardware recording of a known envelope against the emulator's sampled output code.
+- The dB per code step is inferred from the chip's total range, not read from a control table. Settling it needs the MB87186's own gain table, or a recording of one voice stepped through the code range.
+- The tie from F/A and FC/Q to the port address bits is inferred from which registers the firmware writes where. A board schematic would confirm it.
 - The 125 Hz figure is measured in an emulator running the ROM, not against hardware.
