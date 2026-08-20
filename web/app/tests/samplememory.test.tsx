@@ -68,18 +68,50 @@ describe("declaring the sampler's memory", () => {
   });
 
   it("carries on with the default when storage refuses", async () => {
-    const original = localStorage.getItem.bind(localStorage);
+    const read = localStorage.getItem.bind(localStorage);
+    const write = localStorage.setItem.bind(localStorage);
     localStorage.getItem = () => {
       throw new Error("storage is off");
     };
+    localStorage.setItem = () => {
+      throw new Error("storage is off");
+    };
     try {
-      const { core } = recordingCore();
+      const { core, declared } = recordingCore();
       await openInstrumentDisk(core);
-      // The reading is still there; only the memory of the choice is lost.
-      expect(screen.getByRole("status", { name: "memory free" })).toBeTruthy();
+      // Nothing was remembered, so nothing was declared, and the
+      // default stands. Only the memory of the choice is lost.
+      expect(declared).toHaveLength(0);
+      const reading = await screen.findByRole("status", { name: "memory free" });
+      expect(reading.textContent).toContain("% memory free");
+
+      fireEvent.click(screen.getByRole("button", { name: "Eject" }));
+      const pick = await screen.findByLabelText("sampler memory");
+      fireEvent.change(pick, { target: { value: String(2 * MB) } });
+      // The core still hears it; only the remembering failed.
+      await waitFor(() => {
+        expect(declared).toContain(2 * MB);
+      });
     } finally {
-      localStorage.getItem = original;
+      localStorage.getItem = read;
+      localStorage.setItem = write;
     }
+  });
+
+  // A figure from a build with different choices, or a hand edited
+  // profile, must not be pushed at a core that will refuse it.
+  it("ignores a remembered figure no FZ holds", async () => {
+    localStorage.setItem(KEY, String(4 * MB));
+    const { core, declared } = recordingCore();
+    await openInstrumentDisk(core);
+    await waitFor(() => {
+      expect(screen.getByRole("status", { name: "memory free" })).toBeTruthy();
+    });
+    expect(declared).not.toContain(4 * MB);
+    // jsdom always carries the unsupported browser notice, so this
+    // asks only that nothing complains about the memory figure.
+    const alerts = screen.queryAllByRole("alert").map((a) => a.textContent);
+    expect(alerts.join(" ")).not.toMatch(/sample memory/i);
   });
 
   // The reading is the core's answer, and the core keeps the revision
