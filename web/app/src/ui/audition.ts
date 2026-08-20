@@ -18,6 +18,11 @@ export interface PlayOptions {
   velocity: number;
   dca?: EnvelopeSnapshot;
   cutoff?: number;
+  /**
+   * The sustain loop, in voice-relative frames. Present only when the
+   * voice names one, and it repeats for as long as the note is held.
+   */
+  loop?: { start: number; end: number };
 }
 
 /** The slice of AudioContext the engine touches, faked in tests. */
@@ -44,6 +49,9 @@ export interface AudioContextLike {
   createBufferSource(): {
     buffer: unknown;
     playbackRate: { value: number };
+    loop: boolean;
+    loopStart: number;
+    loopEnd: number;
     onended: ((ev: Event) => void) | null;
     connect(node: unknown): void;
     start(): void;
@@ -97,6 +105,15 @@ export function createAudition(
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       source.playbackRate.value = playbackRate(options.note, options.root);
+      // Web Audio loops the buffer itself, in buffer seconds, so the
+      // playback rate carries the loop along with the pitch. An end at
+      // or below the start is the shape a one shot import writes, and
+      // it means no loop rather than an empty or reversed one.
+      if (options.loop && options.loop.end > options.loop.start) {
+        source.loopStart = options.loop.start / options.sampleRate;
+        source.loopEnd = options.loop.end / options.sampleRate;
+        source.loop = true;
+      }
 
       const gain = ctx.createGain();
       const level = Math.max(0.05, options.velocity / 127);
