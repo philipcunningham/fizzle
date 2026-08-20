@@ -873,6 +873,10 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--fz-accent-bright);
 }
 
+.loopsustain {
+  color: var(--fz-ok);
+}
+
 .loopmeta {
   color: var(--fz-fg-faint);
 }

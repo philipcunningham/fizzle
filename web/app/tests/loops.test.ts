@@ -2,7 +2,7 @@
 // repeats while a key is held, and when none of them does.
 import { describe, expect, it } from "vitest";
 import type { VoiceDetail } from "../src/boundary/contract";
-import { sustainLoop } from "../src/viewstate/loops";
+import { isSustainLoop, sustainLoop } from "../src/viewstate/loops";
 
 function detail(loopSustain: number, first: { start: number; end: number }): VoiceDetail {
   const envelope = {
@@ -46,5 +46,28 @@ describe("the sustain loop", () => {
 
   it("is absent for a file with no voice detail", () => {
     expect(sustainLoop(undefined)).toBeUndefined();
+  });
+});
+
+// The waveform marks the loop it draws when that loop is the one the
+// voice repeats, so the question is asked of an index.
+describe("whether a loop is the sustain loop", () => {
+  it("holds for the named loop alone", () => {
+    expect(isSustainLoop(detail(2, { start: 100, end: 900 }), 2)).toBe(true);
+    expect(isSustainLoop(detail(2, { start: 100, end: 900 }), 0)).toBe(false);
+  });
+
+  it("fails when the voice names none", () => {
+    expect(isSustainLoop(detail(8, { start: 100, end: 900 }), 8)).toBe(false);
+  });
+
+  // The preview won't repeat a loop with no range, so the waveform
+  // can't promise it does.
+  it("fails when the named loop has no range", () => {
+    expect(isSustainLoop(detail(0, { start: 900, end: 900 }), 0)).toBe(false);
+  });
+
+  it("fails for a file with no voice detail", () => {
+    expect(isSustainLoop(undefined, 0)).toBe(false);
   });
 });
