@@ -762,3 +762,34 @@ describe("fake core sampler memory", () => {
     expect(r.value.disk?.audioBytes).toBeGreaterThan(0);
   });
 });
+
+// Every path that lands a voice gives it audio, or the fake reads an
+// instrument as costing the sampler nothing and a test can pin a
+// memory figure the real core never reports.
+describe("fake core voices carry their audio", () => {
+  it("counts a voice file joined to the instrument", async () => {
+    const core = createFakeCore();
+    await core.newDisk("JOIN");
+    const r = await core.addVoice(new Uint8Array(4096));
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.disk?.audioBytes).toBeGreaterThan(0);
+  });
+
+  it("counts an SFZ instrument's samples", async () => {
+    const core = createFakeCore();
+    const r = await core.importSfz(
+      {
+        "kit.sfz": new TextEncoder().encode("<region> sample=one.wav\n<region> sample=two.wav\n"),
+        "one.wav": wavFixture(1, 18000, 20000),
+        "two.wav": wavFixture(1, 18000, 20000),
+      },
+      "kit.sfz",
+      18000,
+      false,
+      false,
+      "mix",
+    );
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.snapshot.disk?.audioBytes).toBeGreaterThan(0);
+  });
+});

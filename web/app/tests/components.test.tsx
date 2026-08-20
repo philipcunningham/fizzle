@@ -104,6 +104,26 @@ describe("CapacityBar", () => {
     expect(mem.className).toContain("over");
   });
 
+  // Three things the disk reading has always done, which the second
+  // reading must not cost it.
+  it("keeps the disk reading's own warnings", () => {
+    // A two disk set is worth noticing on sight, whatever its fill.
+    render(<CapacityBar usedBytes={100} disks={2} audioBytes={0} memoryBytes={MB} />);
+    expect(screen.getByRole("status", { name: "disk free" }).className).toContain("warn");
+
+    // Red arrives before the last byte goes, not with it.
+    render(<CapacityBar usedBytes={1_300_000} disks={1} audioBytes={0} memoryBytes={MB} />);
+    const tight = screen.getAllByRole("status", { name: "disk free" })[1];
+    expect(tight?.className).toContain("over");
+  });
+
+  it("marks where disk 1 ends on a two disk set", () => {
+    const { container } = render(
+      <CapacityBar usedBytes={1_800_000} disks={2} audioBytes={0} memoryBytes={MB} />,
+    );
+    expect(container.querySelector(".tick")).not.toBeNull();
+  });
+
   it("stays quiet while the memory has room", () => {
     render(<CapacityBar usedBytes={0} disks={1} audioBytes={MB / 4} memoryBytes={MB} />);
     expect(screen.getByRole("status", { name: "memory free" }).className).not.toContain("over");

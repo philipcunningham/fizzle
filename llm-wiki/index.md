@@ -32,6 +32,9 @@ Conventions: [AGENTS.md](AGENTS.md).
 
 ## Topics
 
+- [Sample memory per machine](topics/sample-memory.md): the FZ-1
+  shipped with 1 MB and the rack units with 2 MB, and the firmware
+  discovers which at power on.
 - [Multi-disk full dumps](topics/multi-disk-dumps.md): disk 1 carries
   all metadata, disk 2 is pure audio; FULL-DATA-FZ naming.
 - [Voice-area sizing](topics/voice-area-sizing.md): vn from the DIS or
