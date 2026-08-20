@@ -399,16 +399,18 @@ func main() {
 			fitsAt = append(fitsAt, r)
 		}
 		return okEnvelope(map[string]any{
-			"bytes":       est.Bytes,
-			"seconds":     est.Seconds,
-			"roomSeconds": est.RoomSeconds,
-			"verdict":     est.Verdict,
-			"reason":      est.Reason,
-			"anyStereo":   est.AnyStereo,
-			"overCapFile": est.OverCapFile,
-			"fileSeconds": est.FileSeconds,
-			"capSeconds":  est.CapSeconds,
-			"fitsAtRates": fitsAt,
+			"bytes":           est.Bytes,
+			"seconds":         est.Seconds,
+			"roomSeconds":     est.RoomSeconds,
+			"audioAfterBytes": est.AudioAfterBytes,
+			"memoryBytes":     est.MemoryBytes,
+			"verdict":         est.Verdict,
+			"reason":          est.Reason,
+			"anyStereo":       est.AnyStereo,
+			"overCapFile":     est.OverCapFile,
+			"fileSeconds":     est.FileSeconds,
+			"capSeconds":      est.CapSeconds,
+			"fitsAtRates":     fitsAt,
 		})
 	})
 	core["setDebug"] = method(func(args []js.Value) map[string]any {

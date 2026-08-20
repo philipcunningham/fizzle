@@ -175,7 +175,14 @@ function estimateCopy(est: ImportEstimate, rateKHz: string, count: number): stri
   if (est.verdict === "splits") {
     return `${size}; spreads the instrument across two disks. Export both images.`;
   }
-  return `${size}; room for about ${s(est.roomSeconds)} s more at ${rateKHz} kHz.`;
+  // Two facts and no inference (R30): what the instrument needs to
+  // load once this lands, and what the user says their sampler has.
+  // It never says the import is refused, because it isn't.
+  const needs = formatBytes(est.audioAfterBytes);
+  const has = formatBytes(est.memoryBytes);
+  const load =
+    est.audioAfterBytes > est.memoryBytes ? ` Needs ${needs} to load; your FZ has ${has}.` : "";
+  return `${size}; room for about ${s(est.roomSeconds)} s more at ${rateKHz} kHz.${load}`;
 }
 
 export function Dialogs({

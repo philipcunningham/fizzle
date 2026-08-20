@@ -4,6 +4,7 @@
 // against the machine they declared (R29). Both count down what is
 // left, so neither ever reads past 100 and full is always zero.
 import { IMAGE_SIZE } from "../boundary/contract";
+import { formatBytes } from "./format";
 
 /**
  * What an FZ can hold. The FZ-1 shipped with 1 MB and reaches 2 MB with
@@ -38,15 +39,20 @@ interface MeterProps {
 /** One reading: the bar fills as the space goes, the figure counts down. */
 function Meter({ used, capacity, what, alarm = false, note = "" }: MeterProps) {
   const spent = capacity > 0 ? (used / capacity) * 100 : 0;
-  const free = Math.max(0, 100 - spent);
+  // Rounded once, so the colour and the figure can't disagree: a
+  // hair above nothing used to read zero in amber.
+  const free = Math.round(Math.max(0, 100 - spent));
   const cls = alarm || free === 0 ? "capacity over" : free < 15 ? "capacity warn" : "capacity";
   return (
-    <div className={cls} role="status" aria-label={`${what} free`}>
-      <div className="bar">
+    // Named for a screen reader to seek out, but not a live region:
+    // capacity moves on every edit, and the status bar already
+    // announces what the user just did.
+    <div className={cls} role="status" aria-live="off" aria-label={`${what} free`}>
+      <div className="bar" aria-hidden="true">
         <div className="fill" style={{ width: `${String(Math.min(100, spent))}%` }} />
       </div>
       <span className="label">
-        {free.toFixed(0)}% {what} free{note}
+        {formatBytes(used)} · {free}% {what} free{note}
       </span>
     </div>
   );

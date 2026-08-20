@@ -356,6 +356,28 @@ await step("a held key repeats the voice's sustain loop (WASM core)", async () =
   await page.getByText("repeats while held").waitFor({ state: "detached", timeout: 5000 });
 });
 
+await step("the import estimate names the machine (WASM core)", async () => {
+  // The estimate crosses the boundary through a map built field by
+  // field, so a figure the fake supplies can be absent in the browser
+  // with nothing failing on either side.
+  const wavPath = join(tmpdir(), "fizzle-smoke-mem.wav");
+  writeFileSync(wavPath, monoWav(600000, 18000));
+  await pickFiles([wavPath]);
+  await page.getByText("Import 1 WAV").waitFor({ timeout: 5000 });
+  const line = await page
+    .locator(".dialog .desc")
+    .filter({ hasText: "Becomes about" })
+    .first()
+    .innerText();
+  if (!/Needs .* to load; your FZ has /.test(line)) {
+    throw new Error(`the estimate says: ${line}`);
+  }
+  await page.getByRole("button", { name: "Cancel" }).click();
+  // The dialog leaves the document untouched, so the steps that follow
+  // meet the instrument they expect.
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 5000 });
+});
+
 await step("R14's Sample group reads and edits over the WASM core", async () => {
   // Sample rate is a schema select, so it reaches the screen through
   // the same path every other schema control takes.

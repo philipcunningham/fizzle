@@ -35,7 +35,11 @@ describe("declaring the sampler's memory", () => {
     fireEvent.click(screen.getByRole("button", { name: "Eject" }));
     const pick = await screen.findByLabelText<HTMLSelectElement>("sampler memory");
     expect(pick.value).toBe(String(MB));
-    expect(screen.getByText(/FZ-1 shipped with 1 MB/)).toBeTruthy();
+    // It teaches the expansion, not the badge: an FZ-1 with the card
+    // fitted holds what a rack unit holds.
+    expect(screen.getByText(/expansion card is fitted/)).toBeTruthy();
+    // And it keeps the promise the page has always made.
+    expect(screen.getByText(/Nothing leaves this machine/)).toBeTruthy();
   });
 
   it("tells the core, and remembers for next time", async () => {

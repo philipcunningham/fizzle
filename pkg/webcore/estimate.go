@@ -43,6 +43,12 @@ type ImportEstimate struct {
 	Verdict     string  `json:"verdict"`
 	// Reason narrows VerdictWontFit; empty otherwise.
 	Reason string `json:"reason,omitempty"`
+	// AudioAfterBytes is what the instrument would ask the sampler to
+	// hold once this import lands, and MemoryBytes is what the user
+	// says their sampler has (R27). The dialog states both and infers
+	// nothing: neither figure changes what fizzle refuses to build.
+	AudioAfterBytes int `json:"audioAfterBytes"`
+	MemoryBytes     int `json:"memoryBytes"`
 	// AnyStereo is set when at least one file carries two channels,
 	// which is what makes the left, right, or mix question worth
 	// asking.
@@ -255,7 +261,12 @@ func estimateAt(profiles []wavProfile, doc *docProfile, rate uint32) *ImportEsti
 	}
 	splitCapable := true
 
-	est := &ImportEstimate{Bytes: growth, Seconds: seconds}
+	est := &ImportEstimate{
+		Bytes:           growth,
+		Seconds:         seconds,
+		AudioAfterBytes: doc.audioBytes + audioSum,
+		MemoryBytes:     doc.memoryBytes,
+	}
 	switch {
 	case newLen <= voicebuild.MaxDiskFileBytes && fitsFreeSectors(doc, newLen):
 		est.Verdict = VerdictFits

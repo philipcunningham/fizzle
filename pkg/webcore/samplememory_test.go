@@ -209,3 +209,32 @@ func TestTheHardRefusalKeepsTheHardwareCeiling(t *testing.T) {
 		t.Fatalf("verdict = %q for a batch past 2 MB, want a refusal", est.Verdict)
 	}
 }
+
+// The dialog says what the import needs and what the machine holds,
+// two facts and no inference, so the core supplies both.
+func TestEstimateStatesTheLoadAgainstTheMachine(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("SAY"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	// Half a megabyte already in, and more than half arriving.
+	if _, cerr := s.ImportWAVToInstrument("first.wav", monoRateWAV(t, 280000, 18000), 18000, ChannelMix); cerr != nil {
+		t.Fatalf("import: %v", cerr)
+	}
+	est, cerr := s.EstimateImport(
+		map[string][]byte{"second.wav": monoRateWAV(t, 280000, 18000)}, 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("EstimateImport: %v", cerr)
+	}
+	if est.MemoryBytes != oneMB {
+		t.Fatalf("memory = %d, want the declared %d", est.MemoryBytes, oneMB)
+	}
+	// Both halves together pass a stock machine.
+	if est.AudioAfterBytes <= oneMB {
+		t.Fatalf("audio after = %d, want past the 1 MB machine", est.AudioAfterBytes)
+	}
+	// And the verdict still lets it through: the figure informs.
+	if est.Verdict != VerdictFits {
+		t.Fatalf("verdict = %q, want the import to land anyway", est.Verdict)
+	}
+}

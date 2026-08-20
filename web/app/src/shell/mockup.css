@@ -489,6 +489,18 @@ table.term input {
   white-space: nowrap;
 }
 
+/* The machine picker on the start screen. It carries the palette
+   itself, since a bare control renders as light browser chrome. */
+.memorypick {
+  background: var(--fz-bg);
+  border: 1px solid var(--fz-border-faint);
+  border-radius: var(--fz-radius);
+  color: var(--fz-fg);
+  color-scheme: dark;
+  font: inherit;
+  padding: 0 2px;
+}
+
 .capacity {
   display: flex;
   align-items: center;
