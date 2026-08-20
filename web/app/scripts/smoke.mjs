@@ -481,7 +481,17 @@ await step("a press schedules the firmware's envelope (WASM core)", async () => 
       `the source stops at ${release.stopAt.toFixed(3)} s, during a release that ends at ${lastRamp.time.toFixed(3)} s`,
     );
   }
-  await page.getByRole("button", { name: "Undo" }).click();
+  // Five edits went in, so five come back out: the steps after this
+  // one share the document, and a partial restore leaks four stage
+  // edits into all of them.
+  for (let i = 0; i < 5; i++) {
+    await page.getByRole("button", { name: "Undo" }).click();
+  }
+  await page.waitForFunction(
+    () => document.querySelector('[aria-label="DCA envelope stage 1 rate"]')?.value !== "50",
+    undefined,
+    { timeout: 5000 },
+  );
 });
 
 await step("the import estimate names the machine (WASM core)", async () => {

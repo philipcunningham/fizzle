@@ -16,7 +16,18 @@ mkdirSync(dir, { recursive: true });
 
 const server = await preview({ preview: { port: 4523 } });
 const browser = await chromium.launch({ channel: "chrome" });
-const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+const page = await browser.newPage({
+  viewport: { width: 1100, height: 900 },
+  // A shot taken while a transition is in flight lands wherever the
+  // clock left it, which is what made one node on the DCF graph differ
+  // by a couple of levels between runs.
+  reducedMotion: "reduce",
+});
+await page
+  .addStyleTag({
+    content: "*, *::before, *::after { transition: none !important; animation: none !important; }",
+  })
+  .catch(() => undefined);
 
 // A deterministic seeded state: one imported WAV, one loop set.
 const monoWav = (samples, rate) => {

@@ -499,7 +499,7 @@ describe("the DCA envelope reaches the scheduler", () => {
     // A panel 50 stop is byte 127, which is far down the dB scale.
     const peak = record.events.at(-1);
     expect(peak?.value).toBeCloseTo(amplitude(127 / 255), 9);
-    expect(peak?.value ?? 1).toBeLessThan(0.02);
+    expect(peak?.value ?? 1).toBeLessThan(0.06);
   });
 
   // A ramp that is exponential in amplitude is linear in dB, which is

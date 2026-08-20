@@ -366,10 +366,16 @@ describe("the level partway through a run of stages", () => {
 
 // The loudness law. The DCA is an analog amplifier inside the filter
 // chip (MB87186, which the FZ-1 parts list calls FM-1 and fits four
-// of, two channels each). Its documented range is 0 to -87.75 dB over
-// a 10 bit control word, and the firmware drives that word as one
-// monotone number: the gain byte is its top two bits and the
-// amplitude byte its low eight. So a code step is 87.75 / 1023 dB.
+// of, two channels each), driven by a 10 bit control word the
+// firmware steps as one monotone number.
+//
+// Which levels are loud relative to which is the firmware's own map
+// and is exact. How many dB the whole range covers is not: the chip's
+// documented 0 to -87.75 dB over the full word would put 57.6 dB
+// across the codes the firmware uses, which spreads a velocity
+// sensitive voice over 46 dB and leaves ordinary playing inaudible.
+// The preview covers the range in 36 dB instead, tuned by ear until a
+// hardware measurement can settle it.
 describe("what a level sounds like", () => {
   const dbOf = (level: number) => 20 * Math.log10(amplitude(level));
 
@@ -382,16 +388,18 @@ describe("what a level sounds like", () => {
   // own mute is a control word of zero, which the firmware writes
   // only when it frees the voice.
   it("floors at the code a stop of zero writes, not at silence", () => {
-    expect(dbOf(0)).toBeCloseTo(-57.56, 1);
+    expect(dbOf(0)).toBeCloseTo(-36, 1);
     expect(amplitude(0)).toBeGreaterThan(0);
   });
 
   // The level to code map spends 159 of its 671 steps on the bottom
   // 62.5% of the level range and the rest on the top, so the scale is
   // steeply top weighted. Half level is nowhere near half loudness.
-  it("is steeply top weighted, as the expansion table makes it", () => {
-    expect(dbOf(0.5)).toBeCloseTo(-46.6, 1);
-    expect(dbOf(159 / 255)).toBeCloseTo(-43.9, 1);
+  it("is top weighted, as the expansion table makes it", () => {
+    // The map spends 159 of its 671 code steps on the bottom 62.5% of
+    // the level range, so half level sits four fifths of the way down.
+    expect(dbOf(0.5)).toBeCloseTo(-29.1, 1);
+    expect(dbOf(159 / 255)).toBeCloseTo(-27.5, 1);
   });
 
   it("rises with the level, without a step backwards", () => {
