@@ -406,3 +406,18 @@ describe("refusals read as words", () => {
     expect(bar.textContent).not.toContain("invalid-label");
   });
 });
+
+// A split instrument passes a stock machine by definition: it exists
+// because the audio outgrew one floppy. That is where the sentence
+// naming the machine matters most (R30).
+describe("the estimate names the machine on every path that lands", () => {
+  it("says what a split instrument needs to load", async () => {
+    const core = createFakeCore();
+    await openDisk(core);
+    // Past one floppy, inside the two disk set, past a stock machine.
+    pickFiles([new File([wavFixture(1, 18000, 700000)], "huge.wav")]);
+    const desc = await screen.findByText(/Becomes about/);
+    expect(desc.textContent).toMatch(/two disks/);
+    expect(desc.textContent).toMatch(/Needs .* to load; your FZ has /);
+  });
+});
