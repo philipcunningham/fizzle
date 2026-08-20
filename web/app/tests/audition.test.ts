@@ -227,6 +227,39 @@ describe("the sustain loop repeats while the key is held", () => {
     expect(record.loop).toBe(false);
   });
 
+  // Chrome plays a source whose loop starts past its buffer as total
+  // silence, not even the first pass, so bounds are judged against the
+  // buffer the engine just built rather than trusted.
+  it("ignores a loop that starts past the samples it holds", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    engine.play({
+      pcm: new Int16Array(4096),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      loop: { start: 9000, end: 12000 },
+    });
+    expect(record.loop).toBe(false);
+  });
+
+  it("holds a loop that overruns the samples to what it has", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    engine.play({
+      pcm: new Int16Array(4096),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      loop: { start: 1000, end: 9000 },
+    });
+    expect(record.loop).toBe(true);
+    expect(record.loopStart).toBeCloseTo(1000 / 18000, 10);
+    expect(record.loopEnd).toBeCloseTo(4096 / 18000, 10);
+  });
+
   // Looping doesn't change the release: the fade still ends the note,
   // and a source left looping would sound forever.
   it("still stops on release", () => {

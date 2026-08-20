@@ -7,7 +7,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Core } from "../src/boundary/contract";
 import { createFakeCore } from "../src/core/fake";
-import { openInstrumentDisk } from "./helpers";
+import { commitField, openInstrumentDisk } from "./helpers";
 
 interface Recorded {
   /** One playback rate per note started. */
@@ -99,19 +99,6 @@ function playMiddleC() {
   fireEvent.pointerUp(key, { pointerId: 1 });
 }
 
-/**
- * Commits a numeric field and waits for the core's answer to come
- * back, which also proves the snapshot behind it refetched.
- */
-async function setField(label: string, value: string) {
-  const field = screen.getByLabelText(label);
-  fireEvent.change(field, { target: { value } });
-  fireEvent.blur(field);
-  await waitFor(() => {
-    expect(screen.getByLabelText<HTMLInputElement>(label).value).toBe(value);
-  });
-}
-
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -156,8 +143,8 @@ describe("the preview repeats the sustain loop", () => {
     const core = createFakeCore();
     await openInstrumentDisk(core);
     await core.setSlotLoopSelect(0, 0, 8);
-    await setField("loop 1 start", "1000");
-    await setField("loop 1 end", "3000");
+    await commitField("loop 1 start", "1000");
+    await commitField("loop 1 end", "3000");
 
     // The PCM arrives asynchronously, so the first press waits for it.
     await waitFor(() => {
@@ -189,7 +176,7 @@ describe("the preview repeats the sustain loop", () => {
     await core.setSlotLoopSelect(0, 0, 8);
     // Loop 2 carries the edit, so loop 1 keeps the width it imported
     // with. The refetch it forces brings the designation with it.
-    await setField("loop 2 start", "100");
+    await commitField("loop 2 start", "100");
     await waitFor(() => {
       playMiddleC();
       expect(recorded.rates.length).toBeGreaterThan(0);
@@ -203,8 +190,8 @@ describe("the preview repeats the sustain loop", () => {
     const core = createFakeCore();
     await openInstrumentDisk(core);
     await core.setSlotLoopSelect(0, 0, 8);
-    await setField("loop 1 start", "1000");
-    await setField("loop 1 end", "3000");
+    await commitField("loop 1 start", "1000");
+    await commitField("loop 1 end", "3000");
     await waitFor(() => {
       playMiddleC();
       expect(recorded.rates.length).toBeGreaterThan(0);
@@ -212,7 +199,7 @@ describe("the preview repeats the sustain loop", () => {
 
     // No wave pointer moves, so the audition query holds its cached
     // PCM: the new bounds have to come from the snapshot at play time.
-    await setField("loop 1 end", "2000");
+    await commitField("loop 1 end", "2000");
     playMiddleC();
     expect(recorded.loops.at(-1)?.end).toBeCloseTo(2000 / 18000, 10);
   });
@@ -299,6 +286,49 @@ describe("a held note survives nothing", () => {
     fireEvent.click(screen.getByRole("button", { name: "Eject" }));
     await screen.findByRole("button", { name: "New disk" });
     expect(recorded.stops.length).toBeGreaterThan(before);
+  });
+
+  // A MIDI note belongs to the device holding it, and the device
+  // reaches a window nobody is looking at, so focus moving elsewhere
+  // is not a note off. The page going away still ends it.
+  it("keeps a MIDI note through a focus change, and ends it on the way out", async () => {
+    const recorded = stubAudioContext();
+    let send: ((data: number[]) => void) | null = null;
+    const input = {
+      onmidimessage: null as ((e: { data: Uint8Array }) => void) | null,
+    };
+    Object.defineProperty(navigator, "requestMIDIAccess", {
+      value: () => Promise.resolve({ inputs: new Map([["in", input]]), onstatechange: null }),
+      configurable: true,
+    });
+    try {
+      await openInstrumentDisk();
+      await waitFor(() => {
+        expect(input.onmidimessage).not.toBeNull();
+      });
+      send = (data) => {
+        input.onmidimessage?.({ data: new Uint8Array(data) });
+      };
+      await waitFor(() => {
+        send?.([0x90, 60, 100]);
+        expect(recorded.rates.length).toBeGreaterThan(0);
+      });
+      const before = recorded.stops.length;
+
+      fireEvent.blur(window);
+      expect(recorded.stops.length).toBe(before);
+      expect(document.querySelector("[data-auditioning]")).not.toBeNull();
+
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      try {
+        fireEvent(document, new Event("visibilitychange"));
+      } finally {
+        Reflect.deleteProperty(document, "visibilityState");
+      }
+      expect(recorded.stops.length).toBeGreaterThan(before);
+    } finally {
+      Reflect.deleteProperty(navigator, "requestMIDIAccess");
+    }
   });
 
   it("releases what is held when the window loses focus", async () => {
@@ -453,12 +483,12 @@ describe("the banks tab keyboard plays the key mapping", () => {
 
     // KICK (slot 0) is selected first; SNARE (slot 1) gets bounds the
     // assertion can tell apart from it.
-    await setField("loop 1 start", "100");
-    await setField("loop 1 end", "200");
+    await commitField("loop 1 start", "100");
+    await commitField("loop 1 end", "200");
     fireEvent.click((await screen.findAllByText("SNARE"))[0] as HTMLElement);
     await screen.findByText(/4,352 frames/);
-    await setField("loop 1 start", "300");
-    await setField("loop 1 end", "900");
+    await commitField("loop 1 start", "300");
+    await commitField("loop 1 end", "900");
 
     fireEvent.click(screen.getByRole("tab", { name: "Banks and Areas" }));
     await screen.findByRole("table", { name: "areas" });
@@ -479,8 +509,8 @@ describe("the banks tab keyboard plays the key mapping", () => {
     await openInstrumentDisk(core);
     // KICK repeats; the duplicate that layers over it doesn't.
     await core.setSlotLoopSelect(0, 0, 8);
-    await setField("loop 1 start", "100");
-    await setField("loop 1 end", "900");
+    await commitField("loop 1 start", "100");
+    await commitField("loop 1 end", "900");
 
     fireEvent.click(screen.getByRole("tab", { name: "Banks and Areas" }));
     await screen.findByRole("table", { name: "areas" });

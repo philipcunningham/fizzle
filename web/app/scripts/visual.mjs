@@ -90,11 +90,23 @@ for (const [name, selector] of shots) {
 
 // The same strip once loop 1 is the loop the voice repeats: the region
 // changes hue, which only a screenshot can hold. Shot last, so the
-// three above keep the state their baselines were taken in.
+// three above keep the state their baselines were taken in. The wait
+// is on the drawn fill rather than a stopwatch, since the region is
+// rebuilt to recolour it and a slow machine would shoot the old one.
 await page.getByRole("combobox", { name: "Sustain loop" }).click();
 await page.getByRole("option", { name: "1", exact: true }).click();
 await page.getByText("repeats while held").waitFor({ timeout: 5000 });
-await page.waitForTimeout(400);
+await page.waitForFunction(
+  (want) => {
+    const host = document.querySelector('[data-testid="waveform"] div');
+    const el = [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])].find((n) =>
+      /^region region-/.test(n.getAttribute("part")),
+    );
+    return el ? getComputedStyle(el).backgroundColor === want : false;
+  },
+  "rgba(51, 209, 122, 0.35)",
+  { timeout: 5000 },
+);
 await compare("waveform-sustain", '[data-testid="waveform"]');
 
 await browser.close();

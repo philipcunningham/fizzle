@@ -1,7 +1,8 @@
 // Shared drivers for the shell interaction tests: a fresh disk via
 // the new disk dialog, and an opened image carrying the fake's
 // instrument.
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { expect } from "vitest";
 import type { Core } from "../src/boundary/contract";
 import { IMAGE_SIZE } from "../src/boundary/contract";
 import { createFakeCore } from "../src/core/fake";
@@ -62,4 +63,20 @@ export function wavHeader(channels: number): Uint8Array<ArrayBuffer> {
   dv.setUint16(22, channels, true);
   ascii("data", 36);
   return b;
+}
+
+/**
+ * Commits a numeric field and waits for the core's answer to come
+ * back. The wait is the point: a field shows a draft the moment it is
+ * typed, so an assertion or a second edit that runs before the commit
+ * lands reads the old document, and the browser tests have been caught
+ * by that more than once.
+ */
+export async function commitField(label: string, value: string) {
+  const field = screen.getByLabelText(label);
+  fireEvent.change(field, { target: { value } });
+  fireEvent.blur(field);
+  await waitFor(() => {
+    expect(screen.getByLabelText<HTMLInputElement>(label).value).toBe(value);
+  });
 }
