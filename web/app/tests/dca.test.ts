@@ -130,3 +130,71 @@ describe("the stages a released key runs", () => {
     expect(fromLow).toBeLessThan(fromHigh);
   });
 });
+
+/** No scaling at all: the envelope as stored. */
+const NO_SCALING = {
+  velocity: 127,
+  note: 60,
+  centre: 60,
+  levelKF: 0,
+  rateKF: 0,
+  velLevel: 0,
+  velRate: 0,
+};
+
+// Velocity and key scaling are applied once, at note on, into per-voice
+// copies of the rates and stops (F000:12B4 to F000:135E). Velocity
+// enters as min(velocity + 0x10, 0x7F), so a sensitivity of zero is a
+// no op whatever the velocity.
+describe("scaling by velocity and key", () => {
+  it("changes nothing when both sensitivities are zero", () => {
+    const env = envelope();
+    const soft = attack(env, { ...NO_SCALING, velocity: 1 });
+    const hard = attack(env, { ...NO_SCALING, velocity: 127 });
+    expect(soft).toEqual(hard);
+    expect(soft).toEqual(attack(env));
+  });
+
+  it("plays quieter for a softer press when level sensitivity is on", () => {
+    const env = envelope();
+    const soft = attack(env, { ...NO_SCALING, velocity: 1, velLevel: 60 });
+    const hard = attack(env, { ...NO_SCALING, velocity: 127, velLevel: 60 });
+    expect(soft.at(-1)?.level ?? 0).toBeLessThan(hard.at(-1)?.level ?? 0);
+    // Velocity moves the level, not how many stages there are.
+    expect(soft).toHaveLength(hard.length);
+  });
+
+  it("moves the stage times when rate sensitivity is on", () => {
+    const env = envelope({ sustain: 1, rates: [40, 40, 40, 40, 40, 40, 40, 40] });
+    const soft = attack(env, { ...NO_SCALING, velocity: 1, velRate: 80 });
+    const hard = attack(env, { ...NO_SCALING, velocity: 127, velRate: 80 });
+    expect(soft[0]?.seconds).not.toBeCloseTo(hard[0]?.seconds ?? 0, 3);
+  });
+
+  // Key follow is (key - centre) scaled: >>4 for level, >>7 for rate.
+  it("follows the keyboard away from the voice's centre", () => {
+    const env = envelope();
+    const atCentre = attack(env, { ...NO_SCALING, levelKF: 15 });
+    const wayUp = attack(env, { ...NO_SCALING, note: 96, levelKF: 15 });
+    expect(wayUp.at(-1)?.level).not.toBeCloseTo(atCentre.at(-1)?.level ?? 0, 3);
+  });
+
+  it("never lets a scaled stage stall or overflow", () => {
+    const env = envelope({
+      rates: [1, 1, 1, 1, 1, 1, 1, 1],
+      stops: [99, 99, 99, 99, 99, 99, 99, 99],
+    });
+    for (const velocity of [1, 64, 127]) {
+      for (const velRate of [-127, 0, 127]) {
+        for (const velLevel of [-127, 0, 127]) {
+          const segments = attack(env, { ...NO_SCALING, velocity, velRate, velLevel });
+          for (const segment of segments) {
+            expect(Number.isFinite(segment.seconds)).toBe(true);
+            expect(segment.level).toBeGreaterThanOrEqual(0);
+            expect(segment.level).toBeLessThanOrEqual(1);
+          }
+        }
+      }
+    }
+  });
+});

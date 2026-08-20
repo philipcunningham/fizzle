@@ -85,8 +85,13 @@ function levelCode(level: number): number {
  * output stage can slew, except at the instant rate.
  */
 export function stageSeconds(from: number, to: number, rateDisplay: number): number {
+  return stageSecondsByte(from, to, rateIndex(rateDisplay));
+}
+
+/** The same, from the rate byte the firmware actually steps with. */
+function stageSecondsByte(from: number, to: number, rateByte: number): number {
   if (from === to) return 0;
-  const index = rateIndex(rateDisplay);
+  const index = Math.max(MIN_RATE, Math.min(INSTANT_RATE, rateByte));
   if (index >= INSTANT_RATE) return 0;
   const step = RATE_TABLE[index] ?? RATE_TABLE[MIN_RATE] ?? 3;
   const ramp = (Math.abs(to - from) * 256) / step / UPDATES_PER_SECOND;
@@ -115,17 +120,67 @@ function clampStage(n: number): number {
 }
 
 /**
+ * How a press and the keyboard position bend the envelope. Every field
+ * is what the voice header carries, in the units the schema surfaces.
+ */
+export interface Scaling {
+  /** The press, 1 to 127. */
+  velocity: number;
+  /** The note played, and the voice's own centre. */
+  note: number;
+  centre: number;
+  /** dcaLevelKF and dcaRateKF, the keyboard follows, -15 to 15. */
+  levelKF: number;
+  rateKF: number;
+  /** velDcaKF and velDcaRS, the velocity follows, -127 to 127. */
+  velLevel: number;
+  velRate: number;
+}
+
+/**
+ * The rates and stops a note actually runs, in bytes. Scaling is
+ * applied once at note on (F000:12B4 to F000:135E): the two KF fields
+ * follow the keyboard, and the two velocity fields follow the press.
+ * A sensitivity of zero is a no op whatever the velocity, which is
+ * what the subtraction of the sensitivity itself achieves.
+ */
+function effective(env: EnvelopeSnapshot, scale?: Scaling): { rates: number[]; stops: number[] } {
+  const rates: number[] = [];
+  const stops: number[] = [];
+  // Velocity enters saturated (F000:125A), so even the lightest press
+  // carries some weight.
+  const velocity = scale ? Math.min(Math.max(scale.velocity, 0) + 0x10, 0x7f) : 0;
+  const fromCentre = scale ? scale.note - scale.centre : 0;
+  for (let stage = 0; stage < STAGES; stage++) {
+    let rate = rateIndex(env.rates[stage] ?? 0);
+    let stop = stopByte(env.stops[stage] ?? 0);
+    if (scale) {
+      rate +=
+        ((fromCentre * scale.rateKF) >> 7) +
+        ((((velocity * scale.velRate * 2) >> 8) + 1 - Math.max(0, scale.velRate)) >> 1);
+      stop +=
+        ((fromCentre * scale.levelKF) >> 4) +
+        2 * (((velocity * scale.velLevel * 2) >> 8) - Math.max(0, scale.velLevel));
+    }
+    rates.push(Math.max(MIN_RATE, Math.min(INSTANT_RATE, rate)));
+    stops.push(Math.max(0, Math.min(FULL_LEVEL, stop)));
+  }
+  return { rates, stops };
+}
+
+/**
  * The stages a held key runs, from silence to the sustain stage. The
  * last segment's level is where the note sits until it is released.
  */
-export function attack(env: EnvelopeSnapshot): Segment[] {
+export function attack(env: EnvelopeSnapshot, scale?: Scaling): Segment[] {
   const sustain = clampStage(env.sustain);
+  const { rates, stops } = effective(env, scale);
   const out: Segment[] = [];
   let level = 0;
   for (let stage = 0; stage <= sustain; stage++) {
-    const target = stopByte(env.stops[stage] ?? 0);
+    const target = stops[stage] ?? 0;
     out.push({
-      seconds: stageSeconds(level, target, env.rates[stage] ?? 0),
+      seconds: stageSecondsByte(level, target, rates[stage] ?? MIN_RATE),
       level: target / FULL_LEVEL,
     });
     level = target;
@@ -147,15 +202,17 @@ export function release(
   env: EnvelopeSnapshot,
   fromLevel: number,
   reachedSustain: boolean,
+  scale?: Scaling,
 ): Segment[] {
   const sustain = clampStage(env.sustain);
   const end = clampStage(env.end);
+  const { rates, stops } = effective(env, scale);
   const out: Segment[] = [];
   let level = Math.round(Math.max(0, Math.min(1, fromLevel)) * FULL_LEVEL);
   for (let stage = reachedSustain ? sustain + 1 : end; stage <= end; stage++) {
-    const target = stage === end ? 0 : stopByte(env.stops[stage] ?? 0);
+    const target = stage === end ? 0 : (stops[stage] ?? 0);
     out.push({
-      seconds: stageSeconds(level, target, env.rates[stage] ?? 0),
+      seconds: stageSecondsByte(level, target, rates[stage] ?? MIN_RATE),
       level: target / FULL_LEVEL,
     });
     level = target;
