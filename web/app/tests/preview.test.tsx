@@ -16,11 +16,17 @@ interface Recorded {
   bufferRates: number[];
   /** One entry per source stopped: the release path ran. */
   stops: number[];
+  /**
+   * One entry per note started, in the same order as the rates: the
+   * loop bounds in buffer seconds, or null for a source playing
+   * straight through.
+   */
+  loops: ({ start: number; end: number } | null)[];
 }
 
 /** A recording stand-in for the Web Audio context jsdom lacks. */
 function stubAudioContext(): Recorded {
-  const recorded: Recorded = { rates: [], bufferRates: [], stops: [] };
+  const recorded: Recorded = { rates: [], bufferRates: [], stops: [], loops: [] };
   vi.stubGlobal(
     "AudioContext",
     vi.fn(() => ({
@@ -42,22 +48,46 @@ function stubAudioContext(): Recorded {
         connect: () => undefined,
         disconnect: () => undefined,
       }),
-      createBufferSource: () => ({
-        buffer: null,
-        playbackRate: {
-          get value() {
-            return recorded.rates[recorded.rates.length - 1] ?? 0;
+      createBufferSource: () => {
+        // Per source, so a layered press records one entry each.
+        const own = { loop: false, loopStart: 0, loopEnd: 0 };
+        return {
+          buffer: null,
+          playbackRate: {
+            get value() {
+              return recorded.rates[recorded.rates.length - 1] ?? 0;
+            },
+            set value(rate: number) {
+              recorded.rates.push(rate);
+            },
           },
-          set value(rate: number) {
-            recorded.rates.push(rate);
+          get loop() {
+            return own.loop;
           },
-        },
-        connect: () => undefined,
-        start: () => undefined,
-        stop: () => {
-          recorded.stops.push(1);
-        },
-      }),
+          set loop(on: boolean) {
+            own.loop = on;
+          },
+          get loopStart() {
+            return own.loopStart;
+          },
+          set loopStart(at: number) {
+            own.loopStart = at;
+          },
+          get loopEnd() {
+            return own.loopEnd;
+          },
+          set loopEnd(at: number) {
+            own.loopEnd = at;
+          },
+          connect: () => undefined,
+          start: () => {
+            recorded.loops.push(own.loop ? { start: own.loopStart, end: own.loopEnd } : null);
+          },
+          stop: () => {
+            recorded.stops.push(1);
+          },
+        };
+      },
     })),
   );
   return recorded;
@@ -67,6 +97,19 @@ function playMiddleC() {
   const key = screen.getByTestId("key-60");
   fireEvent.pointerDown(key, { pointerId: 1, clientY: 0 });
   fireEvent.pointerUp(key, { pointerId: 1 });
+}
+
+/**
+ * Commits a numeric field and waits for the core's answer to come
+ * back, which also proves the snapshot behind it refetched.
+ */
+async function setField(label: string, value: string) {
+  const field = screen.getByLabelText(label);
+  fireEvent.change(field, { target: { value } });
+  fireEvent.blur(field);
+  await waitFor(() => {
+    expect(screen.getByLabelText<HTMLInputElement>(label).value).toBe(value);
+  });
 }
 
 afterEach(() => {
@@ -99,6 +142,61 @@ describe("preview pitch (R20)", () => {
     playMiddleC();
     expect(recorded.rates.length).toBe(2);
     expect(recorded.rates[1]).toBeCloseTo(0.5, 10);
+  });
+});
+
+// A held key repeats the loop the voice names as its sustain loop,
+// which is what the sampler does. The sustain loop itself is a Radix
+// select these tests can't drive, so it goes through the core; the
+// field edits that follow refetch the snapshot carrying it, and the
+// browser smoke covers the select.
+describe("the preview repeats the sustain loop", () => {
+  it("loops between the named loop's bounds, in buffer seconds", async () => {
+    const recorded = stubAudioContext();
+    const core = createFakeCore();
+    await openInstrumentDisk(core);
+    await core.setSlotLoopSelect(0, 0, 8);
+    await setField("loop 1 start", "1000");
+    await setField("loop 1 end", "3000");
+
+    // The PCM arrives asynchronously, so the first press waits for it.
+    await waitFor(() => {
+      playMiddleC();
+      expect(recorded.rates.length).toBeGreaterThan(0);
+    });
+    const loop = recorded.loops.at(-1);
+    // KICK's voice runs at 18 kHz in the fake.
+    expect(loop?.start).toBeCloseTo(1000 / 18000, 10);
+    expect(loop?.end).toBeCloseTo(3000 / 18000, 10);
+  });
+
+  it("plays a voice that names no sustain loop straight through", async () => {
+    const recorded = stubAudioContext();
+    await openInstrumentDisk();
+    await waitFor(() => {
+      playMiddleC();
+      expect(recorded.rates.length).toBeGreaterThan(0);
+    });
+    expect(recorded.loops.at(-1)).toBeNull();
+  });
+
+  it("follows a loop edit instead of the cached payload", async () => {
+    const recorded = stubAudioContext();
+    const core = createFakeCore();
+    await openInstrumentDisk(core);
+    await core.setSlotLoopSelect(0, 0, 8);
+    await setField("loop 1 start", "1000");
+    await setField("loop 1 end", "3000");
+    await waitFor(() => {
+      playMiddleC();
+      expect(recorded.rates.length).toBeGreaterThan(0);
+    });
+
+    // No wave pointer moves, so the audition query holds its cached
+    // PCM: the new bounds have to come from the snapshot at play time.
+    await setField("loop 1 end", "2000");
+    playMiddleC();
+    expect(recorded.loops.at(-1)?.end).toBeCloseTo(2000 / 18000, 10);
   });
 });
 
@@ -231,6 +329,35 @@ describe("the banks tab keyboard plays the key mapping", () => {
     });
     fireEvent.pointerUp(key, { pointerId: 1 });
     expect(recorded.stops.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("loops each sounding slot's own sustain loop, not the selected voice's", async () => {
+    const recorded = stubAudioContext();
+    const core = createFakeCore();
+    await openInstrumentDisk(core);
+    await core.setSlotLoopSelect(0, 0, 8);
+    await core.setSlotLoopSelect(1, 0, 8);
+
+    // KICK (slot 0) is selected first; SNARE (slot 1) gets bounds the
+    // assertion can tell apart from it.
+    await setField("loop 1 start", "100");
+    await setField("loop 1 end", "200");
+    fireEvent.click((await screen.findAllByText("SNARE"))[0] as HTMLElement);
+    await screen.findByText(/4,352 frames/);
+    await setField("loop 1 start", "300");
+    await setField("loop 1 end", "900");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Banks and Areas" }));
+    await screen.findByRole("table", { name: "areas" });
+    // Selecting KICK's area focuses slot 0, while key 70 sounds SNARE:
+    // a preview reading the focus voice would play 100 to 200.
+    fireEvent.click(within(screen.getByRole("table", { name: "areas" })).getByText("KICK"));
+    await screen.findByText(/Edit area · KICK/);
+
+    await holdKey(70, recorded);
+    const loop = recorded.loops.at(-1);
+    expect(loop?.start).toBeCloseTo(300 / 18000, 10);
+    expect(loop?.end).toBeCloseTo(900 / 18000, 10);
   });
 
   it("pitches from the area's root, not the voice's", async () => {
