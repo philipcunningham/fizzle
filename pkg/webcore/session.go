@@ -83,13 +83,18 @@ type FileSnapshot struct {
 // (R23). MissingDisk names the absent half when one image of a pair
 // was opened alone (R5): 2 means "this is disk 1, disk 2 is missing".
 type DiskSnapshot struct {
-	Label         string              `json:"label"`
-	UsedBytes     int                 `json:"usedBytes"`
-	CapacityBytes int                 `json:"capacityBytes"`
-	Disks         int                 `json:"disks"`
-	MissingDisk   int                 `json:"missingDisk,omitempty"`
-	Files         []FileSnapshot      `json:"files"`
-	Instrument    *InstrumentSnapshot `json:"instrument,omitempty"`
+	Label         string `json:"label"`
+	UsedBytes     int    `json:"usedBytes"`
+	CapacityBytes int    `json:"capacityBytes"`
+	// AudioBytes is what the instrument asks the sampler's memory to
+	// hold, and MemoryBytes is what the user says their sampler has.
+	// The two make the second reading of R23's capacity readout.
+	AudioBytes  int                 `json:"audioBytes"`
+	MemoryBytes int                 `json:"memoryBytes"`
+	Disks       int                 `json:"disks"`
+	MissingDisk int                 `json:"missingDisk,omitempty"`
+	Files       []FileSnapshot      `json:"files"`
+	Instrument  *InstrumentSnapshot `json:"instrument,omitempty"`
 }
 
 // Snapshot is the state the UI renders from. Revision is a monotonic
@@ -120,11 +125,14 @@ type imagePair struct {
 // worker serialises calls.
 type Session struct {
 	revision int
-	label    string
-	image    []byte
-	image2   []byte // disk 2 of a split pair; nil for one disk documents
-	used     int
-	files    []FileSnapshot
+	// memoryBytes is the sampler's sample memory as the user declared
+	// it. Zero means they haven't, so sampleMemory supplies the default.
+	memoryBytes int
+	label       string
+	image       []byte
+	image2      []byte // disk 2 of a split pair; nil for one disk documents
+	used        int
+	files       []FileSnapshot
 
 	instrument  *InstrumentSnapshot
 	missingDisk int // 1 or 2 when one half of a pair was opened alone
@@ -156,6 +164,8 @@ func (s *Session) Snapshot() Snapshot {
 			Label:         s.label,
 			UsedBytes:     s.used,
 			CapacityBytes: disks * disk.ImageSize,
+			AudioBytes:    s.instrumentAudioBytes(),
+			MemoryBytes:   s.sampleMemory(),
 			Disks:         disks,
 			MissingDisk:   s.missingDisk,
 			Files:         append([]FileSnapshot{}, s.files...),
@@ -163,6 +173,58 @@ func (s *Session) Snapshot() Snapshot {
 		}
 	}
 	return snap
+}
+
+// SampleMemoryMin and SampleMemoryMax bound what an FZ can hold. The
+// FZ-1 shipped with 1 MB and reaches 2 MB with Casio's expansion card;
+// the rack units shipped with 2 MB. Reverse engineering the FZ-1
+// firmware shows the memory probe at F000:07D4 counting 64 KB banks
+// from a floor of 16, and only five bits of the bank register reach
+// memory, so 32 banks is the ceiling the hardware imposes.
+const (
+	SampleMemoryMin = 1 << 20
+	SampleMemoryMax = 2 << 20
+)
+
+// sampleMemory is the machine the user declared, defaulting to the
+// smaller one: a disk built for 1 MB loads on any FZ.
+func (s *Session) sampleMemory() int {
+	if s.memoryBytes == 0 {
+		return SampleMemoryMin
+	}
+	return s.memoryBytes
+}
+
+// SetSampleMemory records how much sample memory the sampler has (R27).
+// It describes the machine rather than the document, so it changes no
+// bytes and leaves the revision, the undo history, and the dirty flag
+// alone. It never refuses an import or an export; it informs.
+func (s *Session) SetSampleMemory(bytes int) (Snapshot, *Error) {
+	if bytes < SampleMemoryMin || bytes > SampleMemoryMax {
+		return s.Snapshot(), errf(codeInvalidValue,
+			"sample memory %d is outside the 1 MB to 2 MB an FZ holds", bytes)
+	}
+	s.memoryBytes = bytes
+	return s.Snapshot(), nil
+}
+
+// instrumentAudioBytes totals the audio the open instrument asks the
+// sampler to hold. A dump loads as a unit, so this is one load; loose
+// files on the same disk are loaded separately and aren't counted. A
+// velocity switch clone points at an earlier slot's samples, so it
+// costs nothing and is skipped.
+func (s *Session) instrumentAudioBytes() int {
+	if s.instrument == nil {
+		return 0
+	}
+	total := 0
+	for _, v := range s.instrument.Voices {
+		if v.Voice == nil || v.SharesAudio {
+			continue
+		}
+		total += v.Voice.Frames * disk.BytesPerSample
+	}
+	return total
 }
 
 // NewDisk replaces the session's disk with a blank formatted image.
