@@ -135,6 +135,9 @@ export function createAudition(
           ? {
               velocity: options.velocity,
               note: options.note,
+              // The key follow's reference. On the voices tab this is
+              // the voice's own root; on the banks tab it is the
+              // area's, and the two are separate editable fields.
               centre: options.root,
               ...options.dcaFollow,
             }

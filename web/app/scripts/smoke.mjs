@@ -406,6 +406,7 @@ await step("a press schedules the firmware's envelope (WASM core)", async () => 
   });
 
   let log;
+  let release;
   try {
     const key = page.locator('[data-testid="key-48"]');
     // The key reads velocity off click height, and the envelope's own
@@ -420,7 +421,22 @@ await step("a press schedules the firmware's envelope (WASM core)", async () => 
     });
     await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 5000 });
     log = await page.evaluate(() => window.__env);
+    await page.evaluate(() => {
+      window.__stopAt = null;
+      window.__stop = AudioBufferSourceNode.prototype.stop;
+      AudioBufferSourceNode.prototype.stop = function (t) {
+        window.__stopAt = t ?? null;
+        return window.__stop.call(this, t);
+      };
+    });
     await key.dispatchEvent("pointerup", { pointerId: 1 });
+    release = await page.evaluate(() => {
+      const at = window.__stopAt;
+      AudioBufferSourceNode.prototype.stop = window.__stop;
+      delete window.__stop;
+      delete window.__stopAt;
+      return { stopAt: at, events: window.__env.slice() };
+    });
   } finally {
     await page.evaluate(() => {
       AudioParam.prototype.setValueAtTime = window.__hold;
@@ -444,6 +460,16 @@ await step("a press schedules the firmware's envelope (WASM core)", async () => 
   // Stage 2 starts where stage 1 stopped, so it holds rather than moves.
   if (Math.abs(ramps[1].value - ramps[0].value) > 1e-9) {
     throw new Error("stage 2 holds the sustain level, so it should not move");
+  }
+  // The key coming up runs the release stages, and the source has to
+  // outlive them: a stop during the release is the click this work
+  // set out to remove.
+  const lastRamp = release.events.at(-1);
+  if (release.stopAt === null) throw new Error("the release never stopped the source");
+  if (release.stopAt < lastRamp.time) {
+    throw new Error(
+      `the source stops at ${release.stopAt.toFixed(3)} s, during a release that ends at ${lastRamp.time.toFixed(3)} s`,
+    );
   }
   await page.getByRole("button", { name: "Undo" }).click();
 });
