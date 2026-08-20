@@ -454,9 +454,9 @@ await step("a press schedules the firmware's envelope (WASM core)", async () => 
     });
   }
 
-  // The note opens at the code a stop of zero writes, which is 57 dB
-  // down rather than silence, so the note on is the first hold event
-  // rather than a zero.
+  // The note opens at the code a stop of zero writes rather than at
+  // silence, so the note on is the first hold event rather than a
+  // zero.
   const start = log.find((e) => e.kind === "hold");
   const ramps = log.filter((e) => e.kind === "ramp");
   if (!start) throw new Error("the press scheduled no note on");

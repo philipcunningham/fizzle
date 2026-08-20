@@ -44,7 +44,24 @@ export function voiceName(filename: string): string {
 
 // A miniature of the real schema: one field per control kind, plus a
 // kind no registry knows, so the numeric fallback stays tested.
+//
+// The four envelope follow ids are here for a different reason. The
+// preview reads them by name to bend a note by the press and the key,
+// and a name that drifts from the core's would silently play every
+// voice unbent. Carrying them lets a test set one and watch it reach
+// the engine.
 export const FAKE_SCHEMA: SchemaField[] = [
+  { id: "dcaLevelKF", label: "DCA level", group: "Key follow", kind: "stepper", min: -15, max: 15 },
+  { id: "dcaRateKF", label: "DCA rate", group: "Key follow", kind: "stepper", min: -15, max: 15 },
+  {
+    id: "velDcaKF",
+    label: "To amplitude",
+    group: "Velocity",
+    kind: "stepper",
+    min: -127,
+    max: 127,
+  },
+  { id: "velDcaRS", label: "To amp rate", group: "Velocity", kind: "stepper", min: -127, max: 127 },
   {
     id: "playbackMode",
     label: "Playback",

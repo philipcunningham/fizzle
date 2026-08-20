@@ -22,11 +22,13 @@ interface Recorded {
    * straight through.
    */
   loops: ({ start: number; end: number } | null)[];
+  /** Every gain value scheduled, in order, across all sources. */
+  gains: number[];
 }
 
 /** A recording stand-in for the Web Audio context jsdom lacks. */
 function stubAudioContext(): Recorded {
-  const recorded: Recorded = { rates: [], bufferRates: [], stops: [], loops: [] };
+  const recorded: Recorded = { rates: [], bufferRates: [], stops: [], loops: [], gains: [] };
   vi.stubGlobal(
     "AudioContext",
     vi.fn(() => ({
@@ -41,9 +43,9 @@ function stubAudioContext(): Recorded {
       createGain: () => ({
         gain: {
           value: 1,
-          setValueAtTime: () => undefined,
-          linearRampToValueAtTime: () => undefined,
-          exponentialRampToValueAtTime: () => undefined,
+          setValueAtTime: (v: number) => recorded.gains.push(v),
+          linearRampToValueAtTime: (v: number) => recorded.gains.push(v),
+          exponentialRampToValueAtTime: (v: number) => recorded.gains.push(v),
           cancelScheduledValues: () => undefined,
         },
         connect: () => undefined,
@@ -97,6 +99,20 @@ function stubAudioContext(): Recorded {
 function playMiddleC() {
   const key = screen.getByTestId("key-60");
   fireEvent.pointerDown(key, { pointerId: 1, clientY: 0 });
+  fireEvent.pointerUp(key, { pointerId: 1 });
+}
+
+/**
+ * A press at a chosen velocity. The keyboard reads velocity off click
+ * height, and jsdom gives every element a zero height, so the key gets
+ * a box before it is pressed.
+ */
+function playAt(velocity: number) {
+  const key = screen.getByTestId("key-60");
+  const height = 127;
+  key.getBoundingClientRect = () =>
+    ({ top: 0, left: 0, right: 20, bottom: height, width: 20, height, x: 0, y: 0 }) as DOMRect;
+  fireEvent.pointerDown(key, { pointerId: 1, clientY: velocity });
   fireEvent.pointerUp(key, { pointerId: 1 });
 }
 
@@ -555,5 +571,40 @@ describe("the banks tab keyboard plays the key mapping", () => {
     // root is still C4 and would have given half.
     await holdKey(48, recorded);
     expect(recorded.rates.at(-1)).toBeCloseTo(0.25, 10);
+  });
+});
+
+// The four envelope follow fields reach the engine by name, read out
+// of the schema parameters at play time. A name that drifts from the
+// core's would leave every voice playing unbent, silently, with every
+// other test still green: the smoke presses at full velocity where a
+// scaled envelope and an unscaled one agree.
+describe("the envelope follows the press", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("plays quieter for a soft press once velocity sensitivity is on", async () => {
+    const recorded = stubAudioContext();
+    await openInstrumentDisk();
+
+    const peakOf = async (velocity: number) => {
+      recorded.gains.length = 0;
+      await waitFor(() => {
+        playAt(velocity);
+        expect(recorded.gains.length).toBeGreaterThan(0);
+      });
+      return Math.max(...recorded.gains);
+    };
+
+    // Stored sensitivity is zero, so the press cannot bend anything.
+    expect(await peakOf(20)).toBeCloseTo(await peakOf(120), 6);
+
+    await commitField("To amplitude", "90");
+
+    // Now it can, and a soft press is quieter than a hard one.
+    const soft = await peakOf(20);
+    const hard = await peakOf(120);
+    expect(soft).toBeLessThan(hard);
   });
 });

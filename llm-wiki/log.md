@@ -36,50 +36,33 @@ Added the slew limit, the instant rate at panel 99, and the level to
 code mapping through the table at F000:0590. Added the note on scaling
 and the release rules. The code to loudness law stays open.
 
+## [2026-08-20] ingest | Envelope timing, the stage walk
 
-## [2026-08-20] ingest | Envelope timing, the stage walk and the scaling arithmetic
+Note on caps the run at the lower of the sustain and end stages. A
+sustain at or past the end never holds, and the voice terminates with
+the key still down. Note off skips a mid stage release to the end
+stage, where a parked note runs the stages between.
 
-Reverse engineering settled two things the page carried loosely.
+## [2026-08-20] ingest | Envelope timing, the note on scaling
 
-The stage walk: note on caps the run at the lower of the sustain and
-end stages. A voice whose sustain sits at or past its end therefore
-never holds, and terminates with the key still down. Note off compares
-the counter with the sustain stage. A note released mid stage skips to
-the end stage; a parked one runs the stages between.
-
-The note on scaling now carries each term's exact arithmetic, its ROM
-address, and the shift kind. Added the `bvol` subtraction on stops.
-Corrected the slew citation to the loop head at F000:0A49. Split the
-level to code map at F000:214C from the composition at F000:20BD, and
-recorded that velocity never reaches that routine.
+Each scaling term now carries its arithmetic, its ROM address, and its
+shift kind, plus the `bvol` subtraction on stops. Corrected the slew
+citation to F000:0A49. Split the level to code map at F000:214C from
+the composition at F000:20BD, and recorded that velocity never reaches
+that routine.
 
 ## [2026-08-20] ingest | The DCA is an analog amplifier, and its law is dB
 
 Service manuals settled the open question the page carried. The DCA
-sits inside the filter chip, downstream of two 16-bit converters. The
-FZ-20M manual calls it MB87186 and the FZ-1 parts list calls it FM-1.
-Its documented range is 0 to -87.75 dB.
-
-Its control arrives as a gain word and an amplitude word, on two
-ports. The firmware drives them as one monotone 16-bit number. Its own
-slew and fade paths prove that by stepping the pair across the
-register boundary. The fade cuts out a quarter of the way up the
-range. That would click under a law linear in amplitude, so the code
-is dB-like.
-
-A code step is 0.0858 dB under the manual's range. That per-step
-figure stays open. So does the tie from the chip's select pins to the
-port address bits.
+sits inside the filter chip, downstream of two converters, and covers
+0 to -87.75 dB. Its gain word and amplitude word are driven as one
+monotone number, which the slew and the fade prove. The per step
+figure and the select pin tie stay open.
 
 ## [2026-08-20] ingest | Service manuals, and what they don't settle
 
-New source page for the Casio service manuals and the third-party
-books. The manuals establish the DCA part, its range, and its two
-control words. The books corroborate the one shot envelope, the forced
-end stage, and the instant rate from the player's side.
-
-Three open questions added to envelope timing. The competing law that
-the firmware's even stepping rules out. The 46 dB velocity span that
-an even spread implies, which is wide for an instrument. What the
-hardware does when a stage's stored direction disagrees with where its
-stop sits.
+New source page for the manuals and books. The manuals establish the
+DCA part and its control words. The books corroborate the one shot
+envelope, the forced end stage, and the instant rate. Three open
+questions added to envelope timing: the competing law, the wide
+velocity span, and the stored stage direction.
