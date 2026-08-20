@@ -78,6 +78,11 @@ type docProfile struct {
 	freeSectors int  // unallocated sectors on disk 1
 	hasImage    bool
 	disks       int // 1, or 2 for a split document
+	// memoryBytes is the machine the user declared (R27). It bounds
+	// what fizzle reports, never what it refuses: the refusals below
+	// keep the hardware's own ceiling, since a disk is not a load and
+	// the user may be building for someone else's sampler.
+	memoryBytes int
 }
 
 // EstimateImport reports what importing files at rate would do to the
@@ -170,7 +175,7 @@ func profileWAVs(files map[string][]byte) ([]wavProfile, *Error) {
 // or absent disk profiles as empty; the import paths format one on
 // demand, so the estimate assumes the same.
 func (s *Session) profileDocument() (*docProfile, *Error) {
-	doc := &docProfile{disks: 1, freeSectors: disk.SectorCount}
+	doc := &docProfile{disks: 1, freeSectors: disk.SectorCount, memoryBytes: s.sampleMemory()}
 	if s.image == nil {
 		return doc, nil
 	}
@@ -289,7 +294,7 @@ func fitsFreeSectors(doc *docProfile, newLen int) bool {
 func roomSeconds(doc *docProfile, rate uint32) float64 {
 	room := min(
 		doc.disks*voicebuild.MaxDiskFileBytes-doc.dumpLen,
-		disk.MaxSampleRAM-doc.audioBytes,
+		doc.memoryBytes-doc.audioBytes,
 	)
 	if doc.hasImage && doc.disks == 1 {
 		// The same arithmetic fitsFreeSectors applies: the rewritten

@@ -131,3 +131,81 @@ func TestInstrumentAudioCountsSharedSamplesOnce(t *testing.T) {
 		t.Fatalf("audio = %d after a clone, want the original %d", got, before)
 	}
 }
+
+// The room before an import is bound by the tighter of the two
+// ceilings. On a stock FZ-1 the machine binds first, at the 14.5
+// seconds Casio quoted for 1 MB at 36 kHz. On an expanded machine the
+// floppy binds first, at about 18 seconds, which is why an instrument
+// that fills 2 MB needs a two disk set to carry it.
+func TestRoomFollowsTheDeclaredMachine(t *testing.T) {
+	for name, tc := range map[string]struct {
+		memory int
+		want   float64
+	}{
+		"the machine binds": {memory: oneMB, want: 14.56},
+		"the floppy binds":  {memory: twoMB, want: 18.16},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := NewSession()
+			if _, cerr := s.NewDisk("ROOM"); cerr != nil {
+				t.Fatalf("NewDisk: %v", cerr)
+			}
+			if _, cerr := s.SetSampleMemory(tc.memory); cerr != nil {
+				t.Fatalf("SetSampleMemory: %v", cerr)
+			}
+			est, cerr := s.EstimateImport(
+				map[string][]byte{"tick.wav": monoRateWAV(t, 100, 36000)}, 36000, ChannelMix)
+			if cerr != nil {
+				t.Fatalf("EstimateImport: %v", cerr)
+			}
+			if est.RoomSeconds < tc.want-0.5 || est.RoomSeconds > tc.want+0.5 {
+				t.Fatalf("room = %f s, want about %f", est.RoomSeconds, tc.want)
+			}
+		})
+	}
+}
+
+// The declared figure informs; it never blocks. A disk is not a load,
+// so a machine that cannot hold everything on a floppy is still a disk
+// worth building, and the user may be building it for someone else.
+func TestImportPastTheDeclaredMemoryStillLands(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("OVER"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	// 600,000 frames is 1.2 MB of audio: past a 1 MB machine, inside
+	// one floppy, and inside the 2 MB no FZ exceeds.
+	wav := monoRateWAV(t, 600000, 18000)
+	if _, cerr := s.ImportWAVToInstrument("big.wav", wav, 18000, ChannelMix); cerr != nil {
+		t.Fatalf("import refused at the 1 MB default: %v", cerr)
+	}
+	snap := s.Snapshot()
+	if snap.Disk.AudioBytes <= snap.Disk.MemoryBytes {
+		t.Fatalf("audio %d did not exceed memory %d, so this proves nothing",
+			snap.Disk.AudioBytes, snap.Disk.MemoryBytes)
+	}
+	if _, cerr := s.ExportImage(); cerr != nil {
+		t.Fatalf("export refused over the declared memory: %v", cerr)
+	}
+}
+
+// The hardware's own ceiling is not the user's, so declaring 1 MB must
+// not tighten what fizzle refuses to build.
+func TestTheHardRefusalKeepsTheHardwareCeiling(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.NewDisk("HARD"); cerr != nil {
+		t.Fatalf("NewDisk: %v", cerr)
+	}
+	if _, cerr := s.SetSampleMemory(oneMB); cerr != nil {
+		t.Fatalf("SetSampleMemory: %v", cerr)
+	}
+	// Past 2 MB: refused at any declaration, as today.
+	huge := map[string][]byte{"huge.wav": monoRateWAV(t, 1200000, 18000)}
+	est, cerr := s.EstimateImport(huge, 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("EstimateImport: %v", cerr)
+	}
+	if est.Verdict != VerdictWontFit {
+		t.Fatalf("verdict = %q for a batch past 2 MB, want a refusal", est.Verdict)
+	}
+}

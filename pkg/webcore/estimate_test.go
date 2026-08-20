@@ -95,6 +95,16 @@ func TestEstimateImportSmallMonoFits(t *testing.T) {
 	if est.AnyStereo {
 		t.Error("mono batch reported stereo")
 	}
+	// The figure this asserts describes an expanded machine, which the
+	// session no longer assumes, so it says which machine it means.
+	if _, cerr := s.SetSampleMemory(2 << 20); cerr != nil {
+		t.Fatalf("SetSampleMemory: %v", cerr)
+	}
+	est, cerr = s.EstimateImport(
+		map[string][]byte{"hat.wav": monoRateWAV(t, 18000, 18000)}, 18000, ChannelMix)
+	if cerr != nil {
+		t.Fatalf("EstimateImport: %v", cerr)
+	}
 	if est.RoomSeconds < 30 {
 		t.Errorf("room seconds = %f, want a near-empty disk's worth", est.RoomSeconds)
 	}
@@ -309,6 +319,11 @@ func TestEstimateImportRoomAgainstDiskFileMax(t *testing.T) {
 	if _, cerr := s.NewDisk("EST"); cerr != nil {
 		t.Fatalf("NewDisk: %v", cerr)
 	}
+	// The floppy is the binding ceiling only on an expanded machine; a
+	// stock FZ-1 runs out of memory first, which the memory tests cover.
+	if _, cerr := s.SetSampleMemory(2 << 20); cerr != nil {
+		t.Fatalf("SetSampleMemory: %v", cerr)
+	}
 	est, cerr := s.EstimateImport(map[string][]byte{"tick.wav": monoRateWAV(t, 100, 36000)}, 36000, ChannelMix)
 	if cerr != nil {
 		t.Fatalf("EstimateImport: %v", cerr)
@@ -464,6 +479,12 @@ func TestEstimateImportTwoDiskRoom(t *testing.T) {
 	snap := s.Snapshot()
 	if snap.Disk == nil || snap.Disk.Disks != 2 {
 		t.Fatalf("document did not split to two disks")
+	}
+	// This test exists to show memory binding rather than disk space,
+	// and the 8.2 seconds below is 2 MB minus the pair's 1.8 MB, so it
+	// declares the machine that makes the figure true.
+	if _, cerr := s.SetSampleMemory(2 << 20); cerr != nil {
+		t.Fatalf("SetSampleMemory: %v", cerr)
 	}
 	est, cerr := s.EstimateImport(map[string][]byte{"probe two.wav": monoRateWAV(t, 100, 18000)}, 18000, ChannelMix)
 	if cerr != nil {
