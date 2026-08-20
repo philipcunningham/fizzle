@@ -267,7 +267,12 @@ function Shell({ core }: { core: Core }) {
     enabled: focusVoice !== null,
     placeholderData: keepPreviousData,
   });
-  const auditionData = auditionQuery.data?.ok ? auditionQuery.data.value : null;
+  // Held back while the payload on hand belongs to the voice before
+  // this one: pairing those samples with this voice's rate, root, and
+  // loop plays something no voice contains, and a loop past the older,
+  // shorter buffer plays nothing at all.
+  const auditionData =
+    auditionQuery.data?.ok && !auditionQuery.isPlaceholderData ? auditionQuery.data.value : null;
 
   // Every slot the bank references prefetches into the audition cache,
   // so the first press on the banks tab plays without a decode wait.
@@ -399,6 +404,42 @@ function Shell({ core }: { core: Core }) {
       },
     });
   }, []);
+
+  // A sustain loop has no natural end, and a note's release lives in a
+  // closure only the key that started it calls. Anything that takes
+  // that key away, or the page with it, strands the sound.
+  const releaseAll = () => {
+    for (const release of heldNotes.current.values()) release();
+    heldNotes.current.clear();
+    setAuditioning(false);
+  };
+  const releaseAllRef = useRef(releaseAll);
+  releaseAllRef.current = releaseAll;
+
+  useEffect(() => {
+    const away = () => {
+      releaseAllRef.current();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") away();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("blur", away);
+    window.addEventListener("pagehide", away);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("blur", away);
+      window.removeEventListener("pagehide", away);
+    };
+  }, []);
+
+  // Ejecting the disk, or an undo that drops the instrument, unmounts
+  // the keyboard under the finger holding a key.
+  const keyboardUp = instrument !== null && focusVoice !== null;
+  useEffect(() => {
+    if (keyboardUp) return;
+    releaseAllRef.current();
+  }, [keyboardUp]);
 
   // Status messages expire after five seconds, the mockup's rule.
   useEffect(() => {

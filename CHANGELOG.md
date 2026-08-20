@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased (last updated 2026-08-18)
+## Unreleased (last updated 2026-08-20)
+
+- The browser editor's preview repeats a voice's sustain loop for as long as a key is held, so a looped voice sounds the way the sampler plays it rather than running once and stopping. The waveform marks the loop that repeats, and the loop follows an edit straight away. A voice that names no sustain loop, or names one with no width, plays through as before. The release loop, the cross-fade, and the multi-loop time don't reach the preview yet.
 
 ## v0.5.0 (2026-08-18)
 

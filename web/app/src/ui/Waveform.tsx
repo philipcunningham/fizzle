@@ -28,10 +28,11 @@ interface Props {
 // frame space: frame f sits at time f/frames.
 const DURATION = 1;
 
-// Amber for the loop under edit, green for the one that sounds: a
-// different hue says a different thing, where a denser amber would
-// read as the same region lit up. The caption carries the same fact in
-// words, so the colour is never the only thing saying it.
+// The one region the strip draws, in its two states: amber while it is
+// just the loop under edit, green once it is the loop that repeats.
+// Hue can't be what carries that, since the two grounds sit close
+// together for a red green viewer, so the caption says it in words and
+// the fill is the glance level hint.
 const LOOP_FILL = "rgba(255, 176, 0, 0.35)";
 const SUSTAIN_FILL = "rgba(51, 209, 122, 0.35)";
 
@@ -249,10 +250,19 @@ export function Waveform({
   }, [loop.start, loop.end, frames, loopIndex]);
 
   // The designation moves without the loop moving (another loop takes
-  // it, or this one gains it), so the fill follows on its own.
+  // it, or this one gains it), so the fill follows on its own. A new
+  // colour through setOptions leaves the drawn region exactly as it
+  // was, the same repaint gap widening hits, so this rebuilds at the
+  // bounds the region already holds.
   useEffect(() => {
-    regionRef.current?.setOptions({ color: sustain ? SUSTAIN_FILL : LOOP_FILL });
-  }, [sustain, loopIndex]);
+    if (draggingRef.current) return;
+    const region = regionRef.current;
+    if (!region) return;
+    const { start, end } = region;
+    region.remove();
+    regionRef.current = null;
+    remakeRegionRef.current?.(start, end);
+  }, [sustain]);
 
   // Re-applied on remount as well as on change: a new peaks payload
   // rebuilds wavesurfer, and the strip would otherwise snap back to 1x

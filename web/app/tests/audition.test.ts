@@ -202,8 +202,8 @@ describe("the sustain loop repeats while the key is held", () => {
     expect(record.loop).toBe(false);
   });
 
-  // A freshly imported one shot carries start equal to end, so this is
-  // the common shape rather than a corner case.
+  // Handing these on would repeat the whole sample, since Web Audio
+  // reads bounds that don't rise as no bounds at all.
   it("ignores a loop whose end sits at or below its start", () => {
     const record = blank();
     const engine = createAudition(() => fakeContext(record));
