@@ -172,16 +172,17 @@ function estimateCopy(est: ImportEstimate, rateKHz: string, count: number): stri
     return `Not enough room on the disk at ${rateKHz} kHz.${fitsTail(est.fitsAtRates)}`;
   }
   const size = `Becomes about ${formatBytes(est.bytes)} (${s(est.seconds)} s)`;
-  if (est.verdict === "splits") {
-    return `${size}; spreads the instrument across two disks. Export both images.`;
-  }
   // Two facts and no inference (R30): what the instrument needs to
   // load once this lands, and what the user says their sampler has.
-  // It never says the import is refused, because it isn't.
-  const needs = formatBytes(est.audioAfterBytes);
-  const has = formatBytes(est.memoryBytes);
+  // It never says the import is refused, because it isn't. A split
+  // instrument needs it most: it passes a stock machine by being one.
   const load =
-    est.audioAfterBytes > est.memoryBytes ? ` Needs ${needs} to load; your FZ has ${has}.` : "";
+    est.audioAfterBytes > est.memoryBytes
+      ? ` Needs ${formatBytes(est.audioAfterBytes)} to load; your FZ has ${formatBytes(est.memoryBytes)}.`
+      : "";
+  if (est.verdict === "splits") {
+    return `${size}; spreads the instrument across two disks. Export both images.${load}`;
+  }
   return `${size}; room for about ${s(est.roomSeconds)} s more at ${rateKHz} kHz.${load}`;
 }
 
