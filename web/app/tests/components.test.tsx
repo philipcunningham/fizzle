@@ -73,16 +73,49 @@ describe("SelectControl", () => {
   });
 });
 
+const MB = 1024 * 1024;
+
 describe("CapacityBar", () => {
-  it("reads used bytes, percent, and the two disk state", () => {
-    render(<CapacityBar usedBytes={655_360} disks={1} />);
-    const bar = screen.getByRole("status", { name: "disk capacity" });
+  it("counts down the disk's free space, and knows a two disk set", () => {
+    render(<CapacityBar usedBytes={655_360} disks={1} audioBytes={0} memoryBytes={MB} />);
+    const bar = screen.getByRole("status", { name: "disk free" });
     expect(bar.textContent).toContain("50%");
     expect(bar.textContent).not.toContain("two disk");
 
-    render(<CapacityBar usedBytes={1_500_000} disks={2} />);
-    const two = screen.getAllByRole("status", { name: "disk capacity" })[1];
+    render(<CapacityBar usedBytes={1_500_000} disks={2} audioBytes={0} memoryBytes={MB} />);
+    const two = screen.getAllByRole("status", { name: "disk free" })[1];
     expect(two?.textContent).toContain("two disk set");
+  });
+
+  // The sampler's memory is the second ceiling a user can hit (R29),
+  // measured against the machine they declared rather than the floppy.
+  it("counts down the sampler's memory beside the disk", () => {
+    render(<CapacityBar usedBytes={0} disks={1} audioBytes={MB / 2} memoryBytes={MB} />);
+    const mem = screen.getByRole("status", { name: "memory free" });
+    expect(mem.textContent).toContain("50% memory free");
+  });
+
+  // Nothing reads past 100 and nothing reads below zero: an instrument
+  // twice the size of the memory leaves none of it, not minus 100.
+  it("floors free space at nothing rather than going negative", () => {
+    render(<CapacityBar usedBytes={0} disks={1} audioBytes={MB * 2} memoryBytes={MB} />);
+    const mem = screen.getByRole("status", { name: "memory free" });
+    expect(mem.textContent).toContain("0% memory free");
+    expect(mem.className).toContain("over");
+  });
+
+  it("stays quiet while the memory has room", () => {
+    render(<CapacityBar usedBytes={0} disks={1} audioBytes={MB / 4} memoryBytes={MB} />);
+    expect(screen.getByRole("status", { name: "memory free" }).className).not.toContain("over");
+  });
+
+  // A disk with no instrument asks the sampler for nothing, so all of
+  // its memory is available.
+  it("reports the whole machine free with no instrument", () => {
+    render(<CapacityBar usedBytes={0} disks={1} audioBytes={0} memoryBytes={MB} />);
+    expect(screen.getByRole("status", { name: "memory free" }).textContent).toContain(
+      "100% memory free",
+    );
   });
 });
 
@@ -222,10 +255,14 @@ describe("field commit discipline (QA fixes)", () => {
   });
 
   it("CapacityBar reads a two disk set against the pair, not one disk", () => {
-    render(<CapacityBar usedBytes={1_800_000} disks={2} />);
-    const bar = screen.getByRole("status", { name: "disk capacity" });
-    expect(bar.textContent).toContain("69%");
-    expect(bar.textContent).not.toContain("138%");
+    render(
+      <CapacityBar usedBytes={1_800_000} disks={2} audioBytes={0} memoryBytes={1024 * 1024} />,
+    );
+    const bar = screen.getByRole("status", { name: "disk free" });
+    // 1.8 MB of a 2.5 MB pair leaves 31 percent. Measured against one
+    // disk it would be spent twice over, and floor at nothing.
+    expect(bar.textContent).toContain("31%");
+    expect(bar.textContent).not.toContain("0%");
   });
 
   it("a lit matrix cell keeps the focus outline available", () => {
