@@ -35,6 +35,7 @@ import { subscribeMIDI } from "../ui/midi";
 import { noteName } from "../ui/notes";
 import type { NamedBytes, Placement } from "../viewstate/place";
 import { classifyInput, toFileMap } from "../viewstate/place";
+import { sustainLoop } from "../viewstate/loops";
 import { matchAreas } from "../viewstate/mapping";
 import { CrashPanel, ErrorBoundary } from "./ErrorBoundary";
 import { dropEntries, walkEntries } from "./drop";
@@ -335,6 +336,9 @@ function Shell({ core }: { core: Core }) {
       let released = false;
       for (const matched of matches) {
         const slotVoice = instrument.voices.find((v) => v.slot === matched.voiceSlot);
+        // Each sounding slot repeats its own sustain loop, so a layered
+        // key can hold one voice looping and another playing out.
+        const loop = sustainLoop(slotVoice?.voice);
         void slotPCM(matched.voiceSlot, slotVoice?.audioKey ?? "").then((r) => {
           if (!r.ok || released) return;
           releases.push(
@@ -345,6 +349,7 @@ function Shell({ core }: { core: Core }) {
               note,
               velocity,
               ...(slotVoice?.voice ? { dca: slotVoice.voice.dca } : {}),
+              ...(loop ? { loop } : {}),
             }),
           );
         });
@@ -358,9 +363,11 @@ function Shell({ core }: { core: Core }) {
     }
     if (!auditionData) return;
     heldNotes.current.get(note)?.();
-    // Pitch comes from the snapshot, not the cached payload: the query
-    // above is keyed by audio identity, so an edit to the root key or
-    // the rate leaves the PCM untouched and its copy stale (R20).
+    // Pitch and loop come from the snapshot, not the cached payload:
+    // the query above is keyed by audio identity, so an edit to the
+    // root key, the rate, or a loop leaves the PCM untouched and its
+    // copy stale (R20).
+    const loop = sustainLoop(focusVoice?.voice);
     const release = audition.play({
       pcm: auditionData.pcm,
       sampleRate: focusVoice?.voice?.sampleRate ?? auditionData.sampleRate,
@@ -368,6 +375,7 @@ function Shell({ core }: { core: Core }) {
       note,
       velocity,
       ...(focusVoice?.voice ? { dca: focusVoice.voice.dca } : {}),
+      ...(loop ? { loop } : {}),
     });
     heldNotes.current.set(note, release);
     setAuditioning(true);
