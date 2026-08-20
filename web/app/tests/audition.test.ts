@@ -4,7 +4,7 @@
 // says test the scheduling and the fallback, not the sound.
 import { describe, expect, it } from "vitest";
 import { createAudition, playbackRate } from "../src/ui/audition";
-import { amplitude, release as releaseStages, totalSeconds } from "../src/ui/dca";
+import { amplitude, amplitudeAt, release as releaseStages, totalSeconds } from "../src/ui/dca";
 
 describe("playback rate maths", () => {
   it("is exact per equal temperament", () => {
@@ -472,7 +472,7 @@ describe("the DCA envelope reaches the scheduler", () => {
     // the first stage is instant, which puts the note at full, and
     // nothing has reached the sustain stage yet.
     const stages = releaseStages(pluck, 1, false);
-    expect(stopArgs[0]).toBeCloseTo(totalSeconds(stages) + 0.01, 3);
+    expect(stopArgs[0]).toBeCloseTo(totalSeconds(stages) + 0.018, 3);
     // And that is far beyond the fixed 60 ms fade it used to take.
     expect(stopArgs[0]).toBeGreaterThan(0.5);
   });
@@ -555,11 +555,11 @@ describe("the DCA envelope reaches the scheduler", () => {
     clock.now = 0.1935;
     record.events.length = 0;
     stop();
-    // Half way up by the clock, so half way up in level. The stage's
-    // exact seconds are the model's, so compare as a ratio rather
-    // than pinning a figure this test would have to recompute.
+    // Half way up by the clock, so half way along the ramp the engine
+    // scheduled, which is a straight line in dB rather than in level.
     const hold = record.events.find((e) => e.kind === "hold");
-    expect((hold?.value ?? 0) / amplitude(0.5)).toBeCloseTo(1, 1);
+    const want = amplitudeAt([{ seconds: 0.387, level: 1 }], 0.1935);
+    expect((hold?.value ?? 0) / want).toBeCloseTo(1, 1);
   });
 
   // A stored rate of zero runs a stage for 174 s, and velocity rate
@@ -583,7 +583,30 @@ describe("the DCA envelope reaches the scheduler", () => {
     });
     stop();
     expect(record.stopAt).toBeGreaterThan(1);
-    expect(record.stopAt).toBeLessThanOrEqual(30.01);
+    expect(record.stopAt).toBeLessThanOrEqual(30.02);
+  });
+
+  // The envelope's own floor is a code 36 dB down, not silence, and
+  // the hardware frees a finished voice by slewing its output code to
+  // a sentinel below the range. Stopping the source at the floor
+  // instead would click on the end of every note.
+  it("fades to silence before it stops the source", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    const stop = engine.play({
+      pcm: new Int16Array(64),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 127,
+      dca: pluck,
+    });
+    stop();
+    const last = record.events.at(-1);
+    expect(last?.kind).toBe("ramp");
+    expect(last?.value).toBe(0);
+    // And the source outlives that fade rather than cutting into it.
+    expect(record.stopAt ?? 0).toBeGreaterThan(last?.time ?? 0);
   });
 
   it("keeps the short fade for a voice with no envelope", () => {

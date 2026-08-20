@@ -5,13 +5,22 @@
 // audio failure never blocks editing.
 import type { EnvelopeSnapshot } from "../boundary/contract";
 import type { Scaling } from "./dca";
-import { amplitude, attack, levelAt, release, totalSeconds } from "./dca";
+import { amplitude, amplitudeAt, attack, levelAt, release, totalSeconds } from "./dca";
 
 /**
  * The longest release the preview holds a source open for. The
  * envelope model is faithful past this; the scheduler is not.
  */
 const MAX_TAIL_SECONDS = 30;
+
+/**
+ * The fade the preview adds after an envelope finishes. The envelope's
+ * own floor is a code well above silence, and the hardware mutes from
+ * there by slewing the output code to a sentinel below the range,
+ * which frees the voice. Cutting the source at the floor instead
+ * clicks on the end of every note.
+ */
+const MUTE_SECONDS = 0.008;
 
 /** Equal temperament: exact, and unit tested (the plan asks). */
 export function playbackRate(note: number, root: number): number {
@@ -183,9 +192,16 @@ export function createAudition(
           // Where the envelope had got to, from the model rather than
           // from the parameter: cancelScheduledValues drops the ramp in
           // flight, so a read back here gives the stop before it.
-          const from = options.dca ? levelAt(attackStages, at - now) : 1;
+          // The level is what the release stages are timed from; the
+          // loudness is where the scheduled ramp had actually got to.
+          // Reading the level's line for both makes the note step as
+          // the key comes up, because the two lines only meet at a
+          // stage's ends.
+          const elapsed = at - now;
+          const from = options.dca ? levelAt(attackStages, elapsed) : 1;
+          const heard = options.dca ? amplitudeAt(attackStages, elapsed) : 1;
           gain.gain.cancelScheduledValues(at);
-          gain.gain.setValueAtTime((options.dca ? amplitude(from) : from) * level, at);
+          gain.gain.setValueAtTime(heard * level, at);
           // A key that comes up before the envelope reached its sustain
           // stage runs the end stage alone, so the engine has to know
           // which happened.
@@ -208,7 +224,11 @@ export function createAudition(
             releaseStages.length > 0
               ? Math.min(totalSeconds(releaseStages), MAX_TAIL_SECONDS)
               : 0.05;
-          if (releaseStages.length === 0) gain.gain.linearRampToValueAtTime(0, at + 0.05);
+          if (releaseStages.length === 0) {
+            gain.gain.linearRampToValueAtTime(0, at + 0.05);
+          } else {
+            gain.gain.linearRampToValueAtTime(0, at + tail + MUTE_SECONDS);
+          }
           // Stop after the fade lands, and detach only once the source
           // ends: an immediate stop cuts at the current gain and clicks
           // on every release. A one shot that already played out fires
@@ -221,8 +241,9 @@ export function createAudition(
             gain.disconnect();
           };
           source.onended = detach;
-          setTimeout(detach, Math.ceil((tail + 0.06) * 1000));
-          source.stop(at + tail + 0.01);
+          const ends = tail + (releaseStages.length > 0 ? MUTE_SECONDS : 0);
+          setTimeout(detach, Math.ceil((ends + 0.06) * 1000));
+          source.stop(at + ends + 0.01);
         } catch {
           // A source that already ended throws on stop; harmless.
         }
