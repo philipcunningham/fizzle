@@ -114,6 +114,14 @@ function defaultParams(): Record<string, number | string> {
     keyHigh: 96,
     cutoff: 127,
     wobble: 0,
+    // What the import pipeline writes: disk.VelSensitivityDefault. A
+    // fake that leaves it at zero makes an imported voice ignore the
+    // press, which the real core would never do, and lets a test pin
+    // the wrong side of that.
+    velDcaKF: 80,
+    dcaLevelKF: 0,
+    dcaRateKF: 0,
+    velDcaRS: 0,
   };
 }
 
