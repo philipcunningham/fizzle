@@ -192,10 +192,8 @@ describe("labels carry no trailing ellipsis", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog.textContent).toContain("Drop a disk image");
-    // One way in, as on the first page: a browser cannot offer files
-    // and folders in one picker, and a folder still arrives by drag.
-    expect(within(dialog).getByRole("button", { name: "Browse" })).toBeDefined();
-    expect(within(dialog).queryByRole("button", { name: "Choose a folder" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Choose files" })).toBeDefined();
+    expect(within(dialog).getByRole("button", { name: "Choose a folder" })).toBeDefined();
     for (const button of within(dialog).getAllByRole("button")) {
       expect(button.textContent).not.toMatch(/…$/);
     }
