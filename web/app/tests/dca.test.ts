@@ -92,7 +92,39 @@ describe("the stages a held key runs", () => {
   it("holds nothing back for a voice whose sustain is stage zero", () => {
     expect(attack(envelope({ sustain: 0 }))).toHaveLength(1);
   });
+
+  // Note on caps the run at the lower of the sustain and end stages
+  // (F000:123B), so a sustain stage at or past the end stage never
+  // holds anything. The voice runs to its end stage, which note on
+  // forces to silence, and frees its own slot with the key still
+  // down. Sustain past end is how the format spells a one shot, and
+  // most factory voices are written that way.
+  it("stops at the end stage when the sustain sits past it", () => {
+    const env = envelope({ sustain: 7, end: 2, stops: [99, 70, 88, 0, 0, 0, 0, 0] });
+    const segments = attack(env);
+    expect(segments).toHaveLength(3);
+    expect(segments.at(-1)?.level).toBe(0);
+  });
+
+  it("falls silent while the key is still down for a one shot", () => {
+    const env = envelope({ sustain: 3, end: 3, stops: [99, 70, 60, 55, 0, 0, 0, 0] });
+    expect(attack(env).at(-1)?.level).toBe(0);
+  });
+
+  // A voice that does hold keeps its sustain level, because its end
+  // stage is one of the stages release runs rather than attack.
+  it("holds the sustain level when the sustain comes first", () => {
+    const env = envelope({ sustain: 1, end: 3, stops: [99, 70, 40, 20, 0, 0, 0, 0] });
+    const segments = attack(env);
+    expect(segments).toHaveLength(2);
+    expect(segments.at(-1)?.level).toBeCloseTo(stopByteOf(70) / 255, 6);
+  });
 });
+
+/** The stop byte the core computes for a panel value. */
+function stopByteOf(display: number): number {
+  return Math.floor((255 * (display - 1)) / 99) + 1;
+}
 
 describe("the stages a released key runs", () => {
   // The ordinary case: sustain plus one through the end stage.
