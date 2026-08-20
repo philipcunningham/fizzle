@@ -264,6 +264,55 @@ await step("waveform, loops, and envelopes edit over the WASM core", async () =>
   );
 });
 
+await step("a held key repeats the voice's sustain loop (WASM core)", async () => {
+  // Loop 1 takes bounds the assertion can recognise, then the select
+  // makes it the sustain loop. The caption is the core's answer coming
+  // back: the waveform only marks a loop the document really names.
+  const start = page.getByLabel("loop 1 start");
+  await start.fill("400");
+  await start.press("Enter");
+  const end = page.getByLabel("loop 1 end");
+  await end.fill("1200");
+  await end.press("Enter");
+  await page.waitForFunction(
+    () => document.querySelector('[aria-label="loop 1 end"]')?.value === "1200",
+    undefined,
+    { timeout: 5000 },
+  );
+  await page.getByRole("combobox", { name: "Sustain loop" }).click();
+  await page.getByRole("option", { name: "1", exact: true }).click();
+  await page.getByText("repeats while held").waitFor({ timeout: 5000 });
+
+  // What the browser's own audio node received, read as it starts.
+  await page.evaluate(() => {
+    window.__auditionLoops = [];
+    const started = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      window.__auditionLoops.push({ on: this.loop, start: this.loopStart, end: this.loopEnd });
+      return started.apply(this, args);
+    };
+  });
+
+  const key = page.locator('[data-testid="key-48"]');
+  await key.dispatchEvent("pointerdown", { clientY: 10, pointerId: 1 });
+  await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 5000 });
+  await key.dispatchEvent("pointerup", { pointerId: 1 });
+
+  const rateText = await page.getByRole("combobox", { name: "Sample rate (Hz)" }).textContent();
+  const rate = Number(/\d+/.exec(rateText ?? "")?.[0]);
+  const played = await page.evaluate(() => window.__auditionLoops);
+  const last = played.at(-1);
+  if (!last) throw new Error("the press started no source");
+  if (!last.on) throw new Error("the source plays straight through, with no loop");
+  // Buffer seconds: the frames the fields hold over the voice's rate.
+  const want = { start: 400 / rate, end: 1200 / rate };
+  if (Math.abs(last.start - want.start) > 1e-6 || Math.abs(last.end - want.end) > 1e-6) {
+    throw new Error(
+      `loop ${last.start} to ${last.end} at ${rate} Hz, want ${want.start} to ${want.end}`,
+    );
+  }
+});
+
 await step("R14's Sample group reads and edits over the WASM core", async () => {
   // Sample rate is a schema select, so it reaches the screen through
   // the same path every other schema control takes.
