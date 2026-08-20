@@ -4,6 +4,7 @@
 // says test the scheduling and the fallback, not the sound.
 import { describe, expect, it } from "vitest";
 import { createAudition, playbackRate } from "../src/ui/audition";
+import { release as releaseStages, totalSeconds } from "../src/ui/dca";
 
 describe("playback rate maths", () => {
   it("is exact per equal temperament", () => {
@@ -307,6 +308,10 @@ describe("release fades before stopping", () => {
       createBufferSource: () => ({
         buffer: null as unknown,
         playbackRate: { value: 1 },
+        loop: false,
+        loopStart: 0,
+        loopEnd: 0,
+        onended: null,
         connect: () => undefined,
         start: () => undefined,
         stop: (at?: number) => {
@@ -314,7 +319,7 @@ describe("release fades before stopping", () => {
         },
       }),
     };
-    const engine = createAudition(() => context as never);
+    const engine = createAudition(() => context);
     const release = engine.play({
       pcm: new Int16Array(64),
       sampleRate: 18000,
@@ -328,5 +333,137 @@ describe("release fades before stopping", () => {
     // The gain detaches when the source ends, never synchronously:
     // an immediate disconnect silences the fade it just scheduled.
     expect(disconnected).toBe(0);
+  });
+});
+
+// The envelope the firmware runs, through Web Audio's scheduler. The
+// timing model is tested on its own in dca.test.ts; these pin that the
+// engine schedules what the model gives it, and that a note stops when
+// its release finishes rather than during it.
+describe("the DCA envelope reaches the scheduler", () => {
+  const pluck = {
+    sustain: 1,
+    end: 2,
+    // Instant to full, then a slow fall, then a slow release.
+    rates: [99, 30, 30, 50, 50, 50, 50, 50],
+    stops: [99, 60, 0, 0, 0, 0, 0, 0],
+  };
+
+  function ramps(record: Scheduled) {
+    return record.gains.length;
+  }
+
+  it("schedules one ramp per attack stage", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    engine.play({
+      pcm: new Int16Array(64),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      dca: pluck,
+    });
+    // One setValueAtTime to open at silence, then a ramp per stage to
+    // the sustain point.
+    expect(ramps(record)).toBe(1 + 2);
+  });
+
+  it("holds the note until its release stages finish", () => {
+    const stopArgs: (number | undefined)[] = [];
+    const context = {
+      currentTime: 0,
+      state: "running" as const,
+      resume: () => Promise.resolve(),
+      destination: {},
+      createBuffer: (_ch: number, length: number) => ({
+        getChannelData: () => new Float32Array(length),
+      }),
+      createGain: () => ({
+        gain: {
+          value: 0.5,
+          setValueAtTime: () => undefined,
+          linearRampToValueAtTime: () => undefined,
+          cancelScheduledValues: () => undefined,
+        },
+        connect: () => undefined,
+        disconnect: () => undefined,
+      }),
+      createBufferSource: () => ({
+        buffer: null,
+        playbackRate: { value: 1 },
+        loop: false,
+        loopStart: 0,
+        loopEnd: 0,
+        onended: null,
+        connect: () => undefined,
+        start: () => undefined,
+        stop: (at?: number) => {
+          stopArgs.push(at);
+        },
+      }),
+    };
+    const engine = createAudition(() => context);
+    const release = engine.play({
+      pcm: new Int16Array(64),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      dca: pluck,
+    });
+    release();
+    // The source stops when the release finishes, not during it. The
+    // model is tested on its own, so the assertion is that the engine
+    // honours whatever it says rather than a figure copied here.
+    const stages = releaseStages(pluck, 0.5 / (100 / 127), true);
+    expect(stopArgs[0]).toBeCloseTo(totalSeconds(stages) + 0.01, 3);
+    // And that is far beyond the fixed 60 ms fade it used to take.
+    expect(stopArgs[0]).toBeGreaterThan(0.5);
+  });
+
+  it("keeps the short fade for a voice with no envelope", () => {
+    const stopArgs: (number | undefined)[] = [];
+    const context = {
+      currentTime: 0,
+      state: "running" as const,
+      resume: () => Promise.resolve(),
+      destination: {},
+      createBuffer: (_ch: number, length: number) => ({
+        getChannelData: () => new Float32Array(length),
+      }),
+      createGain: () => ({
+        gain: {
+          value: 1,
+          setValueAtTime: () => undefined,
+          linearRampToValueAtTime: () => undefined,
+          cancelScheduledValues: () => undefined,
+        },
+        connect: () => undefined,
+        disconnect: () => undefined,
+      }),
+      createBufferSource: () => ({
+        buffer: null,
+        playbackRate: { value: 1 },
+        loop: false,
+        loopStart: 0,
+        loopEnd: 0,
+        onended: null,
+        connect: () => undefined,
+        start: () => undefined,
+        stop: (at?: number) => {
+          stopArgs.push(at);
+        },
+      }),
+    };
+    const engine = createAudition(() => context);
+    engine.play({
+      pcm: new Int16Array(64),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+    })();
+    expect(stopArgs[0]).toBeLessThan(0.2);
   });
 });

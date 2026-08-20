@@ -4,6 +4,8 @@
 // lazily on the first play, which always follows a user gesture, and
 // audio failure never blocks editing.
 import type { EnvelopeSnapshot } from "../boundary/contract";
+import type { Scaling } from "./dca";
+import { attack, release, totalSeconds } from "./dca";
 
 /** Equal temperament: exact, and unit tested (the plan asks). */
 export function playbackRate(note: number, root: number): number {
@@ -17,6 +19,11 @@ export interface PlayOptions {
   note: number;
   velocity: number;
   dca?: EnvelopeSnapshot;
+  /**
+   * The four voice fields that bend the envelope by the press and the
+   * key. Absent means the envelope runs as stored.
+   */
+  dcaFollow?: Pick<Scaling, "levelKF" | "rateKF" | "velLevel" | "velRate">;
   cutoff?: number;
   /**
    * The sustain loop, in voice-relative frames. Present only when the
@@ -62,12 +69,6 @@ export interface AudioContextLike {
 export interface AuditionEngine {
   /** Starts a note; the returned function releases it. Never throws. */
   play(options: PlayOptions): () => void;
-}
-
-// Envelope display units to preview seconds: a fast rate (99) moves in
-// about 10 ms, a slow one (0) in about 2 s. Approximate on purpose.
-function stageSeconds(rate: number): number {
-  return 0.01 + ((99 - rate) / 99) * 2;
 }
 
 export function createAudition(
@@ -125,15 +126,24 @@ export function createAudition(
       const level = Math.max(0.05, options.velocity / 127);
       const now = ctx.currentTime;
       gain.gain.setValueAtTime(0, now);
+      // The envelope's own scaling covers the press, so velocity is
+      // only a level when the voice carries no envelope at all.
+      const scaling: Scaling | undefined =
+        options.dca && options.dcaFollow
+          ? {
+              velocity: options.velocity,
+              note: options.note,
+              centre: options.root,
+              ...options.dcaFollow,
+            }
+          : undefined;
+      const attackStages = options.dca ? attack(options.dca, scaling) : [];
+      const attackSeconds = totalSeconds(attackStages);
       if (options.dca) {
-        // Walk the stages to the sustain point, scaling stops by
-        // velocity; hold there until release.
         let t = now;
-        const sustain = Math.min(options.dca.sustain, options.dca.stops.length - 1);
-        for (let stage = 0; stage <= sustain; stage++) {
-          t += stageSeconds(options.dca.rates[stage] ?? 50);
-          const stop = ((options.dca.stops[stage] ?? 99) / 99) * level;
-          gain.gain.linearRampToValueAtTime(stop, t);
+        for (const stage of attackStages) {
+          t += stage.seconds;
+          gain.gain.linearRampToValueAtTime(stage.level * level, Math.max(t, now + 0.001));
         }
       } else {
         gain.gain.linearRampToValueAtTime(level, now + 0.005);
@@ -150,8 +160,24 @@ export function createAudition(
         try {
           const at = ctx.currentTime;
           gain.gain.cancelScheduledValues(at);
-          gain.gain.setValueAtTime(gain.gain.value, at);
-          gain.gain.linearRampToValueAtTime(0, at + 0.05);
+          const from = gain.gain.value;
+          gain.gain.setValueAtTime(from, at);
+          // A key that comes up before the envelope reached its sustain
+          // stage runs the end stage alone, so the engine has to know
+          // which happened.
+          const reached = at - now >= attackSeconds;
+          const releaseStages = options.dca
+            ? release(options.dca, from / Math.max(level, 0.0001), reached, scaling)
+            : [];
+          let t = at;
+          for (const stage of releaseStages) {
+            t += stage.seconds;
+            gain.gain.linearRampToValueAtTime(stage.level * level, Math.max(t, at + 0.001));
+          }
+          // A voice with no release stages keeps the short fade, which
+          // is also what stops the click on a voice with no envelope.
+          const tail = releaseStages.length > 0 ? totalSeconds(releaseStages) : 0.05;
+          if (releaseStages.length === 0) gain.gain.linearRampToValueAtTime(0, at + 0.05);
           // Stop after the fade lands, and detach only once the source
           // ends: an immediate stop cuts at the current gain and clicks
           // on every release. A one shot that already played out fires
@@ -164,8 +190,8 @@ export function createAudition(
             gain.disconnect();
           };
           source.onended = detach;
-          setTimeout(detach, 100);
-          source.stop(at + 0.06);
+          setTimeout(detach, Math.ceil((tail + 0.06) * 1000));
+          source.stop(at + tail + 0.01);
         } catch {
           // A source that already ended throws on stop; harmless.
         }
