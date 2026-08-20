@@ -69,7 +69,7 @@ const shots = [
 ];
 
 let failed = false;
-for (const [name, selector] of shots) {
+const compare = async (name, selector) => {
   const shot = await page.locator(selector).first().screenshot();
   const path = join(dir, `${name}.png`);
   if (update || !existsSync(path)) {
@@ -82,7 +82,20 @@ for (const [name, selector] of shots) {
   } else {
     console.log(`ok   ${name}`);
   }
+};
+
+for (const [name, selector] of shots) {
+  await compare(name, selector);
 }
+
+// The same strip once loop 1 is the loop the voice repeats: the region
+// changes hue, which only a screenshot can hold. Shot last, so the
+// three above keep the state their baselines were taken in.
+await page.getByRole("combobox", { name: "Sustain loop" }).click();
+await page.getByRole("option", { name: "1", exact: true }).click();
+await page.getByText("repeats while held").waitFor({ timeout: 5000 });
+await page.waitForTimeout(400);
+await compare("waveform-sustain", '[data-testid="waveform"]');
 
 await browser.close();
 await server.close();
