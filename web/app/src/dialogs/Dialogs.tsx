@@ -62,7 +62,6 @@ export interface DialogActions {
   onPickSfzFolder: () => void;
   /** The import dialog's three ways in. */
   onImportFiles: () => void;
-  onImportFolder: () => void;
   onDropImport: (transfer: DataTransfer) => void;
   /** second is set when a two image pair replaces the document. */
   onSwitchTo: (file: NamedBytes, second?: NamedBytes) => void;
@@ -350,10 +349,7 @@ export function Dialogs({
                 Drop a disk image, WAVs, an SFZ folder, or FZ files here
                 <br />
                 <button className="btn small" onClick={actions.onImportFiles}>
-                  Choose files
-                </button>
-                <button className="btn small" onClick={actions.onImportFolder}>
-                  Choose a folder
+                  Browse
                 </button>
               </div>
               <div className="buttons">
