@@ -23,12 +23,6 @@ const page = await browser.newPage({
   // by a couple of levels between runs.
   reducedMotion: "reduce",
 });
-await page
-  .addStyleTag({
-    content: "*, *::before, *::after { transition: none !important; animation: none !important; }",
-  })
-  .catch(() => undefined);
-
 // A deterministic seeded state: one imported WAV, one loop set.
 const monoWav = (samples, rate) => {
   const data = Buffer.alloc(samples * 2);

@@ -4,7 +4,13 @@
 // says test the scheduling and the fallback, not the sound.
 import { describe, expect, it } from "vitest";
 import { createAudition, playbackRate } from "../src/ui/audition";
-import { amplitude, amplitudeAt, release as releaseStages, totalSeconds } from "../src/ui/dca";
+import {
+  amplitude,
+  amplitudeAt,
+  attack as attackStages,
+  release as releaseStages,
+  totalSeconds,
+} from "../src/ui/dca";
 
 describe("playback rate maths", () => {
   it("is exact per equal temperament", () => {
@@ -19,7 +25,6 @@ interface Scheduled {
   rate: number;
   started: boolean;
   stopped: boolean;
-  gains: number[];
   /** Every gain event in order, with the time it was scheduled for. */
   events: { kind: "hold" | "ramp" | "exp"; value: number; time: number }[];
   loop: boolean;
@@ -33,7 +38,6 @@ function blank(): Scheduled {
     rate: 0,
     started: false,
     stopped: false,
-    gains: [],
     events: [],
     loop: false,
     loopStart: 0,
@@ -46,18 +50,12 @@ function fakeContext(record: Scheduled) {
   const gainNode = {
     gain: {
       value: 1,
-      setValueAtTime: (v: number, t: number) => {
-        record.gains.push(v);
-        record.events.push({ kind: "hold", value: v, time: t });
-      },
-      linearRampToValueAtTime: (v: number, t: number) => {
-        record.gains.push(v);
-        record.events.push({ kind: "ramp", value: v, time: t });
-      },
-      exponentialRampToValueAtTime: (v: number, t: number) => {
-        record.gains.push(v);
-        record.events.push({ kind: "exp", value: v, time: t });
-      },
+      setValueAtTime: (v: number, t: number) =>
+        record.events.push({ kind: "hold", value: v, time: t }),
+      linearRampToValueAtTime: (v: number, t: number) =>
+        record.events.push({ kind: "ramp", value: v, time: t }),
+      exponentialRampToValueAtTime: (v: number, t: number) =>
+        record.events.push({ kind: "exp", value: v, time: t }),
       cancelScheduledValues: () => undefined,
     },
     connect: () => undefined,
@@ -154,7 +152,7 @@ describe("audition engine", () => {
     });
     expect(record.rate).toBe(2);
     expect(record.started).toBe(true);
-    expect(record.gains.length).toBeGreaterThan(0);
+    expect(record.events.length).toBeGreaterThan(0);
   });
 
   it("release stops the source", () => {
@@ -412,7 +410,7 @@ describe("the DCA envelope reaches the scheduler", () => {
         dca: sweep,
         dcaFollow: flat,
       });
-      return Math.max(...record.gains);
+      return Math.max(...record.events.map((e) => e.value));
     };
     // A voice with no velocity sensitivity plays at one loudness,
     // which is what the hardware does.
@@ -421,41 +419,8 @@ describe("the DCA envelope reaches the scheduler", () => {
   });
 
   it("holds the note until its release stages finish", () => {
-    const stopArgs: (number | undefined)[] = [];
-    const context = {
-      currentTime: 0,
-      state: "running" as const,
-      resume: () => Promise.resolve(),
-      destination: {},
-      createBuffer: (_ch: number, length: number) => ({
-        getChannelData: () => new Float32Array(length),
-      }),
-      createGain: () => ({
-        gain: {
-          value: 0.5,
-          setValueAtTime: () => undefined,
-          linearRampToValueAtTime: () => undefined,
-          exponentialRampToValueAtTime: () => undefined,
-          cancelScheduledValues: () => undefined,
-        },
-        connect: () => undefined,
-        disconnect: () => undefined,
-      }),
-      createBufferSource: () => ({
-        buffer: null,
-        playbackRate: { value: 1 },
-        loop: false,
-        loopStart: 0,
-        loopEnd: 0,
-        onended: null,
-        connect: () => undefined,
-        start: () => undefined,
-        stop: (at?: number) => {
-          stopArgs.push(at);
-        },
-      }),
-    };
-    const engine = createAudition(() => context);
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
     const release = engine.play({
       pcm: new Int16Array(64),
       sampleRate: 18000,
@@ -472,9 +437,9 @@ describe("the DCA envelope reaches the scheduler", () => {
     // the first stage is instant, which puts the note at full, and
     // nothing has reached the sustain stage yet.
     const stages = releaseStages(pluck, 1, false);
-    expect(stopArgs[0]).toBeCloseTo(totalSeconds(stages) + 0.018, 3);
+    expect(record.stopAt).toBeCloseTo(totalSeconds(stages) + 0.018, 3);
     // And that is far beyond the fixed 60 ms fade it used to take.
-    expect(stopArgs[0]).toBeGreaterThan(0.5);
+    expect(record.stopAt ?? 0).toBeGreaterThan(0.5);
   });
 
   // The chip's amplifier is calibrated in dB, so a level is a long way
@@ -609,42 +574,52 @@ describe("the DCA envelope reaches the scheduler", () => {
     expect(record.stopAt ?? 0).toBeGreaterThan(last?.time ?? 0);
   });
 
-  it("keeps the short fade for a voice with no envelope", () => {
-    const stopArgs: (number | undefined)[] = [];
-    const context = {
-      currentTime: 0,
-      state: "running" as const,
-      resume: () => Promise.resolve(),
-      destination: {},
-      createBuffer: (_ch: number, length: number) => ({
-        getChannelData: () => new Float32Array(length),
-      }),
-      createGain: () => ({
-        gain: {
-          value: 1,
-          setValueAtTime: () => undefined,
-          linearRampToValueAtTime: () => undefined,
-          exponentialRampToValueAtTime: () => undefined,
-          cancelScheduledValues: () => undefined,
-        },
-        connect: () => undefined,
-        disconnect: () => undefined,
-      }),
-      createBufferSource: () => ({
-        buffer: null,
-        playbackRate: { value: 1 },
-        loop: false,
-        loopStart: 0,
-        loopEnd: 0,
-        onended: null,
-        connect: () => undefined,
-        start: () => undefined,
-        stop: (at?: number) => {
-          stopArgs.push(at);
-        },
-      }),
+  // Most factory voices are one shots: they finish while the key is
+  // still down, and the firmware frees the slot there. Holding the
+  // source open instead leaves a looping voice droning at the
+  // envelope's floor until the key comes up.
+  it("stops a one shot when its attack finishes, key still down", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    const shot = {
+      sustain: 7,
+      end: 1,
+      rates: [99, 50, 50, 50, 50, 50, 50, 50],
+      stops: [99, 0, 0, 0, 0, 0, 0, 0],
     };
-    const engine = createAudition(() => context);
+    engine.play({
+      pcm: new Int16Array(64),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 127,
+      dca: shot,
+    });
+    // No release: the note ends itself.
+    const attackSeconds = totalSeconds(attackStages(shot));
+    expect(record.stopAt ?? 0).toBeGreaterThan(attackSeconds);
+    expect(record.stopAt ?? 0).toBeLessThan(attackSeconds + 0.05);
+    // And it lands in silence rather than at the envelope's floor.
+    expect(record.events.at(-1)?.value).toBe(0);
+  });
+
+  it("leaves a voice that holds sounding until the key comes up", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    engine.play({
+      pcm: new Int16Array(64),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 127,
+      dca: sweep,
+    });
+    expect(record.stopAt).toBeUndefined();
+  });
+
+  it("keeps the short fade for a voice with no envelope", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
     engine.play({
       pcm: new Int16Array(64),
       sampleRate: 18000,
@@ -652,6 +627,6 @@ describe("the DCA envelope reaches the scheduler", () => {
       note: 60,
       velocity: 100,
     })();
-    expect(stopArgs[0]).toBeLessThan(0.2);
+    expect(record.stopAt ?? 0).toBeLessThan(0.2);
   });
 });

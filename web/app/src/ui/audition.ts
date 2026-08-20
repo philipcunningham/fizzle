@@ -5,7 +5,7 @@
 // audio failure never blocks editing.
 import type { EnvelopeSnapshot } from "../boundary/contract";
 import type { Scaling } from "./dca";
-import { amplitude, amplitudeAt, attack, levelAt, release, totalSeconds } from "./dca";
+import { amplitude, amplitudeAt, attack, levelAt, oneShot, release, totalSeconds } from "./dca";
 
 /**
  * The longest release the preview holds a source open for. The
@@ -163,8 +163,8 @@ export function createAudition(
         // The chip's amplifier is calibrated in dB, so a ramp that is
         // exponential in amplitude is the linear one the firmware's
         // accumulator runs. It also cannot start from silence, which
-        // suits: the envelope's own zero is a code 57 dB down rather
-        // than the chip's mute.
+        // suits: the envelope's own zero is a code above the chip's
+        // mute rather than silence.
         gain.gain.setValueAtTime(amplitude(0) * level, now);
         let t = now;
         for (const stage of attackStages) {
@@ -182,6 +182,25 @@ export function createAudition(
       source.connect(gain);
       gain.connect(ctx.destination);
       source.start();
+
+      let detached = false;
+      const detach = () => {
+        if (detached) return;
+        detached = true;
+        gain.disconnect();
+      };
+      source.onended = detach;
+
+      // A one shot finishes while the key is down, and the firmware
+      // frees its slot there. Holding the source open instead leaves a
+      // looping voice droning at the envelope's floor, which is a code
+      // rather than silence.
+      if (options.dca && oneShot(options.dca)) {
+        const ends = now + attackSeconds + MUTE_SECONDS;
+        gain.gain.linearRampToValueAtTime(0, ends);
+        source.stop(ends + 0.01);
+        setTimeout(detach, Math.ceil((attackSeconds + MUTE_SECONDS + 0.06) * 1000));
+      }
 
       let released = false;
       return () => {
@@ -229,18 +248,10 @@ export function createAudition(
           } else {
             gain.gain.linearRampToValueAtTime(0, at + tail + MUTE_SECONDS);
           }
-          // Stop after the fade lands, and detach only once the source
-          // ends: an immediate stop cuts at the current gain and clicks
-          // on every release. A one shot that already played out fires
-          // no further ended event, so the detach also runs on a timer;
-          // whichever comes first wins and the second call is harmless.
-          let detached = false;
-          const detach = () => {
-            if (detached) return;
-            detached = true;
-            gain.disconnect();
-          };
-          source.onended = detach;
+          // Stop after the fade lands. The detach runs on a timer as
+          // well as on the source ending, because a one shot that
+          // already played out fires no further ended event; whichever
+          // comes first wins and the second call is harmless.
           const ends = tail + (releaseStages.length > 0 ? MUTE_SECONDS : 0);
           setTimeout(detach, Math.ceil((ends + 0.06) * 1000));
           source.stop(at + ends + 0.01);

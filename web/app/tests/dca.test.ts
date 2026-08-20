@@ -5,7 +5,15 @@
 // pins whatever bug the implementation has.
 import { describe, expect, it } from "vitest";
 import type { EnvelopeSnapshot } from "../src/boundary/contract";
-import { amplitude, amplitudeAt, attack, levelAt, release, stageSeconds } from "../src/ui/dca";
+import {
+  amplitude,
+  amplitudeAt,
+  attack,
+  levelAt,
+  oneShot,
+  release,
+  stageSeconds,
+} from "../src/ui/dca";
 
 /** The full 0 to 255 span, which is what the worked figures describe. */
 const FULL = 255;
@@ -438,5 +446,21 @@ describe("the loudness partway through a run of stages", () => {
 
   it("holds the last stop once the run is over", () => {
     expect(amplitudeAt(stages, 99)).toBeCloseTo(amplitude(1), 9);
+  });
+});
+
+// A voice whose sustain sits at or past its end never parks, so the
+// firmware runs it to the end stage and frees the slot with the key
+// still down (F000:123B, F000:20AB). The engine has to know, or it
+// holds a source open for a note that already finished.
+describe("which voices finish on their own", () => {
+  it("knows a sustain past the end is a one shot", () => {
+    expect(oneShot({ sustain: 7, end: 4, rates: [], stops: [] })).toBe(true);
+    expect(oneShot({ sustain: 3, end: 3, rates: [], stops: [] })).toBe(true);
+  });
+
+  it("knows a voice that holds is not one", () => {
+    expect(oneShot({ sustain: 1, end: 3, rates: [], stops: [] })).toBe(false);
+    expect(oneShot({ sustain: 0, end: 7, rates: [], stops: [] })).toBe(false);
   });
 });

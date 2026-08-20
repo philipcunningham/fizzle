@@ -236,6 +236,17 @@ function effective(env: EnvelopeSnapshot, scale?: Scaling): { rates: number[]; s
 }
 
 /**
+ * Whether a voice finishes on its own. Note on caps the run at the
+ * lower of the sustain and end stages (F000:123B), so a sustain at or
+ * past the end leaves the counter parked past dca_end, the tail test
+ * at F000:20AB fails, and the voice frees its own slot with the key
+ * still down. Most factory voices are written this way.
+ */
+export function oneShot(env: EnvelopeSnapshot): boolean {
+  return clampStage(env.sustain) >= clampStage(env.end);
+}
+
+/**
  * The stages a held key runs. Note on caps the run at the lower of
  * the sustain and end stages (F000:123B), so the last segment's level
  * is where the note sits until it is released, and a sustain stage at
