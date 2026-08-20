@@ -8,6 +8,7 @@
 // takes |level delta| * 256 / table[rate] updates. States 3 and 7 of a
 // 500 Hz service both dispatch the DCA handler at F000:2039, so those
 // updates arrive 125 times a second.
+import type { EnvelopeSnapshot } from "../boundary/contract";
 
 /**
  * The 128 entry rate table at F000:0490 to F000:058F. Higher index,
@@ -91,4 +92,78 @@ export function stageSeconds(from: number, to: number, rateDisplay: number): num
   const ramp = (Math.abs(to - from) * 256) / step / UPDATES_PER_SECOND;
   const slew = Math.abs(levelCode(to) - levelCode(from)) / CODES_PER_SECOND;
   return Math.max(ramp, slew);
+}
+
+const STAGES = 8;
+
+/** One stage: ramp to this level, from where the last one left off. */
+export interface Segment {
+  seconds: number;
+  /** The stage's stop level, 0 to 1. */
+  level: number;
+}
+
+/** Mirrors disk.StopDisplayToByte: the panel's 0 to 99 to a level byte. */
+function stopByte(display: number): number {
+  if (display <= 0) return 0;
+  if (display >= 99) return FULL_LEVEL;
+  return Math.floor((FULL_LEVEL * (display - 1)) / 99) + 1;
+}
+
+function clampStage(n: number): number {
+  return Math.max(0, Math.min(STAGES - 1, Math.trunc(n)));
+}
+
+/**
+ * The stages a held key runs, from silence to the sustain stage. The
+ * last segment's level is where the note sits until it is released.
+ */
+export function attack(env: EnvelopeSnapshot): Segment[] {
+  const sustain = clampStage(env.sustain);
+  const out: Segment[] = [];
+  let level = 0;
+  for (let stage = 0; stage <= sustain; stage++) {
+    const target = stopByte(env.stops[stage] ?? 0);
+    out.push({
+      seconds: stageSeconds(level, target, env.rates[stage] ?? 0),
+      level: target / FULL_LEVEL,
+    });
+    level = target;
+  }
+  return out;
+}
+
+/**
+ * The stages a released key runs. Ordinarily sustain plus one through
+ * the end stage; a key that came up before the sustain stage was
+ * reached jumps straight to the end stage and runs it alone
+ * (F000:1512). The end stage always falls to silence, whatever the
+ * file stores, because note on writes it that way (F000:1351).
+ *
+ * fromLevel is where the note actually was when the key came up, since
+ * that is where the first release stage starts from.
+ */
+export function release(
+  env: EnvelopeSnapshot,
+  fromLevel: number,
+  reachedSustain: boolean,
+): Segment[] {
+  const sustain = clampStage(env.sustain);
+  const end = clampStage(env.end);
+  const out: Segment[] = [];
+  let level = Math.round(Math.max(0, Math.min(1, fromLevel)) * FULL_LEVEL);
+  for (let stage = reachedSustain ? sustain + 1 : end; stage <= end; stage++) {
+    const target = stage === end ? 0 : stopByte(env.stops[stage] ?? 0);
+    out.push({
+      seconds: stageSeconds(level, target, env.rates[stage] ?? 0),
+      level: target / FULL_LEVEL,
+    });
+    level = target;
+  }
+  return out;
+}
+
+/** How long a run of stages takes, for scheduling what follows. */
+export function totalSeconds(segments: Segment[]): number {
+  return segments.reduce((total, segment) => total + segment.seconds, 0);
 }
