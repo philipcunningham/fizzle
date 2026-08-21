@@ -58,6 +58,10 @@ Rules:
   sources may run longer than any one of them.
 - Pages are trusted at query time; freshness is lint's job, never a
   re-verify instruction on the page.
+- A page states the best current reading, in the present tense. It
+  never narrates its own history: no "this page used to say", no
+  record of a reversal. `log.md` carries what changed, and a page that
+  argues with its past selves costs every later reader the detour.
 - Any page may carry `## Open questions` (claims awaiting a hardware
   experiment or firmware trace); lint collects them as the research
   agenda.

@@ -104,29 +104,39 @@ a phrase's words in reverse, so a next loop can sit behind the one
 before it and the jump runs backward. Added to multi-loops, read
 from the book directly.
 
-## [2026-08-21] ingest | The loop chain, from the ROM
+## [2026-08-21] ingest | The loop chain runs on one cap byte
 
-A firmware trace settled the multi-loop questions. One cap byte drives
-the chain: note on sets it to `min(loop_sus, loop_end)` and note off
-raises it to `loop_end`, and the advance runs only below it. That one
-rule makes both the sustain hold and the repeating end loop.
+Note on caps the chain at `min(loop_sus, loop_end)` and note off raises
+the cap to `loop_end`. The advance runs only below the cap, so the
+sustain hold and the repeating end loop are one rule. multi-loops
+moves to confirmed-firmware.
 
-looptm is a duration after all, at 16 ms a unit, which is the spec's
-own figure. The page had leaned repeat count on the FZ book's caption.
-The 1024 every end loop carries is an authoring marker the runtime
-never reads, because the timer stops at the cap.
+## [2026-08-21] ingest | looptm is a duration, not a count
 
-multi-loops moves to confirmed-firmware; looptm-unit moves from
-suspect to confirmed-firmware. Trace and Skip stay untraced.
+The ROM's counter ticks at 62.5 Hz, so a unit is 16 ms, which is the
+spec's own figure. The finding had leaned repeat count on the FZ
+book's caption. It moves from suspect to confirmed-firmware.
 
-## [2026-08-21] ingest | The loop timer's lifecycle, and pages as present tense
+## [2026-08-21] ingest | The 1024 on end loops is an authoring marker
 
-Traced two more facts. Note on starts the chain at loop 0 with the
-timer parked (F000:1212 to F000:121C), and a negative timer never
-expires. A loop's time therefore runs only while it sounds. The state
-1 handler starts it at F000:2033, and F000:251F parks it again.
+The advance halts at the cap, so an end loop's timer never runs and its
+`looptm` is never read. The corpus writes 1024 on all 2,554 of them,
+and playback consults none of it.
 
-Rewrote both pages to drop what they used to say. A page states the
-best current reading, and this log carries the changes. The looptm
-finding no longer narrates its own reversal. What the FZ book hears in
-Experiment 12 becomes an open question against the timer's gating.
+## [2026-08-21] ingest | The loop timer runs only while its loop sounds
+
+Note on parks the timer, expiry parks it, and F000:251F parks it again;
+a negative timer never expires. The running value comes from F000:2033.
+What those two run under stays untraced, and both pages say so.
+
+## [2026-08-21] schema | Pages state the present, the log carries history
+
+Added the rule to the page section: a page never narrates its own
+history. Three ingests in one day had pages arguing with their past
+readings, which costs every later reader a detour.
+
+## [2026-08-21] lint | Log entry size, third recurrence
+
+Two entries ran past the two to five line body again. Split per
+operation rather than amending the rule: an ingest touching several
+pages is several operations, and the size limit is what forces that.

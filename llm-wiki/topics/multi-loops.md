@@ -6,7 +6,7 @@ tags: [fzv, loops, playback]
 updated: 2026-08-21
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
-  - FZ-1 ROM (note on F000:122B; note off F000:1515; loop advance F000:1D15 to F000:1D43)
+  - FZ-1 ROM (note on F000:122B; note off F000:1515; loop advance F000:1D11 to F000:1D43)
   - The Casio FZ-1 and FZ-10M Book, chapter 8.3, pages 71 to 78
   - Casio FZ-1 Owner's Manual, pages 69 to 71
 status: confirmed-firmware
