@@ -621,21 +621,31 @@ describe("the release loop reaches the preview", () => {
     const recorded = stubAudioContext();
     const core = createFakeCore();
     await openInstrumentDisk(core);
-    // Name loop 1 as the release loop, with no sustain loop: the
-    // signature is (slot, sustain, release) and 8 means none.
-    await core.setSlotLoopSelect(0, 8, 0);
+    // Name loop 1 the sustain loop and loop 2 the release loop, with
+    // distinct bounds. A sustain loop naming none (8) would let note
+    // on's own cap at min(loop_sus, loop_end) (F000:122B) land on the
+    // release loop already, so the window at release would match the
+    // one note on set and prove nothing moved.
+    await core.setSlotLoopSelect(0, 0, 1);
     await commitField("loop 1 start", "500");
     await commitField("loop 1 end", "1200");
+    await commitField("loop 2 start", "2000");
+    await commitField("loop 2 end", "3500");
 
     await waitFor(() => {
       playMiddleC();
       expect(recorded.rates.length).toBeGreaterThan(0);
     });
-    // The window at release, not the one note on set. KICK's voice
-    // runs at 18 kHz in the fake.
+    // Note on holds the sustain loop. KICK's voice runs at 18 kHz in
+    // the fake.
+    const held = recorded.loops.at(-1);
+    expect(held?.start).toBeCloseTo(500 / 18000, 10);
+    expect(held?.end).toBeCloseTo(1200 / 18000, 10);
+    // Key up moves the window to the release loop, distinct from the
+    // one note on set: the move is real, not the same window twice.
     const loop = recorded.releaseLoops.at(-1);
-    expect(loop?.start).toBeCloseTo(500 / 18000, 10);
-    expect(loop?.end).toBeCloseTo(1200 / 18000, 10);
+    expect(loop?.start).toBeCloseTo(2000 / 18000, 10);
+    expect(loop?.end).toBeCloseTo(3500 / 18000, 10);
   });
 });
 
