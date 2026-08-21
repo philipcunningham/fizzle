@@ -218,6 +218,7 @@ describe("Waveform", () => {
         loopIndex={0}
         loop={{ start: 100, end: 900, xf: 0, tm: 0 }}
         sustain={false}
+        release={false}
         onSetLoop={(s, e) => calls.push([s, e])}
       />,
     );

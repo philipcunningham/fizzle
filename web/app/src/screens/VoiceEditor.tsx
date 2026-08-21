@@ -13,7 +13,7 @@ import { Stepper } from "../ui/Stepper";
 import { Waveform } from "../ui/Waveform";
 import { clamp, formatBytes } from "../ui/format";
 import { noteName, parseNote } from "../ui/notes";
-import { isSustainLoop } from "../viewstate/loops";
+import { isReleaseLoop, isSustainLoop } from "../viewstate/loops";
 
 export interface VoiceEditorProps {
   instrument: InstrumentSnapshot;
@@ -293,6 +293,7 @@ export function VoiceEditor(props: VoiceEditorProps) {
               loopIndex={props.selectedLoop}
               loop={activeLoop ?? { start: 0, end: detail.frames, xf: 0, tm: 0 }}
               sustain={isSustainLoop(detail, props.selectedLoop)}
+              release={isReleaseLoop(detail, props.selectedLoop)}
               onSetLoop={(start, end) => {
                 props.onSetLoop(voice.slot, props.selectedLoop, start, end);
               }}
