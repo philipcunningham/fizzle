@@ -103,3 +103,18 @@ A plan review surfaced Experiment 12's observations. The book chains
 a phrase's words in reverse, so a next loop can sit behind the one
 before it and the jump runs backward. Added to multi-loops, read
 from the book directly.
+
+## [2026-08-21] ingest | The loop chain, from the ROM
+
+A firmware trace settled the multi-loop questions. One cap byte drives
+the chain: note on sets it to `min(loop_sus, loop_end)` and note off
+raises it to `loop_end`, and the advance runs only below it. That one
+rule makes both the sustain hold and the repeating end loop.
+
+looptm is a duration after all, at 16 ms a unit, which is the spec's
+own figure. The page had leaned repeat count on the FZ book's caption.
+The 1024 every end loop carries is an authoring marker the runtime
+never reads, because the timer stops at the cap.
+
+multi-loops moves to confirmed-firmware; looptm-unit moves from
+suspect to confirmed-firmware. Trace and Skip stay untraced.

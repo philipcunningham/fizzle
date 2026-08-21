@@ -6,17 +6,15 @@ tags: [fzv, loops, playback]
 updated: 2026-08-21
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
+  - FZ-1 ROM (note on F000:122B; note off F000:1515; loop advance F000:1D15 to F000:1D43)
   - The Casio FZ-1 and FZ-10M Book, chapter 8.3, pages 71 to 78
   - Casio FZ-1 Owner's Manual, pages 69 to 71
-status: spec-only
+status: confirmed-firmware
 ---
 
 # Multi-loop playback
 
-A voice's eight loops aren't alternatives competing for the sustain
-and end designations. They form a chain, played strictly in numerical
-order, and the two designations are roles inside that chain. The FZ
-book calls it the loop cycle (chapter 8.3, page 73).
+A voice's eight loops aren't alternatives competing for the sustain and end designations. They form a chain, played strictly in numerical order, and the two designations are roles inside that chain. The FZ book calls it the loop cycle (chapter 8.3, page 73), and the firmware runs it exactly as described.
 
 ## The three roles
 
@@ -51,6 +49,22 @@ book's Experiment 12 chains the words of a phrase in reverse, loop
 by loop (book, page 76). A next loop can therefore sit behind the
 one before it, and the jump runs backward through the sample.
 
+## How the firmware runs it
+
+One cap and one counter drive the whole chain, the same shape the DCA envelope uses.
+
+Three bytes of the per-voice slot carry the state. `gene+0x0E` is the loop the voice is on. `gene+0x0F` holds the cap in its low 6 bits, with a running flag at 0x40 and a released flag at 0x80. `gene+0x10` counts the current loop's elapsed time.
+
+Note on sets the cap to `min(loop_sus, loop_end)` at F000:122B, four instructions before it caps the DCA envelope at `min(dca_sus, dca_end)` the same way. Note off raises the cap to `loop_end` at F000:1515, preserving the two flag bits.
+
+The advance sits in the per-voice service at F000:1D15. It runs only while the cap sits above the current loop, so reaching the cap stops the chain and leaves that loop repeating. That single rule produces both holds. The sustain loop holds while the key is down, because note on capped the chain there. The end loop repeats afterwards, because note off moved the cap to it.
+
+While the chain is below its cap, the counter at `gene+0x10` increments and is compared against `looptm[index]` at F000:1D34. Passing it parks the counter at 0xFFFE and advances the loop with `INC byte ptr [DI+0x0E]` at F000:1D43. A counter already negative is skipped, so a parked loop never expires.
+
+The counter advances once every eight service calls (F000:1D11), and the service itself runs every eight timer IRQs. At the 4 kHz IRQ that is 62.5 Hz, so one `looptm` unit is 16 ms: see [looptm-unit](../findings/looptm-unit.md).
+
+Because the timer stops at the cap, the end loop's own `looptm` is never read.
+
 ## Trace, Skip, and the seam
 
 Each loop's next flag governs the unlooped audio between its end and
@@ -70,8 +84,7 @@ Section 2-1 of the spec carries the whole mechanism:
 
 - `loop_sus`: 0 to 7 names the sustain loop; 8 means none.
 - `loop_end`: 0 to 7 names the chain's last loop; 8 runs all eight.
-- `looptm[8]`: the per loop time. Its unit is contested: see
-  [looptm-unit](../findings/looptm-unit.md).
+- `looptm[8]`: the per loop time, in 16 ms units, confirmed against the ROM in [looptm-unit](../findings/looptm-unit.md).
 - `loopxf[8]`: the cross fade time, 0 to 1023; 0 means none.
 - `looped[8]` MSB: 1 for Skip, 0 for Trace.
 - `loopst[8]` upper 8 bits: loop fine. The owner's manual's EX FINE
@@ -90,7 +103,5 @@ Skip, and the cross fade don't reach it.
 
 ## Open questions
 
-- The loop cycle's order and hold semantics rest on the FZ book
-  alone; the spec gives fields, not behaviour. A firmware trace of
-  the loop advance would confirm the cycle and raise the page past
-  spec-only.
+- Trace and Skip rest on the book and the manual. The firmware's use of the `looped` MSB is untraced, so how a Skip transition reaches the sample hardware is unrecorded.
+- The cross fade's effect on the seam is documented by the manual, not by a trace.
