@@ -16,7 +16,7 @@ status: confirmed-firmware
 
 ## Claim
 
-A timed loop's `looptm` counts elapsed time, not passes. The spec's prose is right, and the reading this page previously leaned toward is wrong.
+A timed loop's `looptm` counts elapsed time, not passes, in units of 16 ms.
 
 ## Evidence
 
@@ -24,7 +24,7 @@ The firmware settles it. At F000:1D1F the advance loads a counter from `gene+0x1
 
 The rate matches the spec's own figure. The counter advances on one service call in eight (F000:1D11). The service itself runs on one timer IRQ in eight. At the 4 kHz IRQ that is 62.5 Hz, so a unit is 16 ms. The spec calls `looptm` settable "by 16 milliseconds from 16 milliseconds up to 16 seconds". Its stated maximum of 1022 units is 16.35 s.
 
-The book's Figure 33 caption says a Loop Time of one repeats a loop three times. That describes what a player hears rather than what the field counts. Experiment 12 sets every loop to one over word length loops and hears each word repeat. This page took that as the stronger evidence before the ROM was traced. How a 16 ms timer yields more than one audible pass on a 350 ms loop stays unexplained. Answering it needs the sample hardware's jump timing rather than the service routine.
+The FZ book reads as a repeat count from the keyboard. Its Figure 33 caption says a Loop Time of one repeats a loop three times. Experiment 12 hears each word of a phrase repeat under a time of one. A 16 ms timer predicts a single pass on a word length loop. The caption therefore describes an audible effect the service routine alone doesn't account for.
 
 ## The 1024 the corpus writes
 
@@ -38,4 +38,4 @@ Authoring writes `looptm` per [voice-authoring-defaults](../topics/voice-authori
 
 ## Open questions
 
-- Experiment 12's audible repeats stand unexplained against a 16 ms timer. Settling that needs the sample hardware's loop jump, which the service routine doesn't cover, or a hardware recording of one loop at two lengths under the same value.
+- What the book hears in Experiment 12 doesn't follow from a 16 ms timer alone. The timer runs only while a loop sounds, and what starts it is untraced, so the audible repeat count may come from that gating rather than from `looptm`.

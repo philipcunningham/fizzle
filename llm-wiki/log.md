@@ -118,3 +118,15 @@ never reads, because the timer stops at the cap.
 
 multi-loops moves to confirmed-firmware; looptm-unit moves from
 suspect to confirmed-firmware. Trace and Skip stay untraced.
+
+## [2026-08-21] ingest | The loop timer's lifecycle, and pages as present tense
+
+Traced two more facts. Note on starts the chain at loop 0 with the
+timer parked (F000:1212 to F000:121C), and a negative timer never
+expires. A loop's time therefore runs only while it sounds. The state
+1 handler starts it at F000:2033, and F000:251F parks it again.
+
+Rewrote both pages to drop what they used to say. A page states the
+best current reading, and this log carries the changes. The looptm
+finding no longer narrates its own reversal. What the FZ book hears in
+Experiment 12 becomes an open question against the timer's gating.
