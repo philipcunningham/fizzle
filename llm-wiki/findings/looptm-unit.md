@@ -1,62 +1,41 @@
 ---
 type: finding
-title: The looptm unit is contested
-description: The spec calls looptm a duration in 16 ms steps; the FZ book shows a value of one repeating a loop three times; the struct comment hedges between the two.
+title: looptm is a duration in 16 ms units
+description: The spec's duration reading is right; the FZ book's repeat-count caption describes what a player hears, and the 1024 the corpus writes on end loops is never read at playback.
 tags: [fzv, loops]
 updated: 2026-08-21
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
-  - The Casio FZ-1 and FZ-10M Book, chapter 8.3, page 73, Figure 33
-status: suspect
+  - FZ-1 ROM (loop advance F000:1D11 to F000:1D43)
+  - The Casio FZ-1 and FZ-10M Book, chapter 8.3, page 73, Figure 33, and Experiment 12, pages 75 to 76
+  - testdata/corpus, 4,954 voices
+status: confirmed-firmware
 ---
 
-# The looptm unit is contested
+# looptm is a duration in 16 ms units
 
 ## Claim
 
-What a timed loop's `looptm` value counts is unsettled. The spec's
-prose says a duration. The FZ book's worked figure reads as a repeat
-count, and Casio's own struct comment declines to choose.
+A timed loop's `looptm` counts elapsed time, not passes. The spec's prose is right, and the reading this page previously leaned toward is wrong.
 
 ## Evidence
 
-- The spec (section 2-1) says `looptm` "denotes a timing duration for
-  Multi Loop", 1 to 1022, settable "by 16 milliseconds from 16
-  milliseconds up to 16 seconds".
-- The same listing's field comment reads `loop time (' or times)`,
-  which hedges between a duration and a count.
-- The FZ book's Figure 33 caption states that a Loop Time value of
-  one causes a loop to repeat three times (page 73). Its body text
-  says a timed loop repeats "for the specified amount of time".
-- The owner's manual (pages 69 to 71) walks the panel without
-  defining the number at all. Its screens still carry range
-  evidence. Step 12 shows LOOP TIME at 1023 where the spec stops at
-  1022. The same field shows END at step 11 and SUS on the next loop
-  screens, so the panel folds both designations into the time
-  control as positions past the numbers. The file stores them apart,
-  in `loop_sus` and `loop_end`, so the screens prove a panel
-  encoding rather than a stored one.
-- The book's Experiment 12 (pages 75 to 76) sets every loop's time to
-  one, with each loop spanning a spoken word, and hears each word
-  repeat a few times. A word length loop runs far past 16 ms, so a
-  duration reading predicts a single pass there.
+The firmware settles it. At F000:1D1F the advance loads a counter from `gene+0x10`, increments it, and compares it against `looptm[index]` at F000:1D34. Nothing in the path observes the sample position, so a pass through the loop never enters the arithmetic.
 
-A duration with a whole pass floor would reconcile the two for loops
-shorter than about 5 ms. Experiment 12 contradicts it at word length,
-so the repeat count reading holds the stronger evidence today.
+The rate matches the spec's own figure. The counter advances on one service call in eight (F000:1D11). The service itself runs on one timer IRQ in eight. At the 4 kHz IRQ that is 62.5 Hz, so a unit is 16 ms. The spec calls `looptm` settable "by 16 milliseconds from 16 milliseconds up to 16 seconds". Its stated maximum of 1022 units is 16.35 s.
+
+The book's Figure 33 caption says a Loop Time of one repeats a loop three times. That describes what a player hears rather than what the field counts. Experiment 12 sets every loop to one over word length loops and hears each word repeat. This page took that as the stronger evidence before the ROM was traced. How a 16 ms timer yields more than one audible pass on a 350 ms loop stays unexplained. Answering it needs the sample hardware's jump timing rather than the service routine.
+
+## The 1024 the corpus writes
+
+Every usable loop named by `loop_end` alone carries `looptm = 1024`, across all 2,554 of them. No timed loop carries that value. Sustain loops run 0, 100, and 1024, the last only where one loop serves both roles. Both 0 and 1024 sit outside the spec's stated 1 to 1022.
+
+The firmware explains why the file can hold a meaningless value there. The advance runs only while the cap sits above the current loop (F000:1D1A), and note off sets the cap to `loop_end`. The end loop's timer therefore never runs, and its `looptm` is never read. The value is an authoring marker for the END designation. That matches the panel, which folds SUS and END into the time control as positions past the numbers.
 
 ## What fizzle implements
 
-Authoring writes `looptm` per
-[voice-authoring-defaults](../topics/voice-authoring-defaults.md) and
-round trips it untouched. The browser editor edits the value as R14's
-loop time attribute. Nothing in fizzle interprets the unit, and the
-preview ignores timed loops: see
-[multi-loops](../topics/multi-loops.md).
+Authoring writes `looptm` per [voice-authoring-defaults](../topics/voice-authoring-defaults.md) and round trips it untouched. The browser editor edits the value as R14's loop time attribute. Nothing in fizzle interprets the unit, and the preview ignores timed loops: see [multi-loops](../topics/multi-loops.md).
 
 ## Open questions
 
-- Does the firmware treat `looptm` as elapsed time or as passes? A
-  firmware trace of the loop advance during a timed loop, or a
-  hardware recording of one loop at two lengths under the same
-  `looptm`, would settle it.
+- Experiment 12's audible repeats stand unexplained against a 16 ms timer. Settling that needs the sample hardware's loop jump, which the service routine doesn't cover, or a hardware recording of one loop at two lengths under the same value.
