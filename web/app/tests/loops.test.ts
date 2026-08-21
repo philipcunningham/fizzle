@@ -18,8 +18,11 @@ function detail(loopSustain: number, first: { start: number; end: number }): Voi
     genEnd: 4096,
     loopSustain,
     loopRelease: 8,
+    // Loops 1 to 7 each get bounds that are a function of their own
+    // index, distinct from every other loop, so a test that reads the
+    // wrong index fails instead of quietly matching a sibling.
     loops: Array.from({ length: 8 }, (_, i) =>
-      i === 0 ? { ...first, xf: 0, tm: 0 } : { start: 0, end: 4096, xf: 0, tm: 0 },
+      i === 0 ? { ...first, xf: 0, tm: 0 } : { start: i * 100, end: i * 100 + 500, xf: 0, tm: 0 },
     ),
     dca: envelope,
     dcf: envelope,
@@ -27,8 +30,9 @@ function detail(loopSustain: number, first: { start: number; end: number }): Voi
 }
 
 /**
- * The same voice, with a release loop named. Loops 1 to 7 span the
- * whole sample, so naming one gives a usable loop without more setup.
+ * The same voice, with a release loop named. Loops 1 to 7 each carry
+ * distinct, usable bounds, so naming one gives a usable loop without
+ * more setup.
  */
 function withRelease(loopSustain: number, loopRelease: number): VoiceDetail {
   return { ...detail(loopSustain, { start: 100, end: 900 }), loopRelease };
@@ -82,7 +86,7 @@ describe("whether a loop is the sustain loop", () => {
 
 describe("the loop a released key moves to", () => {
   it("is the loop the voice names", () => {
-    expect(releaseLoop(withRelease(8, 2))).toMatchObject({ start: 0, end: 4096 });
+    expect(releaseLoop(withRelease(8, 2))).toMatchObject({ start: 200, end: 700 });
   });
 
   it("is absent when the voice names none", () => {
