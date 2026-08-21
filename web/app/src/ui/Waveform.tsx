@@ -19,6 +19,8 @@ interface Props {
   loop: LoopSnapshot;
   /** The drawn loop is the one the voice repeats while a key is held. */
   sustain: boolean;
+  /** The drawn loop is the one the voice repeats after the key comes up. */
+  release: boolean;
   onSetLoop: (start: number, end: number) => void;
   onGestureBegin?: () => void;
   onGestureCommit?: () => void;
@@ -64,6 +66,7 @@ export function Waveform({
   loopIndex,
   loop,
   sustain,
+  release,
   onSetLoop,
   onGestureBegin,
   onGestureCommit,
@@ -286,6 +289,7 @@ export function Waveform({
       <div className="loopnums">
         <span className="loopname">Loop {loopIndex + 1}</span>
         {sustain && <span className="loopsustain">sustain · repeats while held</span>}
+        {!sustain && release && <span className="loopsustain">end · repeats after the key</span>}
         <span>
           Start{" "}
           <NumberCell

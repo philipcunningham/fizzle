@@ -61,6 +61,19 @@ describe("loops on a slot", () => {
     await commitField("loop 1 start", "100");
     expect(screen.getByText(/repeats while held/)).toBeTruthy();
   });
+
+  it("says a release loop repeats after the key comes up", async () => {
+    const core = createFakeCore();
+    await openInstrumentDisk(core);
+    await screen.findByLabelText("loop 1 start");
+    expect(screen.queryByText(/repeats after the key/)).toBeNull();
+
+    // (slot, sustain, release), where 8 means none.
+    await core.setSlotLoopSelect(0, 8, 0);
+    await commitField("loop 1 start", "500");
+    await commitField("loop 1 end", "1200");
+    expect(await screen.findByText(/repeats after the key/i)).toBeTruthy();
+  });
 });
 
 // R14's Sample group. Sample rate is a schema select, so it must reach
