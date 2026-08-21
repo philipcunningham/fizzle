@@ -55,11 +55,13 @@ One cap and one counter drive the whole chain, the same shape the DCA envelope u
 
 Three bytes of the per-voice slot carry the state. `gene+0x0E` is the loop the voice is on. `gene+0x0F` holds the cap in its low 6 bits, with a running flag at 0x40 and a released flag at 0x80. `gene+0x10` counts the current loop's elapsed time.
 
-Note on sets the cap to `min(loop_sus, loop_end)` at F000:122B, four instructions before it caps the DCA envelope at `min(dca_sus, dca_end)` the same way. Note off raises the cap to `loop_end` at F000:1515, preserving the two flag bits.
+Note on starts the chain at loop 0 and parks the timer, at F000:1212 to F000:121C. It sets the cap to `min(loop_sus, loop_end)` at F000:122B, four instructions before it caps the DCA envelope at `min(dca_sus, dca_end)` the same way. Note off raises the cap to `loop_end` at F000:1515, preserving the two flag bits.
 
 The advance sits in the per-voice service at F000:1D15. It runs only while the cap sits above the current loop, so reaching the cap stops the chain and leaves that loop repeating. That single rule produces both holds. The sustain loop holds while the key is down, because note on capped the chain there. The end loop repeats afterwards, because note off moved the cap to it.
 
-While the chain is below its cap, the counter at `gene+0x10` increments and is compared against `looptm[index]` at F000:1D34. Passing it parks the counter at 0xFFFE and advances the loop with `INC byte ptr [DI+0x0E]` at F000:1D43. A counter already negative is skipped, so a parked loop never expires.
+While the chain is below its cap, the counter at `gene+0x10` increments and is compared against `looptm[index]` at F000:1D34. Passing it parks the counter at 0xFFFE and advances the loop with `INC byte ptr [DI+0x0E]` at F000:1D43.
+
+A negative counter is parked and never expires, which is how the timer runs only while a loop is actually sounding. Note on parks it, expiry parks it, and `isr_voice_segment_advance` parks it again at F000:251F. The running value comes from the state 1 handler at F000:2033.
 
 The counter advances once every eight service calls (F000:1D11), and the service itself runs every eight timer IRQs. At the 4 kHz IRQ that is 62.5 Hz, so one `looptm` unit is 16 ms: see [looptm-unit](../findings/looptm-unit.md).
 
@@ -104,4 +106,5 @@ Skip, and the cross fade don't reach it.
 ## Open questions
 
 - Trace and Skip rest on the book and the manual. The firmware's use of the `looped` MSB is untraced, so how a Skip transition reaches the sample hardware is unrecorded.
+- What starts a loop's timer is untraced. The writers are known, at F000:2033 and F000:251F, but the conditions they run under aren't, so how long a loop sounds before its time begins counting is unrecorded.
 - The cross fade's effect on the seam is documented by the manual, not by a trace.
