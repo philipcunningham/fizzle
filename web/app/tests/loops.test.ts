@@ -2,7 +2,7 @@
 // repeats while a key is held, and when none of them does.
 import { describe, expect, it } from "vitest";
 import type { VoiceDetail } from "../src/boundary/contract";
-import { isSustainLoop, sustainLoop } from "../src/viewstate/loops";
+import { isReleaseLoop, isSustainLoop, releaseLoop, sustainLoop } from "../src/viewstate/loops";
 
 function detail(loopSustain: number, first: { start: number; end: number }): VoiceDetail {
   const envelope = {
@@ -24,6 +24,14 @@ function detail(loopSustain: number, first: { start: number; end: number }): Voi
     dca: envelope,
     dcf: envelope,
   };
+}
+
+/**
+ * The same voice, with a release loop named. Loops 1 to 7 span the
+ * whole sample, so naming one gives a usable loop without more setup.
+ */
+function withRelease(loopSustain: number, loopRelease: number): VoiceDetail {
+  return { ...detail(loopSustain, { start: 100, end: 900 }), loopRelease };
 }
 
 describe("the sustain loop", () => {
@@ -69,5 +77,35 @@ describe("whether a loop is the sustain loop", () => {
 
   it("fails for a file with no voice detail", () => {
     expect(isSustainLoop(undefined, 0)).toBe(false);
+  });
+});
+
+describe("the loop a released key moves to", () => {
+  it("is the loop the voice names", () => {
+    expect(releaseLoop(withRelease(8, 2))).toMatchObject({ start: 0, end: 4096 });
+  });
+
+  it("is absent when the voice names none", () => {
+    expect(releaseLoop(withRelease(8, 8))).toBeUndefined();
+  });
+
+  it("is absent when the named loop has no range", () => {
+    const d = withRelease(8, 0);
+    d.loops[0] = { start: 500, end: 500, xf: 0, tm: 0 };
+    expect(releaseLoop(d)).toBeUndefined();
+  });
+
+  // 146 corpus voices name one loop for both roles.
+  it("is the sustain loop too when one loop serves both", () => {
+    const d = withRelease(3, 3);
+    expect(releaseLoop(d)).toEqual(sustainLoop(d));
+    expect(isReleaseLoop(d, 3)).toBe(true);
+    expect(isSustainLoop(d, 3)).toBe(true);
+  });
+
+  it("marks only the loop the voice names", () => {
+    const d = withRelease(8, 2);
+    expect(isReleaseLoop(d, 2)).toBe(true);
+    expect(isReleaseLoop(d, 1)).toBe(false);
   });
 });
