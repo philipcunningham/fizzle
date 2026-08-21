@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright";
 import { preview } from "vite";
+import { makeCommitField, makeRegionFill } from "./pagehelpers.mjs";
 
 const update = process.argv.includes("--update");
 const dir = new URL(`../visual/${process.platform}`, import.meta.url).pathname;
@@ -23,6 +24,8 @@ const page = await browser.newPage({
   // by a couple of levels between runs.
   reducedMotion: "reduce",
 });
+const commitField = makeCommitField(page);
+
 // A deterministic seeded state: one imported WAV, one loop set.
 const monoWav = (samples, rate) => {
   const data = Buffer.alloc(samples * 2);
@@ -55,15 +58,8 @@ writeFileSync(wavPath, monoWav(4000, 18000));
 await page.getByLabel("fz files").setInputFiles(wavPath);
 await page.getByRole("button", { name: "Convert" }).click();
 await page.getByText("Voices (1/64)").waitFor({ timeout: 10000 });
-const start = page.getByLabel("loop 1 start");
-await start.waitFor({ timeout: 10000 });
-await start.fill("500");
-await start.blur();
-await page.waitForFunction(
-  () => document.querySelector('[aria-label="loop 1 start"]')?.value === "500",
-  undefined,
-  { timeout: 5000 },
-);
+await page.getByLabel("loop 1 start").waitFor({ timeout: 10000 });
+await commitField("loop 1 start", "500");
 // Let the waveform settle before shooting.
 await page.waitForTimeout(400);
 
@@ -96,14 +92,7 @@ for (const [name, selector] of shots) {
 // The same strip once loop 1 is the loop the voice repeats: the region
 // changes hue, which only a screenshot can hold. Shot last, so the
 // three above keep the state their baselines were taken in.
-const regionFill = () =>
-  page.evaluate(() => {
-    const host = document.querySelector('[data-testid="waveform"] div');
-    const el = [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])].find((n) =>
-      /^region region-/.test(n.getAttribute("part")),
-    );
-    return el ? getComputedStyle(el).backgroundColor : null;
-  });
+const regionFill = makeRegionFill(page);
 
 const plain = await regionFill();
 await page.getByRole("combobox", { name: "Sustain loop" }).click();
@@ -131,18 +120,8 @@ if (fill === plain) {
 // designation stays on loop 1, which keeps the cap below loop 2
 // (F000:122B); at none, loop 2 would draw as the sustain loop and this
 // baseline would repeat the one above.
-const commit = async (label, value) => {
-  const field = page.getByLabel(label);
-  await field.fill(value);
-  await field.blur();
-  await page.waitForFunction(
-    ([l, v]) => document.querySelector(`[aria-label="${l}"]`)?.value === v,
-    [label, value],
-    { timeout: 5000 },
-  );
-};
-await commit("loop 2 start", "1500");
-await commit("loop 2 end", "2500");
+await commitField("loop 2 start", "1500");
+await commitField("loop 2 end", "2500");
 await page.getByRole("combobox", { name: "Release loop" }).click();
 await page.getByRole("option", { name: "2", exact: true }).click();
 await page.getByLabel("loop 2 start").click();
