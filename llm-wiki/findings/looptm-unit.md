@@ -29,10 +29,13 @@ count, and Casio's own struct comment declines to choose.
   one causes a loop to repeat three times (page 73). Its body text
   says a timed loop repeats "for the specified amount of time".
 - The owner's manual (pages 69 to 71) walks the panel without
-  defining the number at all. Its screens still carry range evidence:
-  step 12 shows LOOP TIME accepting 1023 where the spec stops at
-  1022, and the same field displays SUS and END. Reserved encodings
-  at the range ends would explain both readings of the field.
+  defining the number at all. Its screens still carry range
+  evidence. Step 12 shows LOOP TIME at 1023 where the spec stops at
+  1022. The same field shows END at step 11 and SUS on the next loop
+  screens, so the panel folds both designations into the time
+  control as positions past the numbers. The file stores them apart,
+  in `loop_sus` and `loop_end`, so the screens prove a panel
+  encoding rather than a stored one.
 - The book's Experiment 12 (pages 75 to 76) sets every loop's time to
   one, with each loop spanning a spoken word, and hears each word
   repeat a few times. A word length loop runs far past 16 ms, so a

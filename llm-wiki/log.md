@@ -89,3 +89,10 @@ An adversarial pass over the manuals found the book's Experiment 12
 contradicting the looptm reconciliation, so the finding now leans
 repeat count. The end loop credit widens to both envelopes, and the
 spec's four bit loop fine comment joins casio-spec known errors.
+
+## [2026-08-21] ingest | The panel and the file part ways on loop roles
+
+A second review caught the roles section speaking panel where the
+file stores loop_sus and loop_end; both pages now draw the line. The
+manual's screens show END at step 11 and SUS on the next loop
+screens, so the designations are panel positions, not looptm values.

@@ -20,8 +20,10 @@ book calls it the loop cycle (chapter 8.3, page 73).
 
 ## The three roles
 
-Each loop's time field takes a number, SUS, or END, and the value is
-what gives the loop its role:
+On the panel, each loop's time field takes a number, SUS, or END,
+and that value is what gives the loop its role. The file stores the
+roles apart from the time, in `loop_sus` and `loop_end`; the panel's
+SUS and END are labels derived from those two fields.
 
 - A number makes it a timed loop. It repeats for its own time, then
   playback continues through the sample to the next loop's start.
