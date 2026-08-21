@@ -62,8 +62,8 @@ describe("the sustain loop", () => {
 
   // Note on caps the chain at min(loop_sus, loop_end) (F000:122B), so
   // a voice with no sustain loop still holds at note on when its end
-  // loop names one: the cap sits there regardless. 2,095 corpus voices
-  // are this shape.
+  // loop names one: the cap sits there regardless. 2,523 corpus voices
+  // name no sustain loop and a usable end loop.
   it("is the loop loopRelease names when loopSustain names none", () => {
     const d = withRelease(8, 3);
     expect(sustainLoop(d)).toMatchObject({ start: 300, end: 800 });

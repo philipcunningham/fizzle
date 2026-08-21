@@ -50,15 +50,6 @@ func main() {
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return
 	}
-	// Scratch directories that agent tooling owns aren't project prose.
-	// Linting them costs a subagent a round trip per report it writes,
-	// and their formats aren't ours to dictate.
-	for _, scratch := range []string{".superpowers/", ".claude/worktrees/"} {
-		if strings.HasPrefix(rel, scratch) {
-			return
-		}
-	}
-
 	if _, err := exec.LookPath("vale"); err != nil {
 		return
 	}
