@@ -100,8 +100,9 @@ Authoring writes one sustain loop or a one shot, with the chain's
 auxiliary fields at their defaults: see
 [voice-authoring-defaults](voice-authoring-defaults.md). The browser
 editor reads and edits all eight loops with their cross fade and time
-attributes. The preview repeats the sustain loop only; timed loops,
-Skip, and the cross fade don't reach it.
+attributes. The preview repeats the sustain loop while a key is held,
+then moves the window to the end loop at key up. Timed loops, Skip,
+and the cross fade still don't reach it.
 
 ## Open questions
 

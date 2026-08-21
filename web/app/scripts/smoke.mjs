@@ -385,7 +385,6 @@ await step("the release loop reaches the node (WASM core)", async () => {
   );
 
   await page.evaluate(() => {
-    window.__win = [];
     window.__start = AudioBufferSourceNode.prototype.start;
     AudioBufferSourceNode.prototype.start = function (...args) {
       window.__node = this;
@@ -409,7 +408,6 @@ await step("the release loop reaches the node (WASM core)", async () => {
       AudioBufferSourceNode.prototype.start = window.__start;
       delete window.__start;
       delete window.__node;
-      delete window.__win;
     });
   }
 
