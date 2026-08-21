@@ -125,6 +125,7 @@ const typeLabelVoice = "Voice"
 var syntheticImages = []string{
 	"BRASS.img",
 	"HOOVER.img",
+	"LOOPDEMO.img",
 	"PAD-LFO.img",
 	"STAB.img",
 	"TECHNO.img",
