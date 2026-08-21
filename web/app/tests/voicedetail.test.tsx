@@ -74,6 +74,22 @@ describe("loops on a slot", () => {
     await commitField("loop 1 end", "1200");
     expect(await screen.findByText(/repeats after the key/i)).toBeTruthy();
   });
+
+  // A loop named for both roles (146 corpus voices take this shape) caps
+  // the chain at note on already, at min(loop_sus, loop_end) (F000:122B),
+  // so the chain runs no further than the sustain loop while the key is
+  // held. It reads as the sustain loop, and only that caption shows.
+  it("shows only the sustain caption when one loop serves both roles", async () => {
+    const core = createFakeCore();
+    await openInstrumentDisk(core);
+    await screen.findByLabelText("loop 1 start");
+
+    await core.setSlotLoopSelect(0, 0, 0);
+    await commitField("loop 1 start", "500");
+    await commitField("loop 1 end", "1200");
+    expect(await screen.findByText(/repeats while held/)).toBeTruthy();
+    expect(screen.queryByText(/repeats after the key/)).toBeNull();
+  });
 });
 
 // R14's Sample group. Sample rate is a schema select, so it must reach
