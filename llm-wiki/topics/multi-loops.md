@@ -46,6 +46,11 @@ then plays through the whole chain and out, however long the key is
 held. With `loop_sus = 8` and no loops at all, the voice is a plain
 one shot.
 
+The chain's order is the loop numbering, not the sample's layout. The
+book's Experiment 12 chains the words of a phrase in reverse, loop
+by loop (book, page 76). A next loop can therefore sit behind the
+one before it, and the jump runs backward through the sample.
+
 ## Trace, Skip, and the seam
 
 Each loop's next flag governs the unlooped audio between its end and

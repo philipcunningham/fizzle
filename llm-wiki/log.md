@@ -96,3 +96,10 @@ A second review caught the roles section speaking panel where the
 file stores loop_sus and loop_end; both pages now draw the line. The
 manual's screens show END at step 11 and SUS on the next loop
 screens, so the designations are panel positions, not looptm values.
+
+## [2026-08-21] ingest | The chain runs backward when the loops do
+
+A plan review surfaced Experiment 12's observations. The book chains
+a phrase's words in reverse, so a next loop can sit behind the one
+before it and the jump runs backward. Added to multi-loops, read
+from the book directly.
