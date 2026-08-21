@@ -563,6 +563,36 @@ describe("the banks tab keyboard plays the key mapping", () => {
     expect(looped?.end).toBeCloseTo(900 / 18000, 10);
   });
 
+  it("names a release loop for the sounding slot, not the selected voice's", async () => {
+    const recorded = stubAudioContext();
+    const core = createFakeCore();
+    await openInstrumentDisk(core);
+    await core.setSlotLoopSelect(0, 8, 0);
+    await core.setSlotLoopSelect(1, 8, 0);
+
+    // KICK (slot 0) is selected first; SNARE (slot 1) gets bounds the
+    // assertion can tell apart from it.
+    await commitField("loop 1 start", "100");
+    await commitField("loop 1 end", "200");
+    fireEvent.click((await screen.findAllByText("SNARE"))[0] as HTMLElement);
+    await screen.findByText(/4,352 frames/);
+    await commitField("loop 1 start", "400");
+    await commitField("loop 1 end", "900");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Banks and Areas" }));
+    await screen.findByRole("table", { name: "areas" });
+    // Selecting KICK's area focuses slot 0, while key 70 sounds SNARE:
+    // a preview reading the focus voice would move to 100 to 200 at
+    // release instead.
+    fireEvent.click(within(screen.getByRole("table", { name: "areas" })).getByText("KICK"));
+    await screen.findByText(/Edit area · KICK/);
+
+    await holdKey(70, recorded);
+    const loop = recorded.releaseLoops.at(-1);
+    expect(loop?.start).toBeCloseTo(400 / 18000, 10);
+    expect(loop?.end).toBeCloseTo(900 / 18000, 10);
+  });
+
   it("pitches from the area's root, not the voice's", async () => {
     const recorded = stubAudioContext();
     const { core } = slotRecordingCore();
