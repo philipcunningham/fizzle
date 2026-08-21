@@ -356,6 +356,82 @@ await step("a held key repeats the voice's sustain loop (WASM core)", async () =
   await page.getByText("repeats while held").waitFor({ state: "detached", timeout: 5000 });
 });
 
+await step("the release loop reaches the node (WASM core)", async () => {
+  const commit = async (label, value) => {
+    const field = page.getByLabel(label);
+    await field.fill(value);
+    await field.press("Enter");
+    await page.waitForFunction(
+      ([l, v]) => document.querySelector(`[aria-label="${l}"]`)?.value === v,
+      [label, value],
+      { timeout: 5000 },
+    );
+  };
+  // Loop 2 sits after loop 1, so the window moves forward: Chrome
+  // traces to it. Bounds of its own, so an earlier step's edit can't
+  // become this step's premise.
+  await commit("loop 2 start", "2000");
+  await commit("loop 2 end", "3000");
+  await page.getByRole("combobox", { name: "Release loop" }).click();
+  await page.getByRole("option", { name: "2", exact: true }).click();
+  // The designation is a document edit, so the press below has to wait
+  // for the core's answer or it plays the note as it was, with no
+  // release loop threaded through at all.
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[aria-label="Release loop"]')?.textContent?.includes("2") ?? false,
+    undefined,
+    { timeout: 5000 },
+  );
+
+  await page.evaluate(() => {
+    window.__win = [];
+    window.__start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      window.__node = this;
+      return window.__start.apply(this, args);
+    };
+  });
+
+  let seen;
+  try {
+    const key = page.locator('[data-testid="key-48"]');
+    await key.dispatchEvent("pointerdown", { clientY: 10, pointerId: 1 });
+    await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 5000 });
+    await key.dispatchEvent("pointerup", { pointerId: 1 });
+    seen = await page.evaluate(() => ({
+      on: window.__node.loop,
+      start: window.__node.loopStart,
+      end: window.__node.loopEnd,
+    }));
+  } finally {
+    await page.evaluate(() => {
+      AudioBufferSourceNode.prototype.start = window.__start;
+      delete window.__start;
+      delete window.__node;
+      delete window.__win;
+    });
+  }
+
+  const rateText = await page.getByRole("combobox", { name: "Sample rate (Hz)" }).textContent();
+  const rate = Number(/\d+/.exec(rateText ?? "")?.[0]);
+  if (!seen.on) throw new Error("the key coming up left the source unlooped");
+  if (Math.abs(seen.start - 2000 / rate) > 1e-6 || Math.abs(seen.end - 3000 / rate) > 1e-6) {
+    throw new Error(`window ${seen.start} to ${seen.end} at ${rate} Hz, want loop 2's bounds`);
+  }
+
+  // The document is shared, so put the designation back, and wait for
+  // the core to answer before the next step reads the document.
+  await page.getByRole("combobox", { name: "Release loop" }).click();
+  await page.getByRole("option", { name: "none", exact: true }).click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[aria-label="Release loop"]')?.textContent?.includes("none") ?? false,
+    undefined,
+    { timeout: 5000 },
+  );
+});
+
 await step("a press schedules the firmware's envelope (WASM core)", async () => {
   // The plan's own verification step. A known envelope goes in through
   // the grid, and what comes back is what the browser's own AudioParam
