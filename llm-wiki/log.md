@@ -82,3 +82,10 @@ drift fixed: the source list gains casio-service-manuals. Staleness
 flagged on nine pages dated 2026-07-11 whose cited packages moved on
 2026-08-18, all refactors; re-verify on next ingest. Twelve open
 questions collected across six pages.
+
+## [2026-08-21] ingest | Multi-loop pages hardened
+
+An adversarial pass over the manuals found the book's Experiment 12
+contradicting the looptm reconciliation, so the finding now leans
+repeat count. The end loop credit widens to both envelopes, and the
+spec's four bit loop fine comment joins casio-spec known errors.
