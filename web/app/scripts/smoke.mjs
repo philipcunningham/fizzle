@@ -12,6 +12,7 @@ import { chromium } from "playwright";
 import { preview } from "vite";
 
 const FIXTURE = new URL("../../../testdata/synthetic/TECHNO.img", import.meta.url).pathname;
+const LOOPDEMO = new URL("../../../testdata/synthetic/LOOPDEMO.img", import.meta.url).pathname;
 const REPO = new URL("../../..", import.meta.url).pathname;
 const IMAGE_SIZE = 1_310_720;
 
@@ -1066,6 +1067,104 @@ await step("the editing surface commits over the real core", async () => {
     /* clean */
   }
   await page.getByRole("button", { name: "New disk" }).waitFor({ timeout: 5000 });
+});
+
+// The cap rule over a stored file: no edit anywhere in this step. The
+// LOOPDEMO fixture's five voices carry one sample and one loop table
+// and differ only in what they name, so the window the node receives
+// is the core's reading of loop_sus and loop_end and nothing else.
+await step("a stored loop chain moves the window at the key (WASM core)", async () => {
+  // Voice frames over the fixture's rate, which is what Web Audio
+  // takes: a window in buffer seconds.
+  const seconds = ([start, end]) => ({ start: start / 18000, end: end / 18000 });
+  const LOW = seconds([3600, 21600]);
+  const HIGH = seconds([39600, 57600]);
+
+  await pickFiles([LOOPDEMO]);
+  await page.waitForFunction(
+    () => document.querySelectorAll('table[aria-label="instrument voices"] tbody tr').length === 5,
+    undefined,
+    { timeout: 15000 },
+  );
+
+  // A voice's samples decode off the main thread, so the first press
+  // after picking a row can land before the payload does and sound
+  // nothing at all. Press until the bar reports a note, rather than
+  // waiting on a signal the app doesn't publish.
+  const pressUntilSounding = async (key) => {
+    const deadline = Date.now() + 15000;
+    for (;;) {
+      await key.dispatchEvent("pointerdown", { clientY: 10, pointerId: 1 });
+      try {
+        await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 1000 });
+        return;
+      } catch (err) {
+        await key.dispatchEvent("pointerup", { pointerId: 1 });
+        if (Date.now() > deadline) throw err;
+      }
+    }
+  };
+
+  // Presses the voice in the given row and returns the loop window the
+  // node carried while the key was down and again once it came up.
+  const pressAndRelease = async (row) => {
+    await page.locator('table[aria-label="instrument voices"] tbody tr').nth(row).click();
+    await page.getByText("61,200 frames").waitFor({ timeout: 5000 });
+    await page.evaluate(() => {
+      window.__start = AudioBufferSourceNode.prototype.start;
+      AudioBufferSourceNode.prototype.start = function (...args) {
+        window.__node = this;
+        return window.__start.apply(this, args);
+      };
+    });
+    const read = () =>
+      page.evaluate(() => ({
+        on: window.__node.loop,
+        start: window.__node.loopStart,
+        end: window.__node.loopEnd,
+      }));
+    try {
+      const key = page.locator('[data-testid="key-60"]');
+      await pressUntilSounding(key);
+      const held = await read();
+      await key.dispatchEvent("pointerup", { pointerId: 1 });
+      return { held, freed: await read() };
+    } finally {
+      await page.evaluate(() => {
+        AudioBufferSourceNode.prototype.start = window.__start;
+        delete window.__start;
+        delete window.__node;
+      });
+    }
+  };
+
+  const near = (got, want) =>
+    got.on && Math.abs(got.start - want.start) < 1e-6 && Math.abs(got.end - want.end) < 1e-6;
+  const show = (got) => `${got.on ? "" : "unlooped "}${got.start} to ${got.end}`;
+
+  // Row 0 names loop 1 for the sustain and loop 3 for the end, so the
+  // key coming up is the only thing that moves the window.
+  const lowHigh = await pressAndRelease(0);
+  if (!near(lowHigh.held, LOW)) {
+    throw new Error(`1 LOW HIGH holds ${show(lowHigh.held)}, want the low window`);
+  }
+  if (!near(lowHigh.freed, HIGH)) {
+    throw new Error(`1 LOW HIGH frees to ${show(lowHigh.freed)}, want the high window`);
+  }
+
+  // Row 2 names no sustain loop and loop 3 for the end. Note on caps
+  // the chain at the lower of the two (F000:122B), so the high window
+  // repeats from the press rather than from the key coming up.
+  const highOnly = await pressAndRelease(2);
+  if (!near(highOnly.held, HIGH)) {
+    throw new Error(`3 HIGH ONLY holds ${show(highOnly.held)}, want the high window from note on`);
+  }
+
+  // Row 4 names neither, so it plays through.
+  const noLoop = await pressAndRelease(4);
+  if (noLoop.held.on) {
+    throw new Error(`5 NO LOOP repeats ${show(noLoop.held)}, want no loop at all`);
+  }
 });
 
 await browser.close();
