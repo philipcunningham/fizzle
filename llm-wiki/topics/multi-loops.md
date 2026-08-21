@@ -36,8 +36,8 @@ for its time, then playback traces on to the next loop, until the
 sustain loop is reached. The sustain loop repeats for as long as the key or
 pedal is held; the sample past it stays unheard until release. Key up
 resumes the chain, and the remaining timed loops each run their time.
-The end loop then repeats while the voice is audible, so the DCA
-release is what ends it (book, page 73, Figure 33).
+The end loop then repeats while the voice is audible, so the DCA and
+DCF releases are what end it (book, page 73, Figure 33).
 
 With no sustain and no end loop, all eight can be timed. The note
 then plays through the whole chain and out, however long the key is
@@ -68,7 +68,9 @@ Section 2-1 of the spec carries the whole mechanism:
 - `loopxf[8]`: the cross fade time, 0 to 1023; 0 means none.
 - `looped[8]` MSB: 1 for Skip, 0 for Trace.
 - `loopst[8]` upper 8 bits: loop fine. The owner's manual's EX FINE
-  positions a loop point in 1/256 of a sample (page 69).
+  positions a loop point in 1/256 of a sample (page 69). The spec's
+  own struct comment says four bits; that slip is logged under
+  [casio-spec](../sources/casio-spec.md) known errors.
 
 ## What fizzle implements
 
@@ -78,3 +80,10 @@ auxiliary fields at their defaults: see
 editor reads and edits all eight loops with their cross fade and time
 attributes. The preview repeats the sustain loop only; timed loops,
 Skip, and the cross fade don't reach it.
+
+## Open questions
+
+- The loop cycle's order and hold semantics rest on the FZ book
+  alone; the spec gives fields, not behaviour. A firmware trace of
+  the loop advance would confirm the cycle and raise the page past
+  spec-only.

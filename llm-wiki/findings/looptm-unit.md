@@ -29,11 +29,18 @@ count, and Casio's own struct comment declines to choose.
   one causes a loop to repeat three times (page 73). Its body text
   says a timed loop repeats "for the specified amount of time".
 - The owner's manual (pages 69 to 71) walks the panel without
-  defining the number at all.
+  defining the number at all. Its screens still carry range evidence:
+  step 12 shows LOOP TIME accepting 1023 where the spec stops at
+  1022, and the same field displays SUS and END. Reserved encodings
+  at the range ends would explain both readings of the field.
+- The book's Experiment 12 (pages 75 to 76) sets every loop's time to
+  one, with each loop spanning a spoken word, and hears each word
+  repeat a few times. A word length loop runs far past 16 ms, so a
+  duration reading predicts a single pass there.
 
-A duration with a whole pass floor would reconcile the two. Three
-passes of a loop shorter than about 5 ms fit inside one 16 ms step.
-Nothing verifies that reading.
+A duration with a whole pass floor would reconcile the two for loops
+shorter than about 5 ms. Experiment 12 contradicts it at word length,
+so the repeat count reading holds the stronger evidence today.
 
 ## What fizzle implements
 

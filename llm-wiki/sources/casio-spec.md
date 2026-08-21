@@ -3,7 +3,7 @@ type: source
 title: Casio FZ-1 Data Structures spec
 description: The primary format specification (T. Sasaki, Casio R&D, 1987); authoritative for intent, with known errors and compiler-specific reading conventions.
 tags: [spec, primary-source]
-updated: 2026-07-11
+updated: 2026-08-21
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md
   - llm-wiki/sources/casio-fz1-data-structures.pdf
@@ -39,5 +39,9 @@ hardware observation.
   ([multiple-bank-sectors](../findings/multiple-bank-sectors.md)).
 - `dcq` described as a 4-bit field; the full byte is effective
   ([dcq-full-byte](../findings/dcq-full-byte.md)).
+- The `loopst` struct comment says bits 15 to 12 carry loop fine,
+  four bits. The spec's own prose says the upper 8 bits with values 0
+  to 255, the owner's manual's EX FINE is 1/256 of a sample, and
+  corpus round trips use the full byte, so the comment is the error.
 - `bstep` wording conflates key splits with voices
   ([bstep-key-splits](../findings/bstep-key-splits.md)).
