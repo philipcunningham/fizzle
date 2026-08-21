@@ -70,7 +70,7 @@ lint-go:
 lint-docs:
 	@command -v vale >/dev/null 2>&1 || \
 	  (echo "vale not found on PATH. Install it with: brew install vale" >&2; exit 1)
-	vale --glob='!{llm-wiki/sources/casio-fz1-data-structures.md,.claude/worktrees/**}' .
+	vale --glob='!{llm-wiki/sources/casio-fz1-data-structures.md,.claude/worktrees/**,.superpowers/**}' .
 
 fuzz-seed:
 	go test -run 'Fuzz' ./...
