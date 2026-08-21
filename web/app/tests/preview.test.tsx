@@ -22,13 +22,22 @@ interface Recorded {
    * straight through.
    */
   loops: ({ start: number; end: number } | null)[];
+  /** One entry per source stopped: the loop bounds at release, or null. */
+  releaseLoops: ({ start: number; end: number } | null)[];
   /** Every gain value scheduled, in order, across all sources. */
   gains: number[];
 }
 
 /** A recording stand-in for the Web Audio context jsdom lacks. */
 function stubAudioContext(): Recorded {
-  const recorded: Recorded = { rates: [], bufferRates: [], stops: [], loops: [], gains: [] };
+  const recorded: Recorded = {
+    rates: [],
+    bufferRates: [],
+    stops: [],
+    loops: [],
+    releaseLoops: [],
+    gains: [],
+  };
   vi.stubGlobal(
     "AudioContext",
     vi.fn(() => ({
@@ -88,6 +97,9 @@ function stubAudioContext(): Recorded {
           },
           stop: () => {
             recorded.stops.push(1);
+            recorded.releaseLoops.push(
+              own.loop ? { start: own.loopStart, end: own.loopEnd } : null,
+            );
           },
         };
       },
@@ -571,6 +583,29 @@ describe("the banks tab keyboard plays the key mapping", () => {
     // root is still C4 and would have given half.
     await holdKey(48, recorded);
     expect(recorded.rates.at(-1)).toBeCloseTo(0.25, 10);
+  });
+});
+
+describe("the release loop reaches the preview", () => {
+  it("moves the window to the release loop at key up", async () => {
+    const recorded = stubAudioContext();
+    const core = createFakeCore();
+    await openInstrumentDisk(core);
+    // Name loop 1 as the release loop, with no sustain loop: the
+    // signature is (slot, sustain, release) and 8 means none.
+    await core.setSlotLoopSelect(0, 8, 0);
+    await commitField("loop 1 start", "500");
+    await commitField("loop 1 end", "1200");
+
+    await waitFor(() => {
+      playMiddleC();
+      expect(recorded.rates.length).toBeGreaterThan(0);
+    });
+    // The window at release, not the one note on set. KICK's voice
+    // runs at 18 kHz in the fake.
+    const loop = recorded.releaseLoops.at(-1);
+    expect(loop?.start).toBeCloseTo(500 / 18000, 10);
+    expect(loop?.end).toBeCloseTo(1200 / 18000, 10);
   });
 });
 

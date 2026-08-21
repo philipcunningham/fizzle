@@ -39,7 +39,7 @@ import { subscribeMIDI } from "../ui/midi";
 import { noteName } from "../ui/notes";
 import type { NamedBytes, Placement } from "../viewstate/place";
 import { classifyInput, toFileMap } from "../viewstate/place";
-import { sustainLoop } from "../viewstate/loops";
+import { releaseLoop, sustainLoop } from "../viewstate/loops";
 import { matchAreas } from "../viewstate/mapping";
 import { CrashPanel, ErrorBoundary } from "./ErrorBoundary";
 import { dropEntries, walkEntries } from "./drop";
@@ -373,6 +373,7 @@ function Shell({ core }: { core: Core }) {
         // Each sounding slot repeats its own sustain loop, so a layered
         // key can hold one voice looping and another playing out.
         const loop = sustainLoop(slotVoice?.voice);
+        const onRelease = releaseLoop(slotVoice?.voice);
         const slotFollow = dcaFollow(slotVoice);
         void slotPCM(matched.voiceSlot, slotVoice?.audioKey ?? "").then((r) => {
           if (!r.ok || released) return;
@@ -386,6 +387,7 @@ function Shell({ core }: { core: Core }) {
               ...(slotVoice?.voice ? { dca: slotVoice.voice.dca } : {}),
               ...(slotFollow ? { dcaFollow: slotFollow } : {}),
               ...(loop ? { loop } : {}),
+              ...(onRelease ? { releaseLoop: onRelease } : {}),
             }),
           );
         });
@@ -407,6 +409,7 @@ function Shell({ core }: { core: Core }) {
     // root key, the rate, or a loop leaves the PCM untouched and its
     // copy stale (R20).
     const loop = sustainLoop(focusVoice?.voice);
+    const onRelease = releaseLoop(focusVoice?.voice);
     const follow = dcaFollow(focusVoice);
     const release = audition.play({
       pcm: auditionData.pcm,
@@ -417,6 +420,7 @@ function Shell({ core }: { core: Core }) {
       ...(focusVoice?.voice ? { dca: focusVoice.voice.dca } : {}),
       ...(follow ? { dcaFollow: follow } : {}),
       ...(loop ? { loop } : {}),
+      ...(onRelease ? { releaseLoop: onRelease } : {}),
     });
     heldNotes.current.set(note, { release, fromMIDI });
     setAuditioning(true);
