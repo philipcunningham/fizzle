@@ -127,6 +127,45 @@ if (fill === plain) {
   await compare("waveform-sustain", '[data-testid="waveform"]');
 }
 
+// The third state: the loop the chain moves to at the key. The sustain
+// designation stays on loop 1, which keeps the cap below loop 2
+// (F000:122B); at none, loop 2 would draw as the sustain loop and this
+// baseline would repeat the one above.
+const commit = async (label, value) => {
+  const field = page.getByLabel(label);
+  await field.fill(value);
+  await field.blur();
+  await page.waitForFunction(
+    ([l, v]) => document.querySelector(`[aria-label="${l}"]`)?.value === v,
+    [label, value],
+    { timeout: 5000 },
+  );
+};
+await commit("loop 2 start", "1500");
+await commit("loop 2 end", "2500");
+await page.getByRole("combobox", { name: "Release loop" }).click();
+await page.getByRole("option", { name: "2", exact: true }).click();
+await page.getByLabel("loop 2 start").click();
+await page.waitForFunction(
+  () => document.querySelector(".loopname")?.textContent?.trim() === "Loop 2",
+  undefined,
+  { timeout: 5000 },
+);
+await page.getByText("repeats after the key").waitFor({ timeout: 5000 });
+
+const releaseDeadline = Date.now() + 5000;
+let releaseFill = await regionFill();
+while ((releaseFill === null || releaseFill === plain) && Date.now() < releaseDeadline) {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  releaseFill = await regionFill();
+}
+if (releaseFill === null || releaseFill === plain) {
+  console.log(`FAIL waveform-release: the region is still filled ${releaseFill}, unmarked`);
+  failed = true;
+} else {
+  await compare("waveform-release", '[data-testid="waveform"]');
+}
+
 await browser.close();
 await server.close();
 process.exit(failed ? 1 : 0);

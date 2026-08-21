@@ -59,13 +59,6 @@ sits inside the filter chip, downstream of two converters, and covers
 monotone number, which the slew and the fade prove. The per step
 figure and the select pin tie stay open.
 
-## [2026-08-21] ingest | Preview follows the loop cap at key up
-
-The implementation note in multi-loops.md fell behind this branch.
-The browser preview now moves the Web Audio loop window to the end
-loop at key up, matching the cap raise at F000:1515. Corrected the
-sentence claiming the preview only repeats the sustain loop.
-
 ## [2026-08-20] ingest | Service manuals, and what they don't settle
 
 New source page for the manuals and books. The manuals establish the
@@ -147,3 +140,10 @@ readings, which costs every later reader a detour.
 Two entries ran past the two to five line body again. Split per
 operation rather than amending the rule: an ingest touching several
 pages is several operations, and the size limit is what forces that.
+
+## [2026-08-21] ingest | Preview follows the loop cap at key up
+
+The implementation note in multi-loops.md fell behind this branch.
+The browser preview now moves the Web Audio loop window to the end
+loop at key up, matching the cap raise at F000:1515. Corrected the
+sentence claiming the preview only repeats the sustain loop.

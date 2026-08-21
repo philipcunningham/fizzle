@@ -30,13 +30,14 @@ interface Props {
 // frame space: frame f sits at time f/frames.
 const DURATION = 1;
 
-// The one region the strip draws, in its two states: amber while it is
-// just the loop under edit, green once it is the loop that repeats.
-// Hue can't be what carries that, since the two grounds sit close
-// together for a red green viewer, so the caption says it in words and
-// the fill is the glance level hint.
+// The one region the strip draws, in its three states: amber under
+// edit, green once a held key repeats it, blue when the chain moves to
+// it at the key. Hue can't be what carries that, since the grounds sit
+// close together for a red green viewer, so the caption says it in
+// words and the fill is the glance level hint.
 const LOOP_FILL = "rgba(255, 176, 0, 0.35)";
 const SUSTAIN_FILL = "rgba(51, 209, 122, 0.35)";
+const RELEASE_FILL = "rgba(122, 162, 255, 0.35)";
 
 // Moves a frame to the centre of the nearest peak bucket that crosses
 // zero, searching at most 5 percent of the span: a snap assists, it
@@ -94,6 +95,8 @@ export function Waveform({
   peaksRef.current = peaks;
   const sustainRef = useRef(sustain);
   sustainRef.current = sustain;
+  const releaseRef = useRef(release);
+  releaseRef.current = release;
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const onGestureCommitRef = useRef(onGestureCommit);
@@ -152,7 +155,7 @@ export function Waveform({
       const region = regions.addRegion({
         start,
         end,
-        color: sustainRef.current ? SUSTAIN_FILL : LOOP_FILL,
+        color: sustainRef.current ? SUSTAIN_FILL : releaseRef.current ? RELEASE_FILL : LOOP_FILL,
         drag: true,
         resize: true,
       });
@@ -265,7 +268,7 @@ export function Waveform({
     region.remove();
     regionRef.current = null;
     remakeRegionRef.current?.(start, end);
-  }, [sustain]);
+  }, [sustain, release]);
 
   // Re-applied on remount as well as on change: a new peaks payload
   // rebuilds wavesurfer, and the strip would otherwise snap back to 1x

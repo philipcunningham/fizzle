@@ -68,7 +68,8 @@ describe("loops on a slot", () => {
   // below a distinct release loop, not "no sustain loop" alone: naming
   // no sustain loop makes the release loop the cap's own loop, and it
   // reads as the sustain loop instead (the case the next test covers).
-  // 459 corpus voices carry the shape this test drives.
+  // 459 corpus voices name loop_sus below loop_end, but none carries a
+  // usable loop in both roles, so this fixture's shape is synthetic.
   it("says a release loop repeats after the key comes up", async () => {
     const core = createFakeCore();
     await openInstrumentDisk(core);

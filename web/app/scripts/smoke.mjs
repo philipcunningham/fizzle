@@ -39,6 +39,22 @@ const step = async (name, fn) => {
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 
+// The same, once the strip has a region: switching the drawn loop
+// removes it and remakes it, and a read in the gap sees nothing.
+const regionFillWhenDrawn = async () => {
+  await page.waitForFunction(
+    () => {
+      const host = document.querySelector('[data-testid="waveform"] div');
+      return [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])].some((n) =>
+        /^region region-/.test(n.getAttribute("part")),
+      );
+    },
+    undefined,
+    { timeout: 5000 },
+  );
+  return regionFill(page);
+};
+
 /** The drawn loop region's fill, from inside wavesurfer's shadow root. */
 const regionFill = (target) =>
   target.evaluate(() => {
@@ -90,6 +106,82 @@ const exportDownloads = async (count) => {
   }
   return out;
 };
+
+// A press that follows an uncommitted edit plays the document as it
+// was, so every editing step commits through here.
+const commitField = async (label, value) => {
+  const field = page.getByLabel(label);
+  await field.fill(value);
+  await field.press("Enter");
+  await page.waitForFunction(
+    ([l, v]) => document.querySelector(`[aria-label="${l}"]`)?.value === v,
+    [label, value],
+    { timeout: 5000 },
+  );
+};
+
+const fieldFrames = (label) =>
+  page.evaluate((l) => Number(document.querySelector(`[aria-label="${l}"]`)?.value), label);
+
+const voiceRate = async () => {
+  const text = await page.getByRole("combobox", { name: "Sample rate (Hz)" }).textContent();
+  const rate = Number(/\d+/.exec(text ?? "")?.[0]);
+  if (!Number.isFinite(rate)) throw new Error(`the sample rate reads ${text}`);
+  return rate;
+};
+
+// A voice's samples decode off the main thread, so a press can land
+// before the payload does and sound nothing.
+const pressUntilSounding = async (key) => {
+  const deadline = Date.now() + 15000;
+  for (;;) {
+    await key.dispatchEvent("pointerdown", { clientY: 10, pointerId: 1 });
+    try {
+      await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 1000 });
+      return;
+    } catch (err) {
+      await key.dispatchEvent("pointerup", { pointerId: 1 });
+      if (Date.now() > deadline) throw err;
+    }
+  }
+};
+
+// The loop window the source node carried while the key was down, and
+// again once it came up. Two readings, or a window already set at note
+// on reads as one that moved.
+const acrossAKey = async (testid = "key-48") => {
+  await page.evaluate(() => {
+    window.__start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      window.__node = this;
+      return window.__start.apply(this, args);
+    };
+  });
+  const read = () =>
+    page.evaluate(() => ({
+      on: window.__node.loop,
+      start: window.__node.loopStart,
+      end: window.__node.loopEnd,
+    }));
+  try {
+    const key = page.locator(`[data-testid="${testid}"]`);
+    await pressUntilSounding(key);
+    const held = await read();
+    await key.dispatchEvent("pointerup", { pointerId: 1 });
+    return { held, freed: await read() };
+  } finally {
+    await page.evaluate(() => {
+      AudioBufferSourceNode.prototype.start = window.__start;
+      delete window.__start;
+      delete window.__node;
+    });
+  }
+};
+
+const isWindow = (got, [start, end], rate) =>
+  got.on && Math.abs(got.start - start / rate) < 1e-6 && Math.abs(got.end - end / rate) < 1e-6;
+
+const showWindow = (got) => `${got.on ? "" : "unlooped "}${got.start} to ${got.end}`;
 
 // Opens images or FZ files through the catch-all picker, discarding
 // unexported changes when the guard dialog intervenes.
@@ -281,18 +373,8 @@ await step("a held key repeats the voice's sustain loop (WASM core)", async () =
   // back: the waveform only marks a loop the document really names.
   // Bounds of its own, not the ones the step above left behind, so an
   // edit there can't quietly become this step's premise.
-  const commitLoop = async (label, value) => {
-    const field = page.getByLabel(label);
-    await field.fill(value);
-    await field.press("Enter");
-    await page.waitForFunction(
-      ([l, v]) => document.querySelector(`[aria-label="${l}"]`)?.value === v,
-      [label, value],
-      { timeout: 5000 },
-    );
-  };
-  await commitLoop("loop 1 start", "500");
-  await commitLoop("loop 1 end", "1200");
+  await commitField("loop 1 start", "500");
+  await commitField("loop 1 end", "1200");
   // The fill the region carries before it is the loop that repeats.
   // Which hue it changes to is the screenshot baseline's to judge; this
   // asks only that recolouring reached the drawn strip, which jsdom
@@ -311,43 +393,11 @@ await step("a held key repeats the voice's sustain loop (WASM core)", async () =
   }
 
   // What the browser's own audio node received, read as it starts.
-  await page.evaluate(() => {
-    window.__auditionLoops = [];
-    window.__auditionStart = AudioBufferSourceNode.prototype.start;
-    AudioBufferSourceNode.prototype.start = function (...args) {
-      window.__auditionLoops.push({ on: this.loop, start: this.loopStart, end: this.loopEnd });
-      return window.__auditionStart.apply(this, args);
-    };
-  });
-
-  let played;
-  try {
-    const key = page.locator('[data-testid="key-48"]');
-    await key.dispatchEvent("pointerdown", { clientY: 10, pointerId: 1 });
-    await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 5000 });
-    await key.dispatchEvent("pointerup", { pointerId: 1 });
-    played = await page.evaluate(() => window.__auditionLoops);
-  } finally {
-    // The steps after this one share the page, so the patch comes off.
-    await page.evaluate(() => {
-      AudioBufferSourceNode.prototype.start = window.__auditionStart;
-      delete window.__auditionStart;
-      delete window.__auditionLoops;
-    });
-  }
-
-  const rateText = await page.getByRole("combobox", { name: "Sample rate (Hz)" }).textContent();
-  const rate = Number(/\d+/.exec(rateText ?? "")?.[0]);
-  if (!Number.isFinite(rate)) throw new Error(`the sample rate reads ${rateText}`);
-  const last = played.at(-1);
-  if (!last) throw new Error("the press started no source");
-  if (!last.on) throw new Error("the source plays straight through, with no loop");
+  const rate = await voiceRate();
+  const { held } = await acrossAKey();
   // Buffer seconds: the frames the fields hold over the voice's rate.
-  const want = { start: 500 / rate, end: 1200 / rate };
-  if (Math.abs(last.start - want.start) > 1e-6 || Math.abs(last.end - want.end) > 1e-6) {
-    throw new Error(
-      `loop ${last.start} to ${last.end} at ${rate} Hz, want ${want.start} to ${want.end}`,
-    );
+  if (!isWindow(held, [500, 1200], rate)) {
+    throw new Error(`a held key repeats ${showWindow(held)} at ${rate} Hz, want loop 1's bounds`);
   }
 
   // The designation is document state, not this step's to leave behind:
@@ -357,78 +407,98 @@ await step("a held key repeats the voice's sustain loop (WASM core)", async () =
   await page.getByText("repeats while held").waitFor({ state: "detached", timeout: 5000 });
 });
 
-await step("the release loop reaches the node (WASM core)", async () => {
-  const commit = async (label, value) => {
-    const field = page.getByLabel(label);
-    await field.fill(value);
-    await field.press("Enter");
+await step("the key coming up moves the window to the release loop (WASM core)", async () => {
+  const designate = async (which, option) => {
+    await page.getByRole("combobox", { name: which }).click();
+    await page.getByRole("option", { name: option, exact: true }).click();
     await page.waitForFunction(
-      ([l, v]) => document.querySelector(`[aria-label="${l}"]`)?.value === v,
-      [label, value],
+      ([w, o]) => document.querySelector(`[aria-label="${w}"]`)?.textContent?.includes(o) ?? false,
+      [which, option],
       { timeout: 5000 },
     );
   };
-  // Loop 2 sits after loop 1, so the window moves forward: Chrome
-  // traces to it. Bounds of its own, so an earlier step's edit can't
-  // become this step's premise.
-  await commit("loop 2 start", "2000");
-  await commit("loop 2 end", "3000");
-  await page.getByRole("combobox", { name: "Release loop" }).click();
-  await page.getByRole("option", { name: "2", exact: true }).click();
-  // The designation is a document edit, so the press below has to wait
-  // for the core's answer or it plays the note as it was, with no
-  // release loop threaded through at all.
-  await page.waitForFunction(
-    () =>
-      document.querySelector('[aria-label="Release loop"]')?.textContent?.includes("2") ?? false,
-    undefined,
-    { timeout: 5000 },
-  );
+  // Forward first: loop 2 sits after loop 1, so Chrome traces into it.
+  await commitField("loop 1 start", "500");
+  await commitField("loop 1 end", "1200");
+  await commitField("loop 2 start", "2000");
+  await commitField("loop 2 end", "3000");
 
-  await page.evaluate(() => {
-    window.__start = AudioBufferSourceNode.prototype.start;
-    AudioBufferSourceNode.prototype.start = function (...args) {
-      window.__node = this;
-      return window.__start.apply(this, args);
-    };
-  });
+  // A designation edit puts the drawn loop back to the first.
+  const drawLoop = async (n) => {
+    await page.getByLabel(`loop ${n} start`).click();
+    await page.waitForFunction(
+      (want) => document.querySelector(".loopname")?.textContent?.trim() === want,
+      `Loop ${n}`,
+      { timeout: 5000 },
+    );
+  };
 
-  let seen;
-  try {
-    const key = page.locator('[data-testid="key-48"]');
-    await key.dispatchEvent("pointerdown", { clientY: 10, pointerId: 1 });
-    await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 5000 });
-    await key.dispatchEvent("pointerup", { pointerId: 1 });
-    seen = await page.evaluate(() => ({
-      on: window.__node.loop,
-      start: window.__node.loopStart,
-      end: window.__node.loopEnd,
-    }));
-  } finally {
-    await page.evaluate(() => {
-      AudioBufferSourceNode.prototype.start = window.__start;
-      delete window.__start;
-      delete window.__node;
-    });
+  // The strip draws one loop at a time, so its three fills are read
+  // one at a time: plain, release, sustain. All three differ, or the
+  // caption is the only marking there is.
+  await drawLoop(2);
+  const plainFill = await regionFillWhenDrawn();
+
+  // The sustain designation puts the cap below the release loop
+  // (F000:122B). Left at none, note on caps at the release loop
+  // itself, and every assertion below passes with the release path
+  // deleted, which is what this step used to do.
+  await designate("Sustain loop", "1");
+  await designate("Release loop", "2");
+
+  await drawLoop(2);
+  await page.getByText("repeats after the key").waitFor({ timeout: 5000 });
+  const releaseFill = await regionFillWhenDrawn();
+  if (!releaseFill || releaseFill === "rgba(0, 0, 0, 0)") {
+    throw new Error(`the release region is filled ${releaseFill}, so it is invisible`);
+  }
+  if (releaseFill === plainFill) {
+    throw new Error(`the release region is filled ${releaseFill}, unmarked`);
   }
 
-  const rateText = await page.getByRole("combobox", { name: "Sample rate (Hz)" }).textContent();
-  const rate = Number(/\d+/.exec(rateText ?? "")?.[0]);
-  if (!seen.on) throw new Error("the key coming up left the source unlooped");
-  if (Math.abs(seen.start - 2000 / rate) > 1e-6 || Math.abs(seen.end - 3000 / rate) > 1e-6) {
-    throw new Error(`window ${seen.start} to ${seen.end} at ${rate} Hz, want loop 2's bounds`);
+  await drawLoop(1);
+  await page.getByText("repeats while held").waitFor({ timeout: 5000 });
+  const sustainFill = await regionFillWhenDrawn();
+  if (sustainFill === releaseFill || sustainFill === plainFill) {
+    throw new Error(`the sustain region is filled ${sustainFill}, which is not its own state`);
   }
 
-  // The document is shared, so put the designation back, and wait for
-  // the core to answer before the next step reads the document.
-  await page.getByRole("combobox", { name: "Release loop" }).click();
-  await page.getByRole("option", { name: "none", exact: true }).click();
-  await page.waitForFunction(
-    () =>
-      document.querySelector('[aria-label="Release loop"]')?.textContent?.includes("none") ?? false,
-    undefined,
-    { timeout: 5000 },
-  );
+  const rate = await voiceRate();
+  const sustainWindow = [await fieldFrames("loop 1 start"), await fieldFrames("loop 1 end")];
+  const releaseWindow = [await fieldFrames("loop 2 start"), await fieldFrames("loop 2 end")];
+
+  const forward = await acrossAKey();
+  if (!isWindow(forward.held, sustainWindow, rate)) {
+    throw new Error(`a held key repeats ${showWindow(forward.held)}, want loop 1's bounds`);
+  }
+  if (!isWindow(forward.freed, releaseWindow, rate)) {
+    throw new Error(`the key coming up leaves ${showWindow(forward.freed)}, want loop 2's bounds`);
+  }
+
+  // Backward next: a window a playhead cannot trace into, which Chrome
+  // wraps on the next render quantum. Each field moves in the order
+  // that keeps its own loop valid.
+  await commitField("loop 1 end", "3000");
+  await commitField("loop 1 start", "2000");
+  await commitField("loop 2 start", "500");
+  await commitField("loop 2 end", "1200");
+  const backHeld = [await fieldFrames("loop 1 start"), await fieldFrames("loop 1 end")];
+  const backFreed = [await fieldFrames("loop 2 start"), await fieldFrames("loop 2 end")];
+  if (backFreed[0] >= backHeld[0]) {
+    throw new Error(`the release window starts at ${backFreed[0]}, not behind ${backHeld[0]}`);
+  }
+
+  const backward = await acrossAKey();
+  if (!isWindow(backward.held, backHeld, rate)) {
+    throw new Error(`a held key repeats ${showWindow(backward.held)}, want the later window`);
+  }
+  if (!isWindow(backward.freed, backFreed, rate)) {
+    throw new Error(`the key coming up leaves ${showWindow(backward.freed)}, want the earlier one`);
+  }
+
+  // The document is shared, so put both designations back.
+  await designate("Release loop", "none");
+  await designate("Sustain loop", "none");
 });
 
 await step("a press schedules the firmware's envelope (WASM core)", async () => {
@@ -437,22 +507,12 @@ await step("a press schedules the firmware's envelope (WASM core)", async () => 
   // was told. Nothing here recomputes the model: 0.387 s is the
   // disassembly's figure for a full sweep at panel 50, so a wrong
   // stepper fails this even when its unit tests agree with it.
-  const commit = async (label, value) => {
-    const field = page.getByLabel(label);
-    await field.fill(value);
-    await field.press("Enter");
-    await page.waitForFunction(
-      ([l, v]) => document.querySelector(`[aria-label="${l}"]`)?.value === v,
-      [label, value],
-      { timeout: 5000 },
-    );
-  };
   // Stage 1 sweeps to full at panel 50, stage 2 holds there, and the
   // sustain sits on stage 2, so a held key runs exactly two stages.
-  await commit("DCA envelope stage 1 rate", "50");
-  await commit("DCA envelope stage 1 level", "99");
-  await commit("DCA envelope stage 2 rate", "50");
-  await commit("DCA envelope stage 2 level", "99");
+  await commitField("DCA envelope stage 1 rate", "50");
+  await commitField("DCA envelope stage 1 level", "99");
+  await commitField("DCA envelope stage 2 rate", "50");
+  await commitField("DCA envelope stage 2 level", "99");
   // The mark is a document edit, so the press has to wait for the core
   // to answer or it plays the envelope as it was.
   await page.getByRole("button", { name: "DCA envelope set sustain stage 2" }).click();
@@ -1069,16 +1129,13 @@ await step("the editing surface commits over the real core", async () => {
   await page.getByRole("button", { name: "New disk" }).waitFor({ timeout: 5000 });
 });
 
-// The cap rule over a stored file: no edit anywhere in this step. The
-// LOOPDEMO fixture's five voices carry one sample and one loop table
-// and differ only in what they name, so the window the node receives
-// is the core's reading of loop_sus and loop_end and nothing else.
+// The cap rule over a stored file, with no edit anywhere in the step:
+// the window the node receives is the core's reading of loop_sus and
+// loop_end and nothing else.
 await step("a stored loop chain moves the window at the key (WASM core)", async () => {
-  // Voice frames over the fixture's rate, which is what Web Audio
-  // takes: a window in buffer seconds.
-  const seconds = ([start, end]) => ({ start: start / 18000, end: end / 18000 });
-  const LOW = seconds([3600, 21600]);
-  const HIGH = seconds([39600, 57600]);
+  const RATE = 18000;
+  const LOW = [3600, 21600];
+  const HIGH = [39600, 57600];
 
   await pickFiles([LOOPDEMO]);
   await page.waitForFunction(
@@ -1087,83 +1144,34 @@ await step("a stored loop chain moves the window at the key (WASM core)", async 
     { timeout: 15000 },
   );
 
-  // A voice's samples decode off the main thread, so the first press
-  // after picking a row can land before the payload does and sound
-  // nothing at all. Press until the bar reports a note, rather than
-  // waiting on a signal the app doesn't publish.
-  const pressUntilSounding = async (key) => {
-    const deadline = Date.now() + 15000;
-    for (;;) {
-      await key.dispatchEvent("pointerdown", { clientY: 10, pointerId: 1 });
-      try {
-        await page.locator(".keyboardbar[data-auditioning]").waitFor({ timeout: 1000 });
-        return;
-      } catch (err) {
-        await key.dispatchEvent("pointerup", { pointerId: 1 });
-        if (Date.now() > deadline) throw err;
-      }
-    }
-  };
-
-  // Presses the voice in the given row and returns the loop window the
-  // node carried while the key was down and again once it came up.
   const pressAndRelease = async (row) => {
     await page.locator('table[aria-label="instrument voices"] tbody tr').nth(row).click();
     await page.getByText("61,200 frames").waitFor({ timeout: 5000 });
-    await page.evaluate(() => {
-      window.__start = AudioBufferSourceNode.prototype.start;
-      AudioBufferSourceNode.prototype.start = function (...args) {
-        window.__node = this;
-        return window.__start.apply(this, args);
-      };
-    });
-    const read = () =>
-      page.evaluate(() => ({
-        on: window.__node.loop,
-        start: window.__node.loopStart,
-        end: window.__node.loopEnd,
-      }));
-    try {
-      const key = page.locator('[data-testid="key-60"]');
-      await pressUntilSounding(key);
-      const held = await read();
-      await key.dispatchEvent("pointerup", { pointerId: 1 });
-      return { held, freed: await read() };
-    } finally {
-      await page.evaluate(() => {
-        AudioBufferSourceNode.prototype.start = window.__start;
-        delete window.__start;
-        delete window.__node;
-      });
-    }
+    return acrossAKey("key-60");
   };
 
-  const near = (got, want) =>
-    got.on && Math.abs(got.start - want.start) < 1e-6 && Math.abs(got.end - want.end) < 1e-6;
-  const show = (got) => `${got.on ? "" : "unlooped "}${got.start} to ${got.end}`;
-
-  // Row 0 names loop 1 for the sustain and loop 3 for the end, so the
-  // key coming up is the only thing that moves the window.
+  // Loop 1 for the sustain, loop 3 for the end: only the key moves it.
   const lowHigh = await pressAndRelease(0);
-  if (!near(lowHigh.held, LOW)) {
-    throw new Error(`1 LOW HIGH holds ${show(lowHigh.held)}, want the low window`);
+  if (!isWindow(lowHigh.held, LOW, RATE)) {
+    throw new Error(`1 LOW HIGH holds ${showWindow(lowHigh.held)}, want the low window`);
   }
-  if (!near(lowHigh.freed, HIGH)) {
-    throw new Error(`1 LOW HIGH frees to ${show(lowHigh.freed)}, want the high window`);
+  if (!isWindow(lowHigh.freed, HIGH, RATE)) {
+    throw new Error(`1 LOW HIGH frees to ${showWindow(lowHigh.freed)}, want the high window`);
   }
 
-  // Row 2 names no sustain loop and loop 3 for the end. Note on caps
-  // the chain at the lower of the two (F000:122B), so the high window
-  // repeats from the press rather than from the key coming up.
+  // No sustain loop, so the cap is the end loop from note on
+  // (F000:122B) and the high window repeats from the press.
   const highOnly = await pressAndRelease(2);
-  if (!near(highOnly.held, HIGH)) {
-    throw new Error(`3 HIGH ONLY holds ${show(highOnly.held)}, want the high window from note on`);
+  if (!isWindow(highOnly.held, HIGH, RATE)) {
+    throw new Error(
+      `3 HIGH ONLY holds ${showWindow(highOnly.held)}, want the high window from note on`,
+    );
   }
 
   // Row 4 names neither, so it plays through.
   const noLoop = await pressAndRelease(4);
   if (noLoop.held.on) {
-    throw new Error(`5 NO LOOP repeats ${show(noLoop.held)}, want no loop at all`);
+    throw new Error(`5 NO LOOP repeats ${showWindow(noLoop.held)}, want no loop at all`);
   }
 });
 
