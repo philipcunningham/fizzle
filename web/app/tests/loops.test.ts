@@ -59,6 +59,25 @@ describe("the sustain loop", () => {
   it("is absent for a file with no voice detail", () => {
     expect(sustainLoop(undefined)).toBeUndefined();
   });
+
+  // Note on caps the chain at min(loop_sus, loop_end) (F000:122B), so
+  // a voice with no sustain loop still holds at note on when its end
+  // loop names one: the cap sits there regardless. 2,095 corpus voices
+  // are this shape.
+  it("is the loop loopRelease names when loopSustain names none", () => {
+    const d = withRelease(8, 3);
+    expect(sustainLoop(d)).toMatchObject({ start: 300, end: 800 });
+  });
+
+  it("stays the loop loopSustain names when it sits below loopRelease", () => {
+    const d = withRelease(2, 5);
+    expect(sustainLoop(d)).toMatchObject({ start: 200, end: 700 });
+  });
+
+  it("is the one loop a voice names for both roles", () => {
+    const d = withRelease(4, 4);
+    expect(sustainLoop(d)).toMatchObject({ start: 400, end: 900 });
+  });
 });
 
 // The waveform marks the loop it draws when that loop is the one the
@@ -81,6 +100,15 @@ describe("whether a loop is the sustain loop", () => {
 
   it("fails for a file with no voice detail", () => {
     expect(isSustainLoop(undefined, 0)).toBe(false);
+  });
+
+  // The cap, not loopSustain, is what the waveform marks: loopSustain
+  // names none here, but the chain still caps at loopRelease's loop
+  // from note on (F000:122B).
+  it("marks the loop loopRelease names, not loopSustain, when loopSustain names none", () => {
+    const d = withRelease(8, 3);
+    expect(isSustainLoop(d, 3)).toBe(true);
+    expect(isSustainLoop(d, 2)).toBe(false);
   });
 });
 
