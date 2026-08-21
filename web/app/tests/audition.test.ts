@@ -293,6 +293,92 @@ describe("the sustain loop repeats while the key is held", () => {
   });
 });
 
+describe("the loop cap moves at key up", () => {
+  const bounds = { start: 4000, end: 12000 };
+
+  it("points the window at the release loop when the key comes up", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    const release = engine.play({
+      pcm: new Int16Array(18000),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      loop: { start: 500, end: 1200 },
+      releaseLoop: bounds,
+    });
+    release();
+    expect(record.loop).toBe(true);
+    expect(record.loopStart).toBeCloseTo(bounds.start / 18000, 10);
+    expect(record.loopEnd).toBeCloseTo(bounds.end / 18000, 10);
+  });
+
+  it("starts looping a voice that names a release loop alone", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    const release = engine.play({
+      pcm: new Int16Array(18000),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      releaseLoop: bounds,
+    });
+    expect(record.loop).toBe(false);
+    release();
+    expect(record.loop).toBe(true);
+  });
+
+  it("leaves a voice with no release loop as it was", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    const release = engine.play({
+      pcm: new Int16Array(18000),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      loop: { start: 500, end: 1200 },
+    });
+    release();
+    expect(record.loopStart).toBeCloseTo(500 / 18000, 10);
+    expect(record.loopEnd).toBeCloseTo(1200 / 18000, 10);
+  });
+
+  // Web Audio answers a window it cannot honour by replaying the whole
+  // sample, so the engine judges the bounds against the buffer it built.
+  it("ignores a release loop whose end sits at or below its start", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    const release = engine.play({
+      pcm: new Int16Array(18000),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      releaseLoop: { start: 900, end: 900 },
+    });
+    release();
+    expect(record.loop).toBe(false);
+  });
+
+  it("holds a release loop that overruns the samples to what it has", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    const release = engine.play({
+      pcm: new Int16Array(9000),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      releaseLoop: { start: 100, end: 99999 },
+    });
+    release();
+    expect(record.loopEnd).toBeCloseTo(9000 / 18000, 10);
+  });
+});
+
 // The release schedules a fade and stops after it: an immediate stop
 // would cut the audio at the current gain and click on every release.
 describe("release fades before stopping", () => {

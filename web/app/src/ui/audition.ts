@@ -45,6 +45,29 @@ export interface PlayOptions {
    * voice names one, and it repeats for as long as the note is held.
    */
   loop?: { start: number; end: number };
+  /**
+   * The loop the chain moves to when the key comes up. Note off raises
+   * the cap to loop_end (F000:1515), so the voice runs on to that loop
+   * and repeats it while the envelope plays out.
+   */
+  releaseLoop?: { start: number; end: number };
+}
+
+/**
+ * The loop window a buffer can honour, in buffer seconds, or null when
+ * it cannot. Web Audio answers bounds it cannot honour by playing
+ * something worse than no loop: an end at or below the start repeats
+ * the whole sample, and a start past the buffer plays silence.
+ */
+function loopWindow(
+  loop: { start: number; end: number } | undefined,
+  frames: number,
+  sampleRate: number,
+): { start: number; end: number } | null {
+  if (!loop) return null;
+  const end = Math.min(loop.end, frames);
+  if (loop.start >= frames || end <= loop.start) return null;
+  return { start: loop.start / sampleRate, end: end / sampleRate };
 }
 
 /** The slice of AudioContext the engine touches, faked in tests. */
@@ -123,19 +146,12 @@ export function createAudition(
       source.buffer = buffer;
       source.playbackRate.value = playbackRate(options.note, options.root);
       // Web Audio loops the buffer itself, in buffer seconds, so the
-      // playback rate carries the loop along with the pitch. The bounds
-      // are judged against the buffer just built rather than trusted,
-      // because Web Audio answers a loop it can't honour by playing
-      // something worse than no loop: an end at or below the start
-      // repeats the whole sample, and a start past the buffer plays
-      // total silence, first pass included.
-      if (options.loop) {
-        const end = Math.min(options.loop.end, options.pcm.length);
-        if (options.loop.start < options.pcm.length && end > options.loop.start) {
-          source.loopStart = options.loop.start / options.sampleRate;
-          source.loopEnd = end / options.sampleRate;
-          source.loop = true;
-        }
+      // playback rate carries the loop along with the pitch.
+      const window = loopWindow(options.loop, options.pcm.length, options.sampleRate);
+      if (window) {
+        source.loopStart = window.start;
+        source.loopEnd = window.end;
+        source.loop = true;
       }
 
       const gain = ctx.createGain();
@@ -208,6 +224,15 @@ export function createAudition(
         released = true;
         try {
           const at = ctx.currentTime;
+          // The cap moves to the end loop, and Chrome carries the
+          // playhead there: a window ahead traces to it, and a window
+          // behind wraps into it within a render quantum.
+          const onRelease = loopWindow(options.releaseLoop, options.pcm.length, options.sampleRate);
+          if (onRelease) {
+            source.loopStart = onRelease.start;
+            source.loopEnd = onRelease.end;
+            source.loop = true;
+          }
           // Where the envelope had got to, from the model rather than
           // from the parameter: cancelScheduledValues drops the ramp in
           // flight, so a read back here gives the stop before it.
