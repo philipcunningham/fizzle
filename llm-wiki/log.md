@@ -66,3 +66,19 @@ DCA part and its control words. The books corroborate the one shot
 envelope, the forced end stage, and the instant rate. Three open
 questions added to envelope timing: the competing law, the wide
 velocity span, and the stored stage direction.
+
+## [2026-08-21] ingest | Multi-loop playback
+
+The eight loops play as a chain in numerical order, with sustain and
+end as roles inside it, per the spec and the FZ book.
+Added [multi-loops](topics/multi-loops.md) and the looptm finding.
+The spec says 16 ms steps where the book's figure shows repeat
+counts. Map row for loops updated.
+
+## [2026-08-21] lint | After the multi-loop ingest
+
+Frontmatter complete on all pages; no orphans or duplicates. Map
+drift fixed: the source list gains casio-service-manuals. Staleness
+flagged on nine pages dated 2026-07-11 whose cited packages moved on
+2026-08-18, all refactors; re-verify on next ingest. Twelve open
+questions collected across six pages.

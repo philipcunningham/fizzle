@@ -29,6 +29,9 @@ Conventions: [AGENTS.md](AGENTS.md).
   the spec's 4-bit claim is wrong on hardware.
 - [bstep counts key splits per bank, not file voices](findings/bstep-key-splits.md):
   it equals vn for only 24 of 235 dumps.
+- [The looptm unit is contested](findings/looptm-unit.md): the spec
+  says 16 ms steps, the FZ book shows repeat counts, and the struct
+  comment hedges.
 
 ## Topics
 
@@ -39,6 +42,9 @@ Conventions: [AGENTS.md](AGENTS.md).
   all metadata, disk 2 is pure audio; FULL-DATA-FZ naming.
 - [Voice-area sizing](topics/voice-area-sizing.md): vn from the DIS or
   a validated slot walk bounded by summed bstep.
+- [Multi-loop playback](topics/multi-loops.md): the eight loops play
+  as a chain in numerical order, with sustain and end as roles inside
+  it.
 - [Envelope timing](topics/envelope-timing.md): the rate table, the
   125 Hz stepper, the output slew, the stage walk, and the note on
   scaling behind the 8-stage envelopes.
