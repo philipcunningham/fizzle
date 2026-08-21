@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright";
 import { preview } from "vite";
+import { makeCommitField, makeRegionFill } from "./pagehelpers.mjs";
 
 const FIXTURE = new URL("../../../testdata/synthetic/TECHNO.img", import.meta.url).pathname;
 const LOOPDEMO = new URL("../../../testdata/synthetic/LOOPDEMO.img", import.meta.url).pathname;
@@ -39,6 +40,8 @@ const step = async (name, fn) => {
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 
+const regionFill = makeRegionFill(page);
+
 // The same, once the strip has a region: switching the drawn loop
 // removes it and remakes it, and a read in the gap sees nothing.
 const regionFillWhenDrawn = async () => {
@@ -52,18 +55,8 @@ const regionFillWhenDrawn = async () => {
     undefined,
     { timeout: 5000 },
   );
-  return regionFill(page);
+  return regionFill();
 };
-
-/** The drawn loop region's fill, from inside wavesurfer's shadow root. */
-const regionFill = (target) =>
-  target.evaluate(() => {
-    const host = document.querySelector('[data-testid="waveform"] div');
-    const el = [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])].find((n) =>
-      /^region region-/.test(n.getAttribute("part")),
-    );
-    return el ? getComputedStyle(el).backgroundColor : null;
-  });
 
 // A minimal 16-bit mono PCM WAV: RIFF header plus a ramp.
 const monoWav = (samples, rate) => {
@@ -109,16 +102,7 @@ const exportDownloads = async (count) => {
 
 // A press that follows an uncommitted edit plays the document as it
 // was, so every editing step commits through here.
-const commitField = async (label, value) => {
-  const field = page.getByLabel(label);
-  await field.fill(value);
-  await field.press("Enter");
-  await page.waitForFunction(
-    ([l, v]) => document.querySelector(`[aria-label="${l}"]`)?.value === v,
-    [label, value],
-    { timeout: 5000 },
-  );
-};
+const commitField = makeCommitField(page);
 
 const fieldFrames = (label) =>
   page.evaluate((l) => Number(document.querySelector(`[aria-label="${l}"]`)?.value), label);
@@ -379,12 +363,12 @@ await step("a held key repeats the voice's sustain loop (WASM core)", async () =
   // Which hue it changes to is the screenshot baseline's to judge; this
   // asks only that recolouring reached the drawn strip, which jsdom
   // cannot show and which a stale region would fail.
-  const plain = await regionFill(page);
+  const plain = await regionFill();
   await page.getByRole("combobox", { name: "Sustain loop" }).click();
   await page.getByRole("option", { name: "1", exact: true }).click();
   await page.getByText("repeats while held").waitFor({ timeout: 5000 });
 
-  const marked = await regionFill(page);
+  const marked = await regionFill();
   if (marked === plain) {
     throw new Error(`the sustain loop region is still filled ${plain}, unmarked`);
   }
