@@ -62,16 +62,27 @@ describe("loops on a slot", () => {
     expect(screen.getByText(/repeats while held/)).toBeTruthy();
   });
 
+  // The cap, min(loopSustain, loopRelease) (F000:122B), is what holds
+  // while a key is down. A release loop earns its own caption only when
+  // it sits above the cap, so the fixture needs a genuine sustain loop
+  // below a distinct release loop, not "no sustain loop" alone: naming
+  // no sustain loop makes the release loop the cap's own loop, and it
+  // reads as the sustain loop instead (the case the next test covers).
+  // 459 corpus voices carry the shape this test drives.
   it("says a release loop repeats after the key comes up", async () => {
     const core = createFakeCore();
     await openInstrumentDisk(core);
     await screen.findByLabelText("loop 1 start");
     expect(screen.queryByText(/repeats after the key/)).toBeNull();
 
-    // (slot, sustain, release), where 8 means none.
-    await core.setSlotLoopSelect(0, 8, 0);
+    // Loop 1 is the sustain loop, loop 2 the release loop, with its own
+    // distinct bounds above the cap. Selecting loop 2's row draws it.
+    await core.setSlotLoopSelect(0, 0, 1);
     await commitField("loop 1 start", "500");
     await commitField("loop 1 end", "1200");
+    await commitField("loop 2 start", "2000");
+    await commitField("loop 2 end", "3500");
+    fireEvent.click(screen.getByLabelText("loop 2 start"));
     expect(await screen.findByText(/repeats after the key/i)).toBeTruthy();
   });
 
