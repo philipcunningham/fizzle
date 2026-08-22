@@ -1,0 +1,30 @@
+{
+  "source": "emulator",
+  "measured": "2026-08-22",
+  "note": "Read off the FZ-1 front panel running under the fizzlab emulator, not off a physical instrument. A measurement taken on a real device overrides any row here; record the device and the bytes tested when it does.",
+  "fields": [
+    {"id": "playbackMode", "kind": "select", "panelOptions": 4, "rule": "FWD, REV and CUE on the MEM READ row; a synth voice reads SYNTHESIZED on DEFINE VOICE and hides that row"},
+    {"id": "tune", "panelMin": -100, "panelMax": 100, "rule": "display = sign * ceil(magnitude * 100 / 255), magnitude from the low byte"},
+    {"id": "rootKey", "panelMin": 0, "panelMax": 127, "rule": "identity"},
+    {"id": "keyLow", "panelMin": 0, "panelMax": 127, "rule": "identity"},
+    {"id": "keyHigh", "panelMin": 0, "panelMax": 127, "rule": "identity"},
+    {"id": "cutoff", "panelMin": 0, "panelMax": 127, "rule": "identity"},
+    {"id": "resonance", "panelMin": 0, "panelMax": 127, "rule": "identity"},
+    {"id": "dcaLevelKF", "panelMin": -15, "panelMax": 15, "rule": "byte = display * 8"},
+    {"id": "dcaRateKF", "panelMin": -15, "panelMax": 15, "rule": "byte = display * 8"},
+    {"id": "dcfLevelKF", "panelMin": -15, "panelMax": 15, "rule": "byte = display * 8"},
+    {"id": "dcfRateKF", "panelMin": -15, "panelMax": 15, "rule": "byte = display * 8"},
+    {"id": "velDcaKF", "panelMin": -127, "panelMax": 127, "rule": "identity, two's complement"},
+    {"id": "velDcfKF", "panelMin": -127, "panelMax": 127, "rule": "identity, two's complement"},
+    {"id": "velDcqKF", "panelMin": 0, "panelMax": 127, "rule": "identity, unsigned; the panel row carries no sign column"},
+    {"id": "velDcaRS", "panelMin": -127, "panelMax": 127, "rule": "identity, two's complement"},
+    {"id": "velDcfRS", "panelMin": -127, "panelMax": 127, "rule": "identity, two's complement"},
+    {"id": "lfoWave", "kind": "select", "panelOptions": 6, "rule": "SIN to RANDOM; bit 7 of the same byte is LFO SYNC"},
+    {"id": "lfoSync", "kind": "select", "panelOptions": 2, "rule": "bit 7 of 0x9E, the panel's LFO SYNC row"},
+    {"id": "lfoRate", "panelMin": 0, "panelMax": 127, "rule": "identity"},
+    {"id": "lfoDelay", "panelMin": 0, "panelMax": 127, "rule": "stored word = display * 16, and the same row writes attack as 18 - ceil(display / 8)"},
+    {"id": "lfoPitch", "panelMin": 0, "panelMax": 127, "rule": "identity"},
+    {"id": "lfoAmp", "panelMin": 0, "panelMax": 127, "rule": "identity"},
+    {"id": "lfoFilter", "panelMin": 0, "panelMax": 127, "rule": "identity"}
+  ]
+}
