@@ -1,7 +1,12 @@
 // Where a sounding note's playhead is. Web Audio reports no position
-// for a buffer source, so it is modelled from what note on knows. The
-// fold was measured against Chrome: a window ahead of the playhead
-// traces to it, and one behind wraps in on the spot.
+// for a buffer source, so it is modelled from what note on knows.
+//
+// Both rules below were measured in Chrome, by rendering a ramp
+// through an OfflineAudioContext and reading the source frame back
+// out of the output. Crossing a window's end while it holds still
+// keeps the phase: the position folds by the window's length. A move
+// that leaves the playhead at or past the new window's end does not:
+// Chrome restarts it at that window's start, a render quantum later.
 
 export interface Span {
   start: number;
@@ -37,9 +42,7 @@ export function frameAt(plan: PlayheadPlan, now: number): number {
     plan.window,
     plan.frames,
   );
-  return fold(
-    atRelease + travelled(plan.releasedAt),
-    plan.releaseWindow ?? plan.window,
-    plan.frames,
-  );
+  const window = plan.releaseWindow ?? plan.window;
+  const from = window && atRelease >= window.end ? window.start : atRelease;
+  return fold(from + travelled(plan.releasedAt), window, plan.frames);
 }
