@@ -290,10 +290,17 @@ export function Waveform({
     });
     return () => {
       cancelAnimationFrame(raf);
-      ws.setOptions({ cursorWidth: 0 });
-      ws.setTime(0);
+      // The instance this effect opened is destroyed by the mount
+      // effect's own cleanup, which React runs first on a remount, so
+      // put the cursor away only while it is still the live one.
+      if (wsRef.current === ws) {
+        ws.setOptions({ cursorWidth: 0 });
+        ws.setTime(0);
+      }
     };
-  }, [playhead, peaks]);
+    // voiceKey and peaks both rebuild the instance above, so the loop
+    // has to be handed the new one.
+  }, [playhead, voiceKey, peaks]);
 
   // Re-applied on remount as well as on change: a new peaks payload
   // rebuilds wavesurfer, and the strip would otherwise snap back to 1x

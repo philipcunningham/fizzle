@@ -52,6 +52,11 @@ export interface PlayOptions {
    * and repeats it while the envelope plays out.
    */
   releaseLoop?: { start: number; end: number };
+  /**
+   * Called once when the note is over, whether it played itself out or
+   * a key released it. The strip stops drawing its playhead there.
+   */
+  onEnded?: () => void;
 }
 
 /**
@@ -112,10 +117,12 @@ export interface Note {
   release: () => void;
   /** The frame the playhead sits on at a context time. */
   frameAt: (now: number) => number;
+  /** False when nothing was scheduled, so there is nothing to draw. */
+  sounding: boolean;
 }
 
 /** A note that never sounded still answers, so callers need no guard. */
-const silent: Note = { release: () => undefined, frameAt: () => 0 };
+const silent: Note = { release: () => undefined, frameAt: () => 0, sounding: false };
 
 export interface AuditionEngine {
   /** Starts a note; the returned note releases it. Never throws. */
@@ -165,7 +172,8 @@ export function createAudition(
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.playbackRate.value = playbackRate(options.note, options.root);
+      const rate = playbackRate(options.note, options.root);
+      source.playbackRate.value = rate;
       // Web Audio loops the buffer itself, in buffer seconds, so the
       // playback rate carries the loop along with the pitch.
       const window = loopWindow(options.loop, options.pcm.length, options.sampleRate);
@@ -175,6 +183,7 @@ export function createAudition(
         source.loop = true;
       }
 
+      const now = ctx.currentTime;
       // The same window in frames, under the guards the seconds went
       // through: a window Web Audio would not honour repeats nothing.
       const framesOf = (span: { start: number; end: number } | undefined): Span | null => {
@@ -182,8 +191,8 @@ export function createAudition(
         return { start: span.start, end: Math.min(span.end, options.pcm.length) };
       };
       const plan: PlayheadPlan = {
-        startedAt: ctx.currentTime,
-        rate: source.playbackRate.value,
+        startedAt: now,
+        rate,
         sampleRate: options.sampleRate,
         frames: options.pcm.length,
         window: framesOf(options.loop),
@@ -192,7 +201,6 @@ export function createAudition(
       };
 
       const gain = ctx.createGain();
-      const now = ctx.currentTime;
       const scaling: Scaling | undefined =
         options.dca && options.dcaFollow
           ? {
@@ -241,6 +249,7 @@ export function createAudition(
         if (detached) return;
         detached = true;
         gain.disconnect();
+        options.onEnded?.();
       };
       source.onended = detach;
 
@@ -325,7 +334,11 @@ export function createAudition(
         }
       };
 
-      return { release: releaseNote, frameAt: (when: number) => frameAt(plan, when) };
+      return {
+        release: releaseNote,
+        frameAt: (when: number) => frameAt(plan, when),
+        sounding: true,
+      };
     },
   };
 }

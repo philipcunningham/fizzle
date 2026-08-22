@@ -360,7 +360,7 @@ describe("a held note survives nothing", () => {
     }
   });
 
-  it("marks the strip with a playhead while a key sounds, and clears it at note off", async () => {
+  it("marks the strip with a playhead while a key sounds", async () => {
     const recorded = stubAudioContext();
     await openInstrumentDisk();
     expect(document.querySelector(".waveform-wrap[data-playhead]")).toBeNull();
@@ -369,11 +369,46 @@ describe("a held note survives nothing", () => {
     await waitFor(() => {
       expect(document.querySelector(".waveform-wrap[data-playhead]")).not.toBeNull();
     });
+  });
+
+  // The window moves to the end loop at the key, which is the whole
+  // point of drawing it, so the mark has to outlive the key and go
+  // when the note itself is over.
+  it("keeps the playhead through the release, and drops it when the note ends", async () => {
+    const recorded = stubAudioContext();
+    await openInstrumentDisk();
+    await holdMiddleC(recorded);
+    await waitFor(() => {
+      expect(document.querySelector(".waveform-wrap[data-playhead]")).not.toBeNull();
+    });
 
     fireEvent.pointerUp(screen.getByTestId("key-60"), { pointerId: 1 });
+    expect(document.querySelector(".waveform-wrap[data-playhead]")).not.toBeNull();
+    await waitFor(
+      () => {
+        expect(document.querySelector(".waveform-wrap[data-playhead]")).toBeNull();
+      },
+      { timeout: 3000 },
+    );
+  });
+
+  // A blur takes the key away without a note off, and the note it
+  // strands would otherwise leave the strip drawing for ever.
+  it("drops the playhead when a blur takes the key away", async () => {
+    const recorded = stubAudioContext();
+    await openInstrumentDisk();
+    await holdMiddleC(recorded);
     await waitFor(() => {
-      expect(document.querySelector(".waveform-wrap[data-playhead]")).toBeNull();
+      expect(document.querySelector(".waveform-wrap[data-playhead]")).not.toBeNull();
     });
+
+    fireEvent.blur(window);
+    await waitFor(
+      () => {
+        expect(document.querySelector(".waveform-wrap[data-playhead]")).toBeNull();
+      },
+      { timeout: 3000 },
+    );
   });
 
   it("releases what is held when the window loses focus", async () => {

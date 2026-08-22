@@ -1128,11 +1128,37 @@ await step("a stored loop chain moves the window at the key (WASM core)", async 
     { timeout: 15000 },
   );
 
-  const pressAndRelease = async (row) => {
+  const drawnLoop = async (row) => {
     await page.locator('table[aria-label="instrument voices"] tbody tr').nth(row).click();
     await page.getByText("61,200 frames").waitFor({ timeout: 5000 });
+  };
+  const pressAndRelease = async (row) => {
+    await drawnLoop(row);
     return acrossAKey("key-60");
   };
+
+  // The cursor is the visible half of the same claim: hidden at rest,
+  // inside the window the chain repeats while a key is down, and
+  // inside the window the chain moves to once it comes up.
+  const cursor = () =>
+    page.evaluate(() => {
+      const host = document.querySelector('[data-testid="waveform"] div');
+      const parts = [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])];
+      const el = parts.find((n) => n.getAttribute("part") === "cursor");
+      const wrapper = parts.find((n) => n.getAttribute("part") === "wrapper");
+      if (!el || !wrapper) return null;
+      const c = el.getBoundingClientRect();
+      const w = wrapper.getBoundingClientRect();
+      return { frame: ((c.x - w.x) / w.width) * 61200, width: c.width };
+    });
+  const inside = (reading, [start, end]) =>
+    reading && reading.width > 0 && reading.frame >= start && reading.frame <= end;
+
+  const atRest = await cursor();
+  if (!atRest) throw new Error("the strip has no cursor to read");
+  if (atRest.width > 0) {
+    throw new Error(`the cursor is ${atRest.width}px wide at rest, want it hidden`);
+  }
 
   // Loop 1 for the sustain, loop 3 for the end: only the key moves it.
   const lowHigh = await pressAndRelease(0);
@@ -1143,36 +1169,25 @@ await step("a stored loop chain moves the window at the key (WASM core)", async 
     throw new Error(`1 LOW HIGH frees to ${showWindow(lowHigh.freed)}, want the high window`);
   }
 
-  // The cursor is the visible half of the same claim: hidden at rest,
-  // and inside the window the chain is repeating while a key is down.
-  const cursor = () =>
-    page.evaluate(() => {
-      const host = document.querySelector('[data-testid="waveform"] div');
-      const parts = [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])];
-      const el = parts.find((n) => n.getAttribute("part") === "cursor");
-      const wrapper = parts.find((n) => n.getAttribute("part") === "wrapper");
-      if (!el || !wrapper) return null;
-      const c = el.getBoundingClientRect();
-      const w = wrapper.getBoundingClientRect();
-      return { fraction: (c.x - w.x) / w.width, width: c.width };
-    });
-
-  const atRest = await cursor();
-  if (atRest && atRest.width > 0) {
-    throw new Error(`the cursor is ${atRest.width}px wide at rest, want it hidden`);
-  }
-
-  await page.locator('table[aria-label="instrument voices"] tbody tr').nth(0).click();
-  await page.getByText("61,200 frames").waitFor({ timeout: 5000 });
+  await drawnLoop(0);
   const key = page.locator('[data-testid="key-60"]');
   await pressUntilSounding(key);
-  await page.waitForTimeout(500);
-  const drawn = await cursor();
+  // Past the low window's end at 1.2 s, so a cursor still inside it
+  // has folded rather than run on.
+  await page.waitForTimeout(1500);
+  const held = await cursor();
+  if (!inside(held, LOW)) {
+    throw new Error(`the cursor reads ${JSON.stringify(held)} while held, want the low window`);
+  }
+  // The key coming up moves the chain, and the cursor is what shows
+  // it: 2.4 s is long enough to trace to the high window and wrap in.
   await key.dispatchEvent("pointerup", { pointerId: 1 });
-  if (!drawn || drawn.width === 0) throw new Error("no cursor while a key sounds");
-  const frame = drawn.fraction * 61200;
-  if (frame < LOW[0] || frame > LOW[1]) {
-    throw new Error(`the cursor sits at frame ${Math.round(frame)}, want the low window`);
+  await page.waitForTimeout(2400);
+  const freed = await cursor();
+  if (!inside(freed, HIGH)) {
+    throw new Error(
+      `the cursor reads ${JSON.stringify(freed)} after the key, want the high window`,
+    );
   }
 
   // No sustain loop, so the cap is the end loop from note on
