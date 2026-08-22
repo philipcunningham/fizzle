@@ -133,6 +133,7 @@ export function Waveform({
         waveColor: "#008b8b",
         progressColor: "#008b8b",
         cursorWidth: 0,
+        cursorColor: "#f0883e",
         interact: true,
         autoScroll: false,
         autoCenter: false,
@@ -272,6 +273,27 @@ export function Waveform({
     regionRef.current = null;
     remakeRegionRef.current?.(start, end);
   }, [sustain, release]);
+
+  // The playhead. Web Audio reports no position, so the frame comes
+  // from the model in playhead.ts, and wavesurfer's own cursor draws
+  // it: nothing here computes a coordinate, which is what makes it
+  // right under zoom and scroll. The strip spans one synthetic
+  // second, so a frame is a fraction of it.
+  useEffect(() => {
+    const ws = wsRef.current;
+    if (!ws || !playhead) return;
+    ws.setOptions({ cursorWidth: 2 });
+    let raf = requestAnimationFrame(function tick() {
+      const span = framesRef.current;
+      if (span > 0) ws.setTime(clamp(playhead(), 0, span - 1) / span);
+      raf = requestAnimationFrame(tick);
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      ws.setOptions({ cursorWidth: 0 });
+      ws.setTime(0);
+    };
+  }, [playhead, peaks]);
 
   // Re-applied on remount as well as on change: a new peaks payload
   // rebuilds wavesurfer, and the strip would otherwise snap back to 1x
