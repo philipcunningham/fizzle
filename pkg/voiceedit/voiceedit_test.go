@@ -1917,3 +1917,98 @@ func TestApplyToFZFSlotBytesBounds(t *testing.T) {
 		t.Error("expected an error for a slot past the voice count")
 	}
 }
+
+// The panel's DELAY row writes the delay word and the attack byte
+// together. One display value drives both, so one call yields two
+// patches.
+func TestBuildLFODelayPatchesWritesBothBytes(t *testing.T) {
+	patches, err := BuildLFODelayPatches(50)
+	if err != nil {
+		t.Fatalf("BuildLFODelayPatches: %v", err)
+	}
+	if len(patches) != 2 {
+		t.Fatalf("got %d patches, want 2", len(patches))
+	}
+	if patches[0].Offset != disk.VoiceLFODelayOffset || patches[0].Size != 2 || patches[0].Value != 800 {
+		t.Errorf("delay patch = %+v, want offset %#x size 2 value 800", patches[0], disk.VoiceLFODelayOffset)
+	}
+	if patches[1].Offset != disk.VoiceLFOAtckOffset || patches[1].Size != 1 || patches[1].Value != 11 {
+		t.Errorf("attack patch = %+v, want offset %#x size 1 value 11", patches[1], disk.VoiceLFOAtckOffset)
+	}
+}
+
+func TestBuildLFODelayPatchesRefusesOutOfRange(t *testing.T) {
+	if _, err := BuildLFODelayPatches(disk.MaxLFODelayDisplay + 1); err == nil {
+		t.Error("expected an error for a delay past the panel's ceiling")
+	}
+	if _, err := BuildLFODelayPatches(-1); err == nil {
+		t.Error("expected an error for a negative delay")
+	}
+}
+
+// Property: every delay the panel can dial yields exactly two patches,
+// at the two offsets the panel writes, and never errors.
+func TestBuildLFODelayPatchesCoversThePanelSpan(t *testing.T) {
+	for display := 0; display <= disk.MaxLFODelayDisplay; display++ {
+		patches, err := BuildLFODelayPatches(display)
+		if err != nil {
+			t.Fatalf("BuildLFODelayPatches(%d): %v", display, err)
+		}
+		if len(patches) != 2 {
+			t.Fatalf("delay %d gives %d patches, want 2", display, len(patches))
+		}
+		if patches[0].Offset != disk.VoiceLFODelayOffset || patches[1].Offset != disk.VoiceLFOAtckOffset {
+			t.Fatalf("delay %d writes offsets %#x and %#x", display, patches[0].Offset, patches[1].Offset)
+		}
+	}
+}
+
+// The sync flag shares its byte with the waveform index, so setting one
+// has to keep the other.
+func TestBuildLFOSyncPatchKeepsTheWaveform(t *testing.T) {
+	// 3 is the triangle index, with sync off.
+	patches, err := BuildLFOSyncPatch("on", 3)
+	if err != nil {
+		t.Fatalf("BuildLFOSyncPatch: %v", err)
+	}
+	if len(patches) != 1 || patches[0].Value != 0x83 {
+		t.Fatalf("patches = %+v, want one patch with value 0x83", patches)
+	}
+
+	// 0x83 is triangle with sync on; turning sync off leaves triangle.
+	patches, err = BuildLFOSyncPatch("off", 0x83)
+	if err != nil {
+		t.Fatalf("BuildLFOSyncPatch: %v", err)
+	}
+	if len(patches) != 1 || patches[0].Value != 3 {
+		t.Fatalf("patches = %+v, want one patch with value 3", patches)
+	}
+
+	if _, err := BuildLFOSyncPatch("maybe", 0); err == nil {
+		t.Error("expected an error for an option that is neither on nor off")
+	}
+}
+
+// Property: whatever the incoming byte holds, setting sync leaves the
+// waveform index untouched and sets bit 7 to match the option.
+func TestBuildLFOSyncPatchPreservesEveryWaveform(t *testing.T) {
+	for b := 0; b < 256; b++ {
+		orig := uint8(b) //nolint:gosec // bounded by the loop
+		for _, c := range []struct {
+			option string
+			want   uint8
+		}{
+			{"on", orig&disk.LFOWaveformMask | disk.LFOPhaseFlag},
+			{"off", orig & disk.LFOWaveformMask},
+		} {
+			patches, err := BuildLFOSyncPatch(c.option, orig)
+			if err != nil {
+				t.Fatalf("BuildLFOSyncPatch(%s, %d): %v", c.option, orig, err)
+			}
+			if uint8(patches[0].Value) != c.want { //nolint:gosec // the builder writes one byte
+				t.Fatalf("sync %s on byte %#02x gives %#02x, want %#02x",
+					c.option, orig, patches[0].Value, c.want)
+			}
+		}
+	}
+}

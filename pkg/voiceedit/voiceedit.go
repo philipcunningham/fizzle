@@ -335,6 +335,34 @@ func BuildModulationPatches(dcaKF, dcaRS, dcfKF, dcfRS, velDCAKF, velDCFKF, velD
 	return patches, nil
 }
 
+// BuildLFODelayPatches creates the patches the panel's DELAY row
+// writes. The row has no independent attack control: moving it writes
+// the delay word and the attack byte together, so both come from the
+// one display value.
+func BuildLFODelayPatches(display int) ([]Patch, error) {
+	if display < 0 || display > disk.MaxLFODelayDisplay {
+		return nil, fmt.Errorf("voiceedit: lfo-delay must be 0 to %d, got %d", disk.MaxLFODelayDisplay, display)
+	}
+	return []Patch{
+		{Offset: disk.VoiceLFODelayOffset, Size: 2, Value: disk.LFODelayDisplayToWord(display)},
+		{Offset: disk.VoiceLFOAtckOffset, Size: 1, Value: uint16(disk.LFOAttackForDelay(display))},
+	}, nil
+}
+
+// BuildLFOSyncPatch sets the phase-sync flag in the lfo_name byte,
+// keeping the waveform index beside it.
+func BuildLFOSyncPatch(option string, origLFOName uint8) ([]Patch, error) {
+	val := origLFOName & disk.LFOWaveformMask
+	switch option {
+	case "on":
+		val |= disk.LFOPhaseFlag
+	case "off":
+	default:
+		return nil, fmt.Errorf("voiceedit: lfo-sync must be on or off, got %q", option)
+	}
+	return []Patch{{Offset: disk.VoiceLFONameOffset, Size: 1, Value: uint16(val)}}, nil
+}
+
 // BuildFilterPatches creates patches for filter cutoff and resonance.
 // Both use the hardware display scale: cutoff 0 to 127, resonance 0 to 127.
 // The resonance byte is stored directly (the full byte is used by the hardware,
