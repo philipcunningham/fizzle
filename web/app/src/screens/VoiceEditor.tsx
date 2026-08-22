@@ -150,6 +150,16 @@ export function VoiceEditor(props: VoiceEditorProps) {
                 />
               );
             })}
+          {group === "Sample" && detail ? (
+            // The rate is fixed when a sample is taken, and the FZ panel
+            // offers no way to change a loaded voice's, so neither does
+            // fizzle. It still reads out, because a voice plays back at
+            // it and the user needs to know which.
+            <div className="readout">
+              <span aria-label="sample rate">{detail.sampleRate} Hz</span>
+              <span className="readout-label">Sample rate</span>
+            </div>
+          ) : null}
         </div>
       </div>
     );

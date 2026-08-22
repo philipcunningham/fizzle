@@ -108,7 +108,9 @@ const fieldFrames = (label) =>
   page.evaluate((l) => Number(document.querySelector(`[aria-label="${l}"]`)?.value), label);
 
 const voiceRate = async () => {
-  const text = await page.getByRole("combobox", { name: "Sample rate (Hz)" }).textContent();
+  // The rate is fixed when a sample is taken, so it reads out rather
+  // than editing. No panel row changes a loaded voice's rate.
+  const text = await page.getByLabel("sample rate").textContent();
   const rate = Number(/\d+/.exec(text ?? "")?.[0]);
   if (!Number.isFinite(rate)) throw new Error(`the sample rate reads ${text}`);
   return rate;
@@ -699,17 +701,23 @@ await step("the import estimate names the machine (WASM core)", async () => {
 });
 
 await step("R14's Sample group reads and edits over the WASM core", async () => {
-  // Sample rate is a schema select, so it reaches the screen through
-  // the same path every other schema control takes.
-  await page.getByRole("combobox", { name: "Sample rate (Hz)" }).click();
-  await page.getByRole("option", { name: "9000" }).click();
+  // Playback is the Sample group's schema select, so it reaches the
+  // screen through the same path every other schema control takes.
+  await page.getByRole("combobox", { name: "Playback" }).click();
+  await page.getByRole("option", { name: "reverse" }).click();
   await page.waitForFunction(
     () =>
-      document.querySelector('[aria-label="Sample rate (Hz)"]')?.textContent?.includes("9000") ??
-      false,
+      document.querySelector('[aria-label="Playback"]')?.textContent?.includes("reverse") ?? false,
     undefined,
     { timeout: 5000 },
   );
+
+  // The rate reads out beside it. The panel offers no way to change a
+  // loaded voice's rate, so fizzle offers none either.
+  const shownRate = await page.getByLabel("sample rate").textContent();
+  if (!/\d/.test(shownRate ?? "")) {
+    throw new Error(`the sample rate reads ${shownRate}, want the voice's rate`);
+  }
 
   // The generation window is bespoke, like the loops: its bounds are
   // the voice's own frame count, so a schema range could not carry it.
