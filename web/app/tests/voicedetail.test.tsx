@@ -116,6 +116,12 @@ describe("the Sample group on a slot", () => {
     expect(screen.queryByRole("combobox", { name: "Sample rate (Hz)" })).toBeNull();
   });
 
+  it("still shows the rate, because a voice plays back at it", async () => {
+    await openInstrumentDisk();
+    const rate = await screen.findByLabelText("sample rate");
+    expect(rate.textContent).toContain("18000");
+  });
+
   it("renders LFO sync as a select carrying the voice's flag", async () => {
     await openInstrumentDisk();
     const trigger = await screen.findByRole("combobox", { name: "Sync" });
