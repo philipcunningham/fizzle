@@ -16,7 +16,7 @@ func editFlags() []cli.Flag {
 	base := []cli.Flag{
 		&cli.StringFlag{Name: "lfo-wave", Usage: "LFO waveform: sine, saw-up, saw-down, triangle, rectangle, random"},
 		&cli.IntFlag{Name: "lfo-rate", Usage: "LFO rate (0-127)"},
-		&cli.IntFlag{Name: "lfo-delay", Usage: "LFO delay (0-65535)"},
+		&cli.IntFlag{Name: "lfo-delay", Usage: "LFO delay on the panel's scale (0-127); the same row sets the attack"},
 		&cli.IntFlag{Name: "lfo-pitch", Usage: "LFO pitch depth (0-127)"},
 		&cli.IntFlag{Name: "lfo-amp", Usage: "LFO amplitude depth (0-127)"},
 		&cli.IntFlag{Name: "lfo-filter", Usage: "LFO filter depth (0-127)"},
@@ -128,16 +128,12 @@ func collectLFOPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceed
 	// silently resets the other.
 	origLFOName := params.LFOName
 
-	const u = voiceedit.Unchanged
 	patches, err := voiceedit.BuildLFOPatches(
 		wave,
 		intIfSet(cmd, "lfo-rate"),
-		u, // the delay flag writes two bytes; see below
-		u, // attack has no flag: the panel derives it from the delay
 		intIfSet(cmd, "lfo-pitch"),
 		intIfSet(cmd, "lfo-amp"),
 		intIfSet(cmd, "lfo-filter"),
-		u, // the resonance depth has no panel control
 		origLFOName,
 	)
 	if err != nil {

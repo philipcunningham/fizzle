@@ -245,7 +245,12 @@ func findVoiceIndex(data []byte, hdr *fzutil.FZFHeader, name string) (int, error
 // lfo_name byte (spec offset 0x9E): bits 0-6 hold the waveform index, bit 7
 // is the phase-sync flag. It is used to preserve the phase-sync flag when
 // only the waveform index changes; see disk.LFOWaveformMask / LFOPhaseFlag.
-func BuildLFOPatches(wave, rate, delay, attack, pitch, amp, filter, q int, origLFOName uint8) ([]Patch, error) {
+// The delay, attack and resonance depth are absent on purpose. The
+// panel's DELAY row writes the delay word and the attack byte together,
+// so BuildLFODelayPatches owns both, and no panel row reaches the
+// resonance depth at all. Taking them here would let a caller write a
+// raw delay and skip the attack the machine pairs with it.
+func BuildLFOPatches(wave, rate, pitch, amp, filter int, origLFOName uint8) ([]Patch, error) {
 	var patches []Patch
 	if wave != Unchanged {
 		if err := ValidateWaveform(wave); err != nil {
@@ -255,12 +260,6 @@ func BuildLFOPatches(wave, rate, delay, attack, pitch, amp, filter, q int, origL
 		val := uint8(wave)&disk.LFOWaveformMask | (origLFOName & disk.LFOPhaseFlag) //nolint:gosec // wave is validated above (0..5)
 		patches = append(patches, Patch{Offset: disk.VoiceLFONameOffset, Size: 1, Value: uint16(val)})
 	}
-	if delay != Unchanged {
-		if delay > disk.MaxLFODelay {
-			return nil, fmt.Errorf("voiceedit: lfo-delay must be 0 to %d, got %d", disk.MaxLFODelay, delay)
-		}
-		patches = append(patches, Patch{Offset: disk.VoiceLFODelayOffset, Size: 2, Value: bitconv.NarrowU16(delay)})
-	}
 	type lfoParam struct {
 		name   string
 		val    int
@@ -268,11 +267,9 @@ func BuildLFOPatches(wave, rate, delay, attack, pitch, amp, filter, q int, origL
 	}
 	params := []lfoParam{
 		{"lfo-rate", rate, disk.VoiceLFORateOffset},
-		{"lfo-attack", attack, disk.VoiceLFOAtckOffset},
 		{"lfo-pitch", pitch, disk.VoiceLFODCPOffset},
 		{"lfo-amp", amp, disk.VoiceLFODCAOffset},
 		{"lfo-filter", filter, disk.VoiceLFODCFOffset},
-		{"lfo-q", q, disk.VoiceLFODCQOffset},
 	}
 	for _, p := range params {
 		if p.val != Unchanged {
