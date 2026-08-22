@@ -57,17 +57,17 @@ func FuzzFZVEditChain(f *testing.F) {
 			case 1:
 				patches, err = BuildFilterPatches(Unchanged, int(valByte%128))
 			case 2:
-				patches, err = BuildLFOPatches(int(valByte%6), Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
+				patches, err = BuildLFOPatches(int(valByte%6), Unchanged, Unchanged, Unchanged, Unchanged, 0)
 			case 3:
-				patches, err = BuildLFOPatches(Unchanged, int(valByte%128), Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
+				patches, err = BuildLFOPatches(Unchanged, int(valByte%128), Unchanged, Unchanged, Unchanged, 0)
 			case 4:
-				patches, err = BuildLFOPatches(Unchanged, Unchanged, int(valByte%128), Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
+				patches, err = BuildLFODelayPatches(int(valByte % 128))
 			case 5:
-				patches, err = BuildLFOPatches(Unchanged, Unchanged, Unchanged, Unchanged, int(valByte%128), Unchanged, Unchanged, Unchanged, 0)
+				patches, err = BuildLFOPatches(Unchanged, Unchanged, int(valByte%128), Unchanged, Unchanged, 0)
 			case 6:
-				patches, err = BuildLFOPatches(Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, int(valByte%128), Unchanged, Unchanged, 0)
+				patches, err = BuildLFOPatches(Unchanged, Unchanged, Unchanged, int(valByte%128), Unchanged, 0)
 			case 7:
-				patches, err = BuildLFOPatches(Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, int(valByte%128), Unchanged, 0)
+				patches, err = BuildLFOPatches(Unchanged, Unchanged, Unchanged, Unchanged, int(valByte%128), 0)
 			case 8:
 				patches, err = BuildDCAPatches(int(valByte%8), Unchanged,
 					[disk.EnvelopeStages]int{Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged},

@@ -1505,7 +1505,7 @@ func TestEditFZFVoiceRoundTrip(t *testing.T) {
 
 	audioBefore := fzfAudioHash(t, fzfPath)
 
-	patches, err := voiceedit.BuildLFOPatches(3, 25, voiceedit.Unchanged, 127, 10, 20, 50, voiceedit.Unchanged, 0)
+	patches, err := voiceedit.BuildLFOPatches(3, 25, 10, 20, 50, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1635,7 +1635,7 @@ func TestEditVoiceInImageRoundTrip(t *testing.T) {
 	}
 	audioBefore := fzfAudioHash(t, extractedFZF)
 
-	patches, err := voiceedit.BuildLFOPatches(3, 25, voiceedit.Unchanged, 127, 10, 20, 50, voiceedit.Unchanged, 0)
+	patches, err := voiceedit.BuildLFOPatches(3, 25, 10, 20, 50, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

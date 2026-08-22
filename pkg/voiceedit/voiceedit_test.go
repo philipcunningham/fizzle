@@ -132,7 +132,7 @@ func TestValidateWaveform(t *testing.T) {
 
 func TestBuildLFOPatches(t *testing.T) {
 	t.Parallel()
-	patches, err := BuildLFOPatches(0, 25, 100, 127, 0, 0, 50, Unchanged, 0)
+	patches, err := BuildLFOPatches(0, 25, 0, 0, 50, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,14 +149,20 @@ func TestBuildLFOPatches(t *testing.T) {
 	if offsets[disk.VoiceLFODCFOffset] != 50 {
 		t.Errorf("filter depth: got %d, want 50", offsets[disk.VoiceLFODCFOffset])
 	}
+	// The resonance depth has no panel control, so nothing here can
+	// reach it.
 	if _, ok := offsets[disk.VoiceLFODCQOffset]; ok {
-		t.Error("q should not be patched when -1")
+		t.Error("the resonance depth byte was patched, but no control reaches it")
+	}
+	// The attack belongs to the delay row, not to this builder.
+	if _, ok := offsets[disk.VoiceLFOAtckOffset]; ok {
+		t.Error("the attack byte was patched, but only the delay row writes it")
 	}
 }
 
 func TestBuildLFOPatchesAllSkipped(t *testing.T) {
 	t.Parallel()
-	patches, err := BuildLFOPatches(Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
+	patches, err := BuildLFOPatches(Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +173,7 @@ func TestBuildLFOPatchesAllSkipped(t *testing.T) {
 
 func TestBuildLFOPatchesInvalidRate(t *testing.T) {
 	t.Parallel()
-	_, err := BuildLFOPatches(Unchanged, 200, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
+	_, err := BuildLFOPatches(Unchanged, 200, Unchanged, Unchanged, Unchanged, 0)
 	if err == nil {
 		t.Error("expected error for rate 200")
 	}
@@ -181,7 +187,7 @@ func TestBuildLFOPatchesPreservesPhaseFlag(t *testing.T) {
 	t.Parallel()
 	// origLFOName = 0x83: waveform 3 (Triangle) | bit 7 (phase sync).
 	const origLFOName uint8 = 0x83
-	patches, err := BuildLFOPatches(disk.LFOSine, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, origLFOName)
+	patches, err := BuildLFOPatches(disk.LFOSine, Unchanged, Unchanged, Unchanged, Unchanged, origLFOName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +224,7 @@ func TestApplyToFZVLFOPreservesPhaseFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	patches, err := BuildLFOPatches(disk.LFOSine, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0x83)
+	patches, err := BuildLFOPatches(disk.LFOSine, Unchanged, Unchanged, Unchanged, Unchanged, 0x83)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +344,7 @@ func TestApplyToFZV(t *testing.T) {
 		t.Fatalf("expected initial LFO rate 0, got %d", before.LFORate)
 	}
 
-	patches, _ := BuildLFOPatches(Unchanged, 42, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
+	patches, _ := BuildLFOPatches(Unchanged, 42, Unchanged, Unchanged, Unchanged, 0)
 	if err := ApplyToFZV(path, patches); err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +360,7 @@ func TestApplyToFZVPreservesOtherBytes(t *testing.T) {
 	path := buildTestFZV(t)
 	before := parseFZV(t, path)
 
-	patches, _ := BuildLFOPatches(Unchanged, 42, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
+	patches, _ := BuildLFOPatches(Unchanged, 42, Unchanged, Unchanged, Unchanged, 0)
 	if err := ApplyToFZV(path, patches); err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +381,7 @@ func TestApplyToFZVMultiplePatches(t *testing.T) {
 	t.Parallel()
 	path := buildTestFZV(t)
 
-	lfoPatches, _ := BuildLFOPatches(3, 25, Unchanged, 127, Unchanged, Unchanged, 50, Unchanged, 0)
+	lfoPatches, _ := BuildLFOPatches(3, 25, Unchanged, Unchanged, 50, 0)
 	filterPatches, _ := BuildFilterPatches(64, 7)
 	all := make([]Patch, 0, len(lfoPatches)+len(filterPatches))
 	all = append(all, lfoPatches...)
@@ -457,7 +463,7 @@ func TestApplyToFZFVoice(t *testing.T) {
 	t.Parallel()
 	fzfPath := extractTestFZF(t, "../../testdata/synthetic/TECHNO.img", "FULL-DATA-FZ")
 
-	patches, _ := BuildLFOPatches(0, 30, Unchanged, Unchanged, Unchanged, Unchanged, 60, Unchanged, 0)
+	patches, _ := BuildLFOPatches(0, 30, Unchanged, Unchanged, 60, 0)
 	if err := ApplyToFZFVoice(fzfPath, "COWBELL", patches); err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +491,7 @@ func TestApplyToFZFVoicePreservesOthers(t *testing.T) {
 	}
 	bellBefore := parseFZV(t, filepath.Join(dir1, "METAL-BELL.fzv"))
 
-	patches, _ := BuildLFOPatches(0, 30, Unchanged, Unchanged, Unchanged, Unchanged, 60, Unchanged, 0)
+	patches, _ := BuildLFOPatches(0, 30, Unchanged, Unchanged, 60, 0)
 	if err := ApplyToFZFVoice(fzfPath, "COWBELL", patches); err != nil {
 		t.Fatal(err)
 	}
@@ -519,7 +525,7 @@ func TestLFOPatchRoundTrip(t *testing.T) {
 	t.Parallel()
 	path := buildTestFZV(t)
 
-	patches, _ := BuildLFOPatches(3, 25, 100, 127, 10, 20, 50, 5, 0)
+	patches, _ := BuildLFOPatches(3, 25, 10, 20, 50, 0)
 	if err := ApplyToFZV(path, patches); err != nil {
 		t.Fatal(err)
 	}
@@ -624,7 +630,7 @@ func TestApplyToFZFVoiceInvalidFZF(t *testing.T) {
 func TestApplyToFZFVoiceCaseInsensitive(t *testing.T) {
 	t.Parallel()
 	fzfPath := extractTestFZF(t, "../../testdata/synthetic/TECHNO.img", "FULL-DATA-FZ")
-	patches, _ := BuildLFOPatches(Unchanged, 10, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
+	patches, _ := BuildLFOPatches(Unchanged, 10, Unchanged, Unchanged, Unchanged, 0)
 	if err := ApplyToFZFVoice(fzfPath, "cowbell", patches); err != nil {
 		t.Fatalf("case-insensitive lookup failed: %v", err)
 	}
@@ -734,7 +740,7 @@ func TestApplyToFZFVoiceNonKeyRangePatchSkipsBank(t *testing.T) {
 	}
 
 	// Apply an LFO patch (no bank counterpart).
-	patches, err := BuildLFOPatches(Unchanged, 42, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
+	patches, err := BuildLFOPatches(Unchanged, 42, Unchanged, Unchanged, Unchanged, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -849,26 +855,20 @@ func TestBuildLFOPatchesValidation(t *testing.T) {
 		name   string
 		wave   int
 		rate   int
-		delay  int
-		attack int
 		pitch  int
 		amp    int
 		filter int
-		q      int
 	}{
-		{"invalid waveform", 10, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged},
-		{"invalid rate", Unchanged, 200, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged},
-		{"invalid delay", Unchanged, Unchanged, 70000, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged},
-		{"invalid attack", Unchanged, Unchanged, Unchanged, 200, Unchanged, Unchanged, Unchanged, Unchanged},
-		{"invalid pitch", Unchanged, Unchanged, Unchanged, Unchanged, 200, Unchanged, Unchanged, Unchanged},
-		{"invalid amp", Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 200, Unchanged, Unchanged},
-		{"invalid filter", Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 200, Unchanged},
-		{"invalid q", Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 200},
+		{"invalid waveform", 10, Unchanged, Unchanged, Unchanged, Unchanged},
+		{"invalid rate", Unchanged, 200, Unchanged, Unchanged, Unchanged},
+		{"invalid pitch", Unchanged, Unchanged, 200, Unchanged, Unchanged},
+		{"invalid amp", Unchanged, Unchanged, Unchanged, 200, Unchanged},
+		{"invalid filter", Unchanged, Unchanged, Unchanged, Unchanged, 200},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := BuildLFOPatches(tc.wave, tc.rate, tc.delay, tc.attack, tc.pitch, tc.amp, tc.filter, tc.q, 0)
+			_, err := BuildLFOPatches(tc.wave, tc.rate, tc.pitch, tc.amp, tc.filter, 0)
 			if err == nil {
 				t.Errorf("expected error for %s", tc.name)
 			}
@@ -897,10 +897,13 @@ func TestBuildFilterPatchesValidation(t *testing.T) {
 	}
 }
 
+// The delay row writes the delay word and the attack byte together, so
+// the round trip checks both. Display 100 stores the word 1600, and the
+// attack the panel derives is 18 - ceil(100/8) = 5.
 func TestLFODelayPatchRoundTrip(t *testing.T) {
 	t.Parallel()
 	path := buildTestFZV(t)
-	patches, err := BuildLFOPatches(Unchanged, Unchanged, 100, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
+	patches, err := BuildLFODelayPatches(100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -908,8 +911,11 @@ func TestLFODelayPatchRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	params := parseFZV(t, path)
-	if params.LFODelay != 100 {
-		t.Errorf("LFODelay: got %d, want 100", params.LFODelay)
+	if params.LFODelay != 1600 {
+		t.Errorf("LFODelay: got %d, want 1600", params.LFODelay)
+	}
+	if params.LFOAttack != 5 {
+		t.Errorf("LFOAttack: got %d, want 5", params.LFOAttack)
 	}
 }
 
@@ -920,7 +926,7 @@ func TestEditPreservesFileSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lfoPatches, _ := BuildLFOPatches(2, 50, 200, 100, 10, 20, 30, 5, 0)
+	lfoPatches, _ := BuildLFOPatches(2, 50, 10, 20, 30, 0)
 	filterPatches, _ := BuildFilterPatches(80, 10)
 	all := make([]Patch, 0, len(lfoPatches)+len(filterPatches))
 	all = append(all, lfoPatches...)
@@ -948,7 +954,7 @@ func TestPatchPreservesAudio(t *testing.T) {
 	audioBefore := make([]byte, len(dataBefore)-disk.SectorSize)
 	copy(audioBefore, dataBefore[disk.SectorSize:])
 
-	patches, _ := BuildLFOPatches(0, 42, 200, 127, 10, 20, 50, 5, 0)
+	patches, _ := BuildLFOPatches(0, 42, 10, 20, 50, 0)
 	filterPatches, _ := BuildFilterPatches(64, 7)
 	all := make([]Patch, 0, len(patches)+len(filterPatches))
 	all = append(all, patches...)
@@ -1396,7 +1402,7 @@ func TestDCAEditPreservesOtherParams(t *testing.T) {
 	t.Parallel()
 	path := buildTestFZV(t)
 
-	lfoPatches, _ := BuildLFOPatches(2, 50, Unchanged, 100, 10, 20, 30, Unchanged, 0)
+	lfoPatches, _ := BuildLFOPatches(2, 50, 10, 20, 30, 0)
 	filterPatches, _ := BuildFilterPatches(64, 7)
 	setup := make([]Patch, 0, len(lfoPatches)+len(filterPatches))
 	setup = append(setup, lfoPatches...)
@@ -1657,7 +1663,7 @@ func TestConcurrentApplyToFZVSafe(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			patches, err := BuildLFOPatches(Unchanged, rates[idx], Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, Unchanged, 0)
+			patches, err := BuildLFOPatches(Unchanged, rates[idx], Unchanged, Unchanged, Unchanged, 0)
 			if err != nil {
 				errs[idx] = err
 				return
@@ -1878,7 +1884,7 @@ func TestApplyToFZFSlotBytesMatchesByName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lfoPatches, perr := BuildLFOPatches(0, 30, Unchanged, Unchanged, Unchanged, Unchanged, 60, Unchanged, 0)
+	lfoPatches, perr := BuildLFOPatches(0, 30, Unchanged, Unchanged, 60, 0)
 	if perr != nil {
 		t.Fatal(perr)
 	}

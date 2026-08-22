@@ -58,6 +58,13 @@ func TestEditFlagUsageNamesThePanelScale(t *testing.T) {
 	} else if contains(got, "-127") {
 		t.Errorf("vel-dcq-kf usage = %q, but the panel's row is unsigned", got)
 	}
+	// The panel's DELAY row stops at 127. Advertising the stored word's
+	// range invites a value the flag then refuses.
+	if got := usage["lfo-delay"]; got == "" {
+		t.Fatal("the lfo-delay flag has no usage string")
+	} else if contains(got, "65535") {
+		t.Errorf("lfo-delay usage = %q, but the panel's row stops at 127", got)
+	}
 }
 
 func contains(haystack, needle string) bool {

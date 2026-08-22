@@ -168,17 +168,17 @@ func numberPatches(id string, n int, voiceBytes []byte) ([]voiceedit.Patch, erro
 	case fieldVelDcfRS:
 		return voiceedit.BuildModulationPatches(u, u, u, u, u, u, u, u, n)
 	case fieldLfoRate:
-		return voiceedit.BuildLFOPatches(u, n, u, u, u, u, u, u, lfoNameByte(voiceBytes))
+		return voiceedit.BuildLFOPatches(u, n, u, u, u, lfoNameByte(voiceBytes))
 	case fieldLfoDelay:
 		// The panel's DELAY row writes the delay word and the attack
 		// byte together; there is no independent attack control.
 		return voiceedit.BuildLFODelayPatches(n)
 	case fieldLfoPitch:
-		return voiceedit.BuildLFOPatches(u, u, u, u, n, u, u, u, lfoNameByte(voiceBytes))
+		return voiceedit.BuildLFOPatches(u, u, n, u, u, lfoNameByte(voiceBytes))
 	case fieldLfoAmp:
-		return voiceedit.BuildLFOPatches(u, u, u, u, u, n, u, u, lfoNameByte(voiceBytes))
+		return voiceedit.BuildLFOPatches(u, u, u, n, u, lfoNameByte(voiceBytes))
 	case fieldLfoFilter:
-		return voiceedit.BuildLFOPatches(u, u, u, u, u, u, n, u, lfoNameByte(voiceBytes))
+		return voiceedit.BuildLFOPatches(u, u, u, u, n, lfoNameByte(voiceBytes))
 	default:
 		return nil, errf("invalid-field", "%q is not a numeric field", id)
 	}
@@ -196,7 +196,7 @@ func optionPatches(id, option string, voiceBytes []byte) ([]voiceedit.Patch, err
 		if !ok {
 			return nil, errf(codeInvalidValue, "unknown LFO waveform %q", option)
 		}
-		return voiceedit.BuildLFOPatches(idx, u, u, u, u, u, u, u, lfoNameByte(voiceBytes))
+		return voiceedit.BuildLFOPatches(idx, u, u, u, u, lfoNameByte(voiceBytes))
 	case fieldLfoSync:
 		return voiceedit.BuildLFOSyncPatch(option, lfoNameByte(voiceBytes))
 	default:
