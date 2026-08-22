@@ -91,7 +91,7 @@ When voices in a full dump have different MIDI receive channels, the sampler ope
 
 The sampler's front panel shows envelope rates and stop levels on a 0-to-99 scale. The actual bytes in the file are 0-to-127 (rates) or 0-to-255 (stop levels). `fizzle fzv edit --dca-rate-1 99` takes the display value: what you type matches the panel, and fizzle converts to bytes internally. The formulae are documented in [display-scales](../llm-wiki/topics/display-scales.md).
 
-The same rule reaches every parameter, not only envelopes. Tune is in cents, and LFO delay uses the panel's 0 to 127. An area's level counts the way `AREA LEVEL` counts, where 127 is loudest. Where the panel has no control for a byte, fizzle has none either: it round trips the byte untouched.
+The same rule reaches every parameter, not only envelopes. Tune is in cents, and LFO delay uses the panel's 0 to 127. An area's level counts the way `AREA LEVEL` counts, where 127 is loudest. Where the panel has no control for a byte, fizzle has none either: it round trips the byte untouched. `fzv info` reads the same way, and puts the bytes no panel row reaches on a line of their own.
 
 ---
 

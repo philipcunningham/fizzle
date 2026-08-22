@@ -77,11 +77,15 @@ type VoiceParams struct {
 	GenEnd       uint32  `json:"-"`
 	WaveEnd      uint32  `json:"-"`
 	Transpose    int16   `json:"transpose"`
-	KeyLow       uint8   `json:"key_low"`
-	KeyHigh      uint8   `json:"key_high"`
-	KeyCentre    uint8   `json:"root_note"`
-	FilterCutoff uint8   `json:"cutoff"`
-	FilterQ      uint8   `json:"resonance"`
+	// DCP is the raw dcp word: the tune the panel's TUNE row edits, in
+	// 1/256 semitone units. Transpose above is the same value divided
+	// into whole semitones, which loses everything inside one.
+	DCP          int16 `json:"-"`
+	KeyLow       uint8 `json:"key_low"`
+	KeyHigh      uint8 `json:"key_high"`
+	KeyCentre    uint8 `json:"root_note"`
+	FilterCutoff uint8 `json:"cutoff"`
+	FilterQ      uint8 `json:"resonance"`
 
 	DCADefault bool                       `json:"-"`
 	DCASilent  bool                       `json:"-"`
@@ -324,6 +328,7 @@ func parseHeader(hdr []byte, source string) (*VoiceParams, error) {
 		GenEnd:       genEnd,
 		WaveEnd:      waveEnd,
 		Transpose:    transpose,
+		DCP:          int16(dcp), //nolint:gosec // G115: intentional uint16-to-int16 reinterpretation
 		KeyLow:       lwid,
 		KeyHigh:      hwid,
 		KeyCentre:    cent,
@@ -478,8 +483,10 @@ func Render(w io.Writer, p *VoiceParams) {
 	if p.GenStart > 0 || (p.WaveEnd > 0 && p.GenEnd+disk.GenEndGuard < p.WaveEnd) {
 		render.Printf(w, "Gen range:   %d to %d samples\n", p.GenStart, p.GenEnd)
 	}
-	if p.Transpose != 0 {
-		render.Printf(w, "Transpose:   %+d semitones\n", p.Transpose)
+	if p.DCP != 0 {
+		// The panel's TUNE row, in cents. Transpose counts the same
+		// value in whole semitones, which hides everything inside one.
+		render.Printf(w, "Tune:        %+d cents\n", disk.TuneWordToDisplay(p.DCP))
 	}
 
 	render.Printf(w, "Key window:  %s to %s   Root: %s\n",
@@ -511,12 +518,18 @@ func Render(w io.Writer, p *VoiceParams) {
 			render.Printf(w, " (phase sync)")
 		}
 		render.Println(w)
-		// Delay shows the way the panel's DELAY row shows it. Attack has
-		// no panel row of its own: the DELAY row derives it, so the
-		// stored byte is the only honest thing to print.
-		render.Printf(w, "  Rate: %d   Attack: %d   Delay: %d\n",
-			p.LFORate, p.LFOAttack, disk.LFODelayWordToDisplay(p.LFODelay))
-		render.Printf(w, "  Depth: pitch=%d  amp=%d  filter=%d  q=%d\n", p.LFODepthPitch, p.LFODepthAmp, p.LFODepthFilter, p.LFODepthQ)
+		// The panel's own LFO page: rate, delay, and three depths. Delay
+		// shows the way the DELAY row shows it.
+		render.Printf(w, "  Rate: %d   Delay: %d\n",
+			p.LFORate, disk.LFODelayWordToDisplay(p.LFODelay))
+		render.Printf(w, "  Depth: pitch=%d  amp=%d  filter=%d\n",
+			p.LFODepthPitch, p.LFODepthAmp, p.LFODepthFilter)
+		// The attack and the resonance depth are real bytes that no
+		// panel row reaches. The DELAY row derives the attack and writes
+		// it. Naming them apart keeps a reader from hunting the machine
+		// for a control that isn't there.
+		render.Printf(w, "  No panel row: attack=%d  resonance depth=%d\n",
+			p.LFOAttack, p.LFODepthQ)
 	}
 
 	hasModRouting := kfDisplay(p.DCALevelKF) != 0 || kfDisplay(p.DCARateKF) != 0 ||
@@ -530,8 +543,10 @@ func Render(w io.Writer, p *VoiceParams) {
 		render.Printf(w, "  DCF: level KF=%+d  rate KF=%+d  vel sensitivity=%+d\n",
 			kfDisplay(p.DCFLevelKF), kfDisplay(p.DCFRateKF), p.VelDCFKF)
 		if p.VelDCQKF != 0 || p.VelDCARS != 0 || p.VelDCFRS != 0 {
-			render.Printf(w, "  Vel: dcq KF=%+d  dca RS=%+d  dcf RS=%+d\n",
-				p.VelDCQKF, p.VelDCARS, p.VelDCFRS)
+			// The panel's resonance row carries no sign column, so this
+			// one prints unsigned while its neighbours keep their sign.
+			render.Printf(w, "  Vel: dcq KF=%d  dca RS=%+d  dcf RS=%+d\n",
+				disk.VelDCQByteToDisplay(uint8(p.VelDCQKF)), p.VelDCARS, p.VelDCFRS) //nolint:gosec // two's complement round trip
 		}
 	}
 

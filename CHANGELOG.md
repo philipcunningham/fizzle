@@ -6,6 +6,8 @@
 
 - Parameters read and write the way the FZ front panel shows them. Tune is in cents, LFO delay uses the panel's own 0 to 127, and an area's volume counts the way `AREA LEVEL` counts, where 127 is loudest. Values that used to show a stored byte now show the machine's number.
 
+- `fzv info` reads the way the panel reads. Tune is in cents, the LFO delay uses the panel's scale, and velocity to resonance drops the sign column the panel doesn't have. The LFO attack and resonance depth move to a line naming them as bytes no panel row reaches.
+
 - `--lfo-attack` and `--lfo-q` are gone, and `--lfo-sync` is new. The panel derives the attack from the delay and has no resonance depth control, so fizzle offers neither. It still round trips both bytes untouched.
 
 - Velocity to resonance is 0 to 127, not -127 to 127. The panel's row has no sign column and refuses to go below zero.

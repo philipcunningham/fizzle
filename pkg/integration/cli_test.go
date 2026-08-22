@@ -1260,9 +1260,10 @@ func TestCLIFzvEditLFOSubFlags(t *testing.T) {
 	out, _ := mustRun(t, "fzv", "info", fzvPath)
 	for _, want := range []string{
 		"Rate: 20",
-		// The DELAY row writes the attack too: 18 - ceil(100/8) = 5.
-		"Attack: 5",
 		"Delay: 100",
+		// The DELAY row writes the attack too: 18 - ceil(100/8) = 5. It
+		// has no panel row, so the readout names it apart.
+		"No panel row: attack=5",
 		"(phase sync)",
 		"pitch=30",
 		"amp=20",
@@ -1341,7 +1342,7 @@ func TestCLIFzvEditVelModulationSigned(t *testing.T) {
 	)
 	out, _ := mustRun(t, "fzv", "info", fzvPath)
 	for _, want := range []string{
-		"dcq KF=+50",
+		"dcq KF=50",
 		"dca RS=-50",
 		"dcf RS=+127",
 	} {
