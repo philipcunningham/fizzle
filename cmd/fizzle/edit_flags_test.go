@@ -7,6 +7,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 )
 
 // The flags are stringly typed, so deleting one leaves any call site
@@ -101,5 +102,34 @@ func TestTuneFlagConvertsCentsToTheStoredWord(t *testing.T) {
 		if !found {
 			t.Errorf("--tune %d produced no patch at the dcp offset", c.cents)
 		}
+	}
+}
+
+// --lfo-sync shares its byte with the waveform, so it has to keep the
+// waveform bits. Reconstructing the byte from the sync flag alone
+// silently resets the waveform to sine.
+func TestLFOSyncFlagKeepsTheWaveform(t *testing.T) {
+	cmd := &cli.Command{Flags: editFlags()}
+	if err := cmd.Set("lfo-sync", "on"); err != nil {
+		t.Fatalf("set lfo-sync: %v", err)
+	}
+	// A voice already carrying triangle (index 3) with sync off.
+	params := &fzvinfo.VoiceParams{LFOName: 3}
+
+	patches, err := collectLFOPatches(cmd, params)
+	if err != nil {
+		t.Fatalf("collectLFOPatches: %v", err)
+	}
+	var found bool
+	for _, p := range patches {
+		if p.Offset == disk.VoiceLFONameOffset {
+			found = true
+			if p.Value != 0x83 {
+				t.Errorf("--lfo-sync on wrote %#02x, want 0x83 (triangle kept, sync set)", p.Value)
+			}
+		}
+	}
+	if !found {
+		t.Error("--lfo-sync on produced no patch at the lfo_name offset")
 	}
 }

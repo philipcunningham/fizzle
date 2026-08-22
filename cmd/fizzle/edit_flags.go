@@ -122,13 +122,11 @@ func collectLFOPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceed
 		wave = idx
 	}
 
-	// Rebuild the raw lfo_name byte so BuildLFOPatches keeps the
-	// phase-sync flag (bit 7) when only the waveform index changes. The
-	// waveform-index bits get overwritten, so bit 7 is all that matters.
-	var origLFOName uint8
-	if params.LFOPhaseSync {
-		origLFOName |= disk.LFOPhaseFlag
-	}
+	// The whole lfo_name byte, because both halves matter. Setting the
+	// waveform keeps bit 7's phase sync, and setting the sync keeps the
+	// waveform index. Reconstructing the byte from one half alone
+	// silently resets the other.
+	origLFOName := params.LFOName
 
 	const u = voiceedit.Unchanged
 	patches, err := voiceedit.BuildLFOPatches(
