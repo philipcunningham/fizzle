@@ -4,6 +4,14 @@
 
 - The browser editor's preview follows the FZ's loop chain: a held key repeats the loop the chain caps at, and the key coming up moves it to the end loop. The waveform marks both. The cross-fade and the multi-loop time stay out for now.
 
+- Parameters read and write the way the FZ front panel shows them. Tune is in cents, LFO delay uses the panel's own 0 to 127, and an area's volume counts the way `AREA LEVEL` counts, where 127 is loudest. Values that used to show a stored byte now show the machine's number.
+
+- `--lfo-attack` and `--lfo-q` are gone, and `--lfo-sync` is new. The panel derives the attack from the delay and has no resonance depth control, so fizzle offers neither. It still round trips both bytes untouched.
+
+- Velocity to resonance is 0 to 127, not -127 to 127. The panel's row has no sign column and refuses to go below zero.
+
+- The sample rate is no longer editable on a recorded voice. The panel fixes it when the sample is taken.
+
 - The waveform draws a playhead while a note sounds, so a loop is visible and not only audible. It snaps back at the loop's end under a held key, then travels on to the end loop when the key comes up.
 
 ## v0.5.0 (2026-08-18)
