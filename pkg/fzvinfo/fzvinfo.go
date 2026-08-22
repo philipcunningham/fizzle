@@ -484,9 +484,19 @@ func Render(w io.Writer, p *VoiceParams) {
 		render.Printf(w, "Gen range:   %d to %d samples\n", p.GenStart, p.GenEnd)
 	}
 	if p.DCP != 0 {
-		// The panel's TUNE row, in cents. Transpose counts the same
-		// value in whole semitones, which hides everything inside one.
-		render.Printf(w, "Tune:        %+d cents\n", disk.TuneWordToDisplay(p.DCP))
+		// The panel's TUNE row, in cents. Past a semitone the panel
+		// wraps and reads +000, so name the whole semitones beside it
+		// rather than mimicking the panel into hiding an audible
+		// detune. Only a foreign file reaches here: the panel and
+		// fizzle's own editors both stop at one semitone.
+		cents := disk.TuneWordToDisplay(p.DCP)
+		semitones := int(p.DCP) / disk.SemitoneDCPScale
+		if semitones != 0 {
+			render.Printf(w, "Tune:        %+04d cents and %+d semitones, past the panel's row\n",
+				cents, semitones)
+		} else {
+			render.Printf(w, "Tune:        %+d cents\n", cents)
+		}
 	}
 
 	render.Printf(w, "Key window:  %s to %s   Root: %s\n",

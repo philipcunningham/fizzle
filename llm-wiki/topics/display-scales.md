@@ -62,8 +62,10 @@ Treat each row as provisional until hardware confirms it.
 | `bvol` (AREA LEVEL) | 0 to 127 | `byte = 127 - display`, so a stored 0 is the panel's loudest |
 
 Two rows here replaced earlier readings taken statically from the ROM's
-bounds table. Velocity to resonance was recorded as plus or minus 100,
-and the DCF rate as 0 to 127. Both came from misjudging the 24 byte
+bounds table. The velocity RESONANCE row was recorded as plus or
+minus 100, and the velocity DCF RATE row as 0 to 127. Both are the
+VELOCITY SENS page's rows, not the envelope rate scales this page also
+documents. Both came from misjudging the 24 byte
 record's phase by one, which still decodes into plausible bounds.
 
 `lfo_atck` and `lfo_dcq` have no panel row at all. The DELAY row derives

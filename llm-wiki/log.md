@@ -147,3 +147,16 @@ The implementation note in multi-loops.md fell behind this branch.
 The browser preview now moves the Web Audio loop window to the end
 loop at key up, matching the cap raise at F000:1515. Corrected the
 sentence claiming the preview only repeats the sustain loop.
+
+## [2026-08-22] ingest | Panel display scales, read off an emulator
+
+Recorded four mappings in display-scales.md. Tune in cents, the delay
+and attack pair the DELAY row writes together, the unsigned velocity
+resonance row, and the inverted area level. Each came from driving the
+FZ-1 firmware under an emulator and reading the bytes back.
+
+Two earlier readings were reversed: the velocity resonance row, and the
+velocity DCF rate row. Both came from misjudging the bounds table's
+record phase by one, which still decodes into plausible bounds. The
+open question claiming the velocity fields were uncalibrated is gone.
+
