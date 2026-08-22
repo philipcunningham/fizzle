@@ -128,6 +128,17 @@ func collectLFOPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceed
 	// silently resets the other.
 	origLFOName := params.LFOName
 
+	// Both flags write this one byte, so the sync has to fold into the
+	// waveform's own patch rather than following it. Two patches at one
+	// offset apply in order, and the second would drop the first.
+	if cmd.IsSet("lfo-sync") {
+		syncPatches, serr := voiceedit.BuildLFOSyncPatch(cmd.String("lfo-sync"), origLFOName)
+		if serr != nil {
+			return nil, serr
+		}
+		origLFOName = uint8(syncPatches[0].Value) //nolint:gosec // the builder writes one byte
+	}
+
 	patches, err := voiceedit.BuildLFOPatches(
 		wave,
 		intIfSet(cmd, "lfo-rate"),
@@ -149,12 +160,12 @@ func collectLFOPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceed
 		}
 		patches = append(patches, delayPatches...)
 	}
-	if cmd.IsSet("lfo-sync") {
-		syncPatches, serr := voiceedit.BuildLFOSyncPatch(cmd.String("lfo-sync"), origLFOName)
-		if serr != nil {
-			return nil, serr
-		}
-		patches = append(patches, syncPatches...)
+	// A sync change with no waveform change still needs its own patch,
+	// since nothing above wrote the byte.
+	if cmd.IsSet("lfo-sync") && !cmd.IsSet("lfo-wave") {
+		patches = append(patches, voiceedit.Patch{
+			Offset: disk.VoiceLFONameOffset, Size: 1, Value: uint16(origLFOName),
+		})
 	}
 	return patches, nil
 }

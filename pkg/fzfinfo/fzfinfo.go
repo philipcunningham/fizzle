@@ -319,7 +319,7 @@ func Render(w io.Writer, info *FullDump, highlighted map[int]bool) {
 		header = append(header, "Velocity")
 	}
 	if info.ShowVolume {
-		header = append(header, "Vol")
+		header = append(header, "Level")
 	}
 	header = append(header, "Rate", "Duration")
 	t.AppendHeader(header)
@@ -362,7 +362,9 @@ func Render(w io.Writer, info *FullDump, highlighted map[int]bool) {
 			row = append(row, vel)
 		}
 		if info.ShowVolume {
-			row = append(row, v.BankVolume)
+			// The panel's AREA LEVEL row, where 127 is loudest. The
+			// stored bvol byte counts the other way.
+			row = append(row, disk.AreaLevelFromByte(v.BankVolume))
 		}
 		row = append(row, render.RateName(v.RateIndex), durStr)
 		t.AppendRow(row)

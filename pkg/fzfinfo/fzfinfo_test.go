@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -915,5 +916,32 @@ func TestMemoryBytesClampedToAudioArea(t *testing.T) {
 	}
 	if info.MemoryBytes < 0 {
 		t.Errorf("MemoryBytes = %d, should be non-negative", info.MemoryBytes)
+	}
+}
+
+// The bvol byte counts the opposite way to the panel's AREA LEVEL row,
+// where 127 is loudest. The table is a display, so it shows the panel's
+// number and names the column for what the panel calls it.
+func TestRenderShowsTheAreaLevelThePanelsWay(t *testing.T) {
+	info := &FullDump{
+		ShowVolume: true,
+		Voices: []VoiceEntry{
+			{VoiceEntry: fzutil.VoiceEntry{Index: 1, Name: "LOUD", BankVolume: 0}},
+			{VoiceEntry: fzutil.VoiceEntry{Index: 2, Name: "QUIET", BankVolume: 127}},
+		},
+	}
+	var buf bytes.Buffer
+	Render(&buf, info, nil)
+	out := buf.String()
+
+	if !strings.Contains(out, "Level") {
+		t.Errorf("the column is not named for the panel's row:\n%s", out)
+	}
+	// A stored 0 is the panel's loudest.
+	if !regexp.MustCompile(`LOUD.*\s127\s`).MatchString(out) {
+		t.Errorf("a stored 0 does not read as the panel's 127:\n%s", out)
+	}
+	if !regexp.MustCompile(`QUIET.*\s0\s`).MatchString(out) {
+		t.Errorf("a stored 127 does not read as the panel's 0:\n%s", out)
 	}
 }

@@ -439,8 +439,11 @@ Per-voice routing of MIDI key and velocity to envelope behaviour and other param
 | `--dca-rate-kf` | -15 to +15 | Key follow into amplitude envelope rate. |
 | `--dcf-level-kf` | -15 to +15 | Key follow into filter cutoff. |
 | `--dcf-rate-kf` | -15 to +15 | Key follow into filter envelope rate. |
-| `--vel-dca-kf` | 0-127 | Velocity into amplitude. A value of zero means velocity doesn't affect volume. fizzle's defaults set this to 80 to give normal velocity response. |
-| `--vel-dcf-kf` | 0-127 | Velocity into filter. |
+| `--vel-dca-kf` | -127 to +127 | Velocity into amplitude. A value of zero means velocity doesn't affect volume. fizzle's defaults set this to 80 to give normal velocity response. |
+| `--vel-dcf-kf` | -127 to +127 | Velocity into filter. |
+| `--vel-dcq-kf` | 0-127 | Velocity into filter resonance. Unsigned: the panel's row carries no sign column and refuses to go below zero. |
+| `--vel-dca-rs` | -127 to +127 | Velocity into the DCA envelope's rate. |
+| `--vel-dcf-rs` | -127 to +127 | Velocity into the DCF envelope's rate. |
 
 ### Loops and playback modes
 
@@ -781,7 +784,10 @@ Every fizzle subcommand and flag, alphabetical.
 | `--root` | [Keyboard range](#keyboard-range) |
 | `--tune` | [Tuning and voice naming](#tuning-and-voice-naming) |
 | `--vel-dca-kf` | [Modulation routing](#modulation-routing) |
+| `--vel-dca-rs` | [Modulation routing](#modulation-routing) |
 | `--vel-dcf-kf` | [Modulation routing](#modulation-routing) |
+| `--vel-dcf-rs` | [Modulation routing](#modulation-routing) |
+| `--vel-dcq-kf` | [Modulation routing](#modulation-routing) |
 
 ---
 

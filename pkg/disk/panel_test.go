@@ -2,9 +2,14 @@ package disk
 
 import "testing"
 
-// Every case here is a value read off the FZ-1 front panel running
-// under the fizzlab emulator. The numbers are measurements, not
-// choices, so don't change them to make code pass.
+// Rows pairing a stored byte with a panel reading are measurements,
+// taken by driving the FZ-1 firmware under an emulator. Don't change
+// those to make code pass: change the code.
+//
+// Two other kinds of row sit beside them. Clamp rows, such as tune 900
+// or area level -5, are fizzle's own policy rather than readings. Rows
+// sweeping a whole range extrapolate the fitted rule past the points
+// actually measured, and hold only as far as the rule does.
 
 func TestTuneWordToDisplayMatchesThePanel(t *testing.T) {
 	for _, c := range []struct{ word, display int }{

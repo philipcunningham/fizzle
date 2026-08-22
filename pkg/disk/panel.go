@@ -1,10 +1,12 @@
 package disk
 
-// Panel display conversions, measured against the FZ-1 firmware running
-// under the fizzlab emulator. See handoffs/PLAN-MEASURED-AUDIT.md for
-// the measurements behind each rule, and for the caveat that none of it
-// is confirmed on a physical FZ. A measurement taken on a real device
-// overrides any rule here.
+// Panel display conversions, read off the FZ-1 firmware running under
+// an emulator: set the value on the panel, save, and read the bytes
+// back. llm-wiki/topics/display-scales.md carries each mapping with its
+// evidence.
+//
+// None of this is confirmed on a physical FZ. A measurement taken on a
+// real device outranks it and replaces the rule here.
 
 const (
 	// MinTuneDisplay is the TUNE row's floor. The panel reads roughly as
