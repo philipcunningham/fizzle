@@ -163,6 +163,41 @@ Knowledge of FZ-1 firmware behaviour comes from reverse engineering the
 firmware. Cite firmware findings by ROM address and routine name, for
 example `midi_note_on` at `F000:0FFD`.
 
+## Panel values and stored bytes
+
+The FZ front panel shows most fields on its own scale, and Casio chose
+that scale per field. The velocity quartet is the raw signed byte, and
+velocity to resonance is plus or minus 100. AREA LEVEL is 127 minus
+the byte, envelope rates and levels are 0 to 99, and key follow is the
+byte over 8. There is no single rule, so never assume one.
+
+Three layers, each taking its answer from a different place:
+
+- Display follows the panel, per field, since a user checks the screen
+  against the machine.
+- Computation follows the stored byte, always. The firmware reads
+  bytes, so a preview or a model that reads a display value is wrong.
+- Storage preserves the byte. Never write back a field the user
+  didn't edit: a display value that round trips through its scale
+  isn't the byte it came from.
+
+Derive a field's mapping from the firmware, not by guessing. Use
+ghidra-mcp against the ROM. A panel row is a 24 byte blob: label text,
+a max word, then a min word. The bounds come out of a read, and the
+conversion sits in the screen that renders the row. `AREA LEVEL` is
+127 minus the byte at F000:6562, written back inverted at F000:6725.
+
+The firmware wins. A mapping the ROM shows is an invariant, and code
+or documentation that disagrees is the thing to change. Override it
+only with a measurement taken on a real device. Record that
+measurement, the device, and the bytes tested, beside the firmware
+reading.
+
+Record every mapping in
+[llm-wiki/topics/display-scales.md](llm-wiki/topics/display-scales.md),
+with its evidence: a ROM address, or the hardware calibration that
+overrode one.
+
 ## CLAUDE.md symlinks
 
 `CLAUDE.md` at the repo root and `llm-wiki/CLAUDE.md` are symlinks to
