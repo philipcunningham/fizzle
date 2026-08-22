@@ -183,10 +183,27 @@ func buildEnvelopePatches(which string, sustain, end int, rates, stops []int) (f
 		st[i] = clampInt(v, 0, 99)
 	}
 	return func(vp *fzvinfo.VoiceParams) ([]voiceedit.Patch, error) {
-		if which == envDCA {
-			return voiceedit.BuildDCAPatches(sustain, end, r, st, vp.DCARates)
+		origRates, origStops := vp.DCARates, vp.DCAStops
+		if which != envDCA {
+			origRates, origStops = vp.DCFRates, vp.DCFStops
 		}
-		return voiceedit.BuildDCFPatches(sustain, end, r, st, vp.DCFRates)
+		// The display scale is lossy in both directions: 28 of 128 rate
+		// bytes and 156 of 256 stop bytes fail a round trip. A stage the
+		// user didn't move must keep its exact byte, so send Unchanged
+		// wherever the display value already matches.
+		sendR, sendSt := r, st
+		for i := range disk.EnvelopeStages {
+			if sendR[i] == disk.RateByteToDisplay(origRates[i]) {
+				sendR[i] = voiceedit.Unchanged
+			}
+			if sendSt[i] == disk.StopByteToDisplay(origStops[i]) {
+				sendSt[i] = voiceedit.Unchanged
+			}
+		}
+		if which == envDCA {
+			return voiceedit.BuildDCAPatches(sustain, end, sendR, sendSt, origRates)
+		}
+		return voiceedit.BuildDCFPatches(sustain, end, sendR, sendSt, origRates)
 	}, nil
 }
 

@@ -2,6 +2,9 @@ package webcore
 
 import (
 	"testing"
+
+	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 )
 
 func voiceDetail(t *testing.T, s *Session, file string) *VoiceDetail {
@@ -171,5 +174,67 @@ func TestLoopAndEnvelopeEditsUndo(t *testing.T) {
 	after := voiceDetail(t, s, voice).Loops[0]
 	if after != before {
 		t.Fatalf("undo did not restore loop 0: %+v then %+v", before, after)
+	}
+}
+
+func displayRates(b [disk.EnvelopeStages]uint8) []int {
+	out := make([]int, disk.EnvelopeStages)
+	for i := range b {
+		out[i] = disk.RateByteToDisplay(b[i])
+	}
+	return out
+}
+
+func displayStops(b [disk.EnvelopeStages]uint8) []int {
+	out := make([]int, disk.EnvelopeStages)
+	for i := range b {
+		out[i] = disk.StopByteToDisplay(b[i])
+	}
+	return out
+}
+
+// 28 of 128 rate bytes and 156 of 256 stop bytes fail a display round
+// trip, so writing every stage from display values changes stages the
+// user never moved. Only the stages that actually changed get patched.
+func TestEnvelopePatchesOnlyChangedStages(t *testing.T) {
+	// A stop byte that doesn't survive a display round trip. 156 of the
+	// 256 possible stop bytes fail it; this is one of them.
+	const lossyStop = 2
+	if disk.StopDisplayToByte(disk.StopByteToDisplay(lossyStop)) == lossyStop {
+		t.Fatal("240 round trips cleanly, so this test proves nothing")
+	}
+
+	vp := &fzvinfo.VoiceParams{}
+	for i := range vp.DCARates {
+		vp.DCARates[i] = 127
+		vp.DCAStops[i] = lossyStop
+	}
+
+	rates := displayRates(vp.DCARates)
+	stops := displayStops(vp.DCAStops)
+	rates[0] = 50 // move exactly one stage's rate
+
+	build, cerr := buildEnvelopePatches(envDCA, 0, 7, rates, stops)
+	if cerr != nil {
+		t.Fatalf("buildEnvelopePatches: %v", cerr)
+	}
+	patches, err := build(vp)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	sawStage0 := false
+	for _, p := range patches {
+		switch {
+		case p.Offset >= disk.VoiceDCAStopOffset && p.Offset < disk.VoiceDCAStopOffset+disk.EnvelopeStages:
+			t.Errorf("stop stage %d was patched, but no stop changed", p.Offset-disk.VoiceDCAStopOffset)
+		case p.Offset == disk.VoiceDCARateOffset:
+			sawStage0 = true
+		case p.Offset > disk.VoiceDCARateOffset && p.Offset < disk.VoiceDCARateOffset+disk.EnvelopeStages:
+			t.Errorf("rate stage %d was patched, but only stage 0 changed", p.Offset-disk.VoiceDCARateOffset)
+		}
+	}
+	if !sawStage0 {
+		t.Error("the edited stage was not patched")
 	}
 }
