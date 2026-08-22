@@ -934,3 +934,27 @@ func TestParseNamesTheFileItRejected(t *testing.T) {
 func namesPath(err error, path string) bool {
 	return err != nil && strings.Contains(err.Error(), fmt.Sprintf("%q", path))
 }
+
+// The readout is a display, so it shows the delay the way the panel's
+// DELAY row shows it. The stored word counts in 16s; the panel counts
+// in 1s.
+func TestRenderShowsTheDelayOnThePanelScale(t *testing.T) {
+	p := &VoiceParams{
+		LFOWaveform:    "sine",
+		LFORate:        20,
+		LFODelay:       1600, // the panel's 100
+		LFOAttack:      5,
+		LFODepthPitch:  30,
+		LFODepthAmp:    20,
+		LFODepthFilter: 50,
+	}
+	var buf bytes.Buffer
+	Render(&buf, p)
+	out := buf.String()
+	if !strings.Contains(out, "Delay: 100") {
+		t.Errorf("render shows the raw word, not the panel's delay:\n%s", out)
+	}
+	if strings.Contains(out, "Delay: 1600") {
+		t.Errorf("render still shows the stored word:\n%s", out)
+	}
+}

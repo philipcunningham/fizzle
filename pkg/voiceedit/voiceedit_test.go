@@ -1587,10 +1587,11 @@ func TestApplyToFZVSignedVelDCAKFAndVelDCFKFRoundTrip(t *testing.T) {
 	}
 }
 
-// TestApplyToFZVSignedVelModulationRoundTrip writes the three signed
-// initial-touch velocity modulation fields (vel_dcq_kf, vel_dca_rs,
-// vel_dcf_rs) through ApplyToFZV and verifies they round-trip via fzvinfo
-// for the full -127..+127 range that the spec allows.
+// TestApplyToFZVSignedVelModulationRoundTrip writes the initial-touch
+// velocity modulation fields through ApplyToFZV and verifies they
+// round-trip via fzvinfo. vel_dca_rs and vel_dcf_rs cover the full
+// -127..+127 span. vel_dcq_kf stays non-negative: the panel's row has
+// no sign column and refuses to go below zero, so fizzle refuses too.
 func TestApplyToFZVSignedVelModulationRoundTrip(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -1598,9 +1599,10 @@ func TestApplyToFZVSignedVelModulationRoundTrip(t *testing.T) {
 		velDCQKF, velDCARS, velDCFRS int
 	}{
 		{"positives", 50, 25, 100},
-		{"negatives", -50, -25, -100},
+		{"negatives", 50, -25, -100},
 		{"extremes", 127, -127, 127},
-		{"mixed", -1, 0, 1},
+		{"mixed", 1, 0, 1},
+		{"dcq floor", 0, -127, -127},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2010,5 +2012,28 @@ func TestBuildLFOSyncPatchPreservesEveryWaveform(t *testing.T) {
 					c.option, orig, patches[0].Value, c.want)
 			}
 		}
+	}
+}
+
+// Four velocity parameters are signed, but the panel's RESONANCE row
+// carries no sign column and refuses to go below zero, whatever spec
+// section 2-1 says about all five.
+func TestVelDCQKFRefusesNegativeValues(t *testing.T) {
+	u := Unchanged
+	if _, err := BuildModulationPatches(u, u, u, u, u, u, -1, u, u); err == nil {
+		t.Error("expected an error for a negative vel-dcq-kf")
+	}
+	if _, err := BuildModulationPatches(u, u, u, u, u, u, 0, u, u); err != nil {
+		t.Errorf("vel-dcq-kf 0 should be accepted: %v", err)
+	}
+	if _, err := BuildModulationPatches(u, u, u, u, u, u, 127, u, u); err != nil {
+		t.Errorf("vel-dcq-kf 127 should be accepted: %v", err)
+	}
+	// The other four keep their sign.
+	if _, err := BuildModulationPatches(u, u, u, u, -127, u, u, u, u); err != nil {
+		t.Errorf("vel-dca-kf -127 should still be accepted: %v", err)
+	}
+	if _, err := BuildModulationPatches(u, u, u, u, u, u, u, -127, u); err != nil {
+		t.Errorf("vel-dca-rs -127 should still be accepted: %v", err)
 	}
 }

@@ -1252,21 +1252,21 @@ func TestCLIFzvEditLFOSubFlags(t *testing.T) {
 		"--lfo-wave", "sine",
 		"--lfo-rate", "20",
 		"--lfo-delay", "100",
-		"--lfo-attack", "64",
+		"--lfo-sync", "on",
 		"--lfo-pitch", "30",
 		"--lfo-amp", "20",
 		"--lfo-filter", "50",
-		"--lfo-q", "10",
 	)
 	out, _ := mustRun(t, "fzv", "info", fzvPath)
 	for _, want := range []string{
 		"Rate: 20",
-		"Attack: 64",
+		// The DELAY row writes the attack too: 18 - ceil(100/8) = 5.
+		"Attack: 5",
 		"Delay: 100",
+		"(phase sync)",
 		"pitch=30",
 		"amp=20",
 		"filter=50",
-		"q=10",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("fzv info after LFO sub-flag edit missing %q:\n%s", want, out)
