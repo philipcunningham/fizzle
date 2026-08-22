@@ -17,6 +17,7 @@ import (
 )
 
 type lfoParams struct {
+	name        uint8
 	waveform    string
 	phaseSync   bool
 	rate        uint8
@@ -95,8 +96,13 @@ type VoiceParams struct {
 	DCFRates   [disk.EnvelopeStages]uint8 `json:"dcf_rates"`
 	DCFStops   [disk.EnvelopeStages]uint8 `json:"dcf_stops"`
 
-	LFOWaveform    string `json:"lfo_waveform"`
-	LFOPhaseSync   bool   `json:"lfo_phase_sync"`
+	LFOWaveform  string `json:"lfo_waveform"`
+	LFOPhaseSync bool   `json:"lfo_phase_sync"`
+	// LFOName is the raw lfo_name byte: the waveform index in the low 7
+	// bits and the phase-sync flag in bit 7. Editors that touch one half
+	// need the other half to put back, and the display fields above
+	// can't be turned back into a byte reliably.
+	LFOName        uint8  `json:"-"`
 	LFORate        uint8  `json:"lfo_rate"`
 	LFOAttack      uint8  `json:"lfo_attack"`
 	LFODelay       uint16 `json:"lfo_delay"`
@@ -338,6 +344,7 @@ func parseHeader(hdr []byte, source string) (*VoiceParams, error) {
 		DCFStops:   dcfStops,
 
 		LFOWaveform:    lfo.waveform,
+		LFOName:        lfo.name,
 		LFOPhaseSync:   lfo.phaseSync,
 		LFORate:        lfo.rate,
 		LFOAttack:      lfo.attack,
@@ -380,6 +387,7 @@ func parseEnvelope(hdr []byte, susOff, endOff, rateOff, stopOff int) (sustain, e
 func parseLFO(hdr []byte) lfoParams {
 	lfoName := hdr[disk.VoiceLFONameOffset]
 	return lfoParams{
+		name:        lfoName,
 		waveform:    lfoWaveforms[lfoName&disk.LFOWaveformMask],
 		phaseSync:   lfoName&disk.LFOPhaseFlag != 0,
 		rate:        hdr[disk.VoiceLFORateOffset],
