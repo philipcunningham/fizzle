@@ -130,7 +130,7 @@ func instrumentFrom(fileName string, fzfData []byte) (*InstrumentSnapshot, error
 				MidiChannel: int(bank[disk.BankMIDIRecvChanOffset+i]) + 1,
 				Output:      int(bank[disk.BankAudioOutOffset+i]),
 				OutputLabel: disk.FormatAudioOut(bank[disk.BankAudioOutOffset+i]),
-				Volume:      int(bank[disk.BankVolumeOffset+i]),
+				Volume:      disk.AreaLevelFromByte(bank[disk.BankVolumeOffset+i]),
 			}
 			if entry, ok := fzutil.ParseBankVoiceEntry(bank, voiceArea, i, slot); ok {
 				area.VoiceName = entry.Name

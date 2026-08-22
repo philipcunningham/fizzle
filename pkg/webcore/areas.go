@@ -473,7 +473,9 @@ func (s *Session) SetAreaField(bank, area int, field string, value int) (Snapsho
 		case "velHigh":
 			return []model.Patch{bytePatch(d.fzf, base+disk.BankVelHighOffset+area, clampByte(value, 127))}, nil
 		case "volume":
-			return []model.Patch{bytePatch(d.fzf, base+disk.BankVolumeOffset+area, clampByte(value, 127))}, nil
+			// The panel's AREA LEVEL counts the opposite way to the
+			// stored byte, so convert rather than clamping the raw value.
+			return []model.Patch{bytePatch(d.fzf, base+disk.BankVolumeOffset+area, disk.AreaLevelToByte(value))}, nil
 		case "midiChannel":
 			return []model.Patch{bytePatch(d.fzf, base+disk.BankMIDIRecvChanOffset+area, clampByte(value-1, 15))}, nil
 		case "output":

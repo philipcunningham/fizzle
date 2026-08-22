@@ -7,15 +7,16 @@ package disk
 // overrides any rule here.
 
 const (
-	// MinTuneDisplay and MaxTuneDisplay are the TUNE row's span. The
-	// panel reads roughly as cents, one semitone either way.
+	// MinTuneDisplay is the TUNE row's floor. The panel reads roughly as
+	// cents, one semitone either way.
 	MinTuneDisplay = -100
+	// MaxTuneDisplay is the TUNE row's ceiling.
 	MaxTuneDisplay = 100
 
-	// MaxLFODelayDisplay is the LFO DELAY row's ceiling, and
-	// LFODelayStep is the stored-word step behind one display unit.
+	// MaxLFODelayDisplay is the LFO DELAY row's ceiling.
 	MaxLFODelayDisplay = 127
-	LFODelayStep       = 16
+	// LFODelayStep is the stored-word step behind one display unit.
+	LFODelayStep = 16
 
 	// MaxVelDCQDisplay is the VELOCITY SENS resonance row's ceiling.
 	// The row carries no sign column and refuses to go below zero.
