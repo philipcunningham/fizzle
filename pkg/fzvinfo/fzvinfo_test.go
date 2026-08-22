@@ -1018,3 +1018,36 @@ func TestRenderSeparatesTheBytesThePanelDoesNotShow(t *testing.T) {
 		t.Errorf("the resonance depth still sits with the panel's depths:\n%s", out)
 	}
 }
+
+// The panel wraps a tune word past its own span, so a voice detuned by
+// whole semitones reads +000 there. The file still carries the detune,
+// and it's audible, so the readout names the part the panel can't show
+// rather than mimicking the panel into silence.
+func TestRenderNamesTheSemitonesThePanelCannotShow(t *testing.T) {
+	// Two whole semitones: the panel reads +000 for this word.
+	p := &VoiceParams{Name: "T", DCP: 512}
+	var buf bytes.Buffer
+	Render(&buf, p)
+	out := buf.String()
+	if !strings.Contains(out, "+000 cents") {
+		t.Errorf("the panel's own reading is missing:\n%s", out)
+	}
+	if !strings.Contains(out, "2 semitones") {
+		t.Errorf("the detune the panel can't show is missing:\n%s", out)
+	}
+}
+
+// Inside the panel's span there are no semitones to name, so the line
+// stays as the panel reads it.
+func TestRenderLeavesTheCentsAloneInsideThePanelSpan(t *testing.T) {
+	p := &VoiceParams{Name: "T", DCP: 127}
+	var buf bytes.Buffer
+	Render(&buf, p)
+	out := buf.String()
+	if !strings.Contains(out, "+50 cents") {
+		t.Errorf("tune does not read in cents:\n%s", out)
+	}
+	if strings.Contains(out, "semitone") {
+		t.Errorf("a tune inside the panel's span names semitones:\n%s", out)
+	}
+}
