@@ -1,8 +1,7 @@
 # fizzle Web UI
 
 The React and TypeScript front end over the Go core compiled to
-WebAssembly. The specification, plan, and decision log live in
-`handoffs/` at the repository root.
+WebAssembly.
 
 ## Run it
 
