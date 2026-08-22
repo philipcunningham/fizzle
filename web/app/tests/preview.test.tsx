@@ -360,6 +360,22 @@ describe("a held note survives nothing", () => {
     }
   });
 
+  it("marks the strip with a playhead while a key sounds, and clears it at note off", async () => {
+    const recorded = stubAudioContext();
+    await openInstrumentDisk();
+    expect(document.querySelector(".waveform-wrap[data-playhead]")).toBeNull();
+
+    await holdMiddleC(recorded);
+    await waitFor(() => {
+      expect(document.querySelector(".waveform-wrap[data-playhead]")).not.toBeNull();
+    });
+
+    fireEvent.pointerUp(screen.getByTestId("key-60"), { pointerId: 1 });
+    await waitFor(() => {
+      expect(document.querySelector(".waveform-wrap[data-playhead]")).toBeNull();
+    });
+  });
+
   it("releases what is held when the window loses focus", async () => {
     const recorded = stubAudioContext();
     await openInstrumentDisk();
