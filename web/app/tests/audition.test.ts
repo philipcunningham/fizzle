@@ -158,14 +158,14 @@ describe("audition engine", () => {
   it("release stops the source", () => {
     const record = blank();
     const engine = createAudition(() => fakeContext(record));
-    const release = engine.play({
+    const note = engine.play({
       pcm: new Int16Array(64),
       sampleRate: 18000,
       root: 60,
       note: 60,
       velocity: 100,
     });
-    release();
+    note.release();
     expect(record.stopped).toBe(true);
   });
 
@@ -173,14 +173,14 @@ describe("audition engine", () => {
     const engine = createAudition(() => {
       throw new Error("no audio hardware");
     });
-    const release = engine.play({
+    const note = engine.play({
       pcm: new Int16Array(8),
       sampleRate: 18000,
       root: 60,
       note: 60,
       velocity: 1,
     });
-    release();
+    note.release();
   });
 });
 
@@ -280,7 +280,7 @@ describe("the sustain loop repeats while the key is held", () => {
   it("still stops on release", () => {
     const record = blank();
     const engine = createAudition(() => fakeContext(record));
-    const release = engine.play({
+    const note = engine.play({
       pcm: new Int16Array(18000),
       sampleRate: 18000,
       root: 60,
@@ -288,7 +288,7 @@ describe("the sustain loop repeats while the key is held", () => {
       velocity: 100,
       loop: { start: 4000, end: 12000 },
     });
-    release();
+    note.release();
     expect(record.stopped).toBe(true);
   });
 });
@@ -299,7 +299,7 @@ describe("the loop cap moves at key up", () => {
   it("points the window at the release loop when the key comes up", () => {
     const record = blank();
     const engine = createAudition(() => fakeContext(record));
-    const release = engine.play({
+    const note = engine.play({
       pcm: new Int16Array(18000),
       sampleRate: 18000,
       root: 60,
@@ -308,7 +308,7 @@ describe("the loop cap moves at key up", () => {
       loop: { start: 500, end: 1200 },
       releaseLoop: bounds,
     });
-    release();
+    note.release();
     expect(record.loop).toBe(true);
     expect(record.loopStart).toBeCloseTo(bounds.start / 18000, 10);
     expect(record.loopEnd).toBeCloseTo(bounds.end / 18000, 10);
@@ -317,7 +317,7 @@ describe("the loop cap moves at key up", () => {
   it("starts looping a voice that names a release loop alone", () => {
     const record = blank();
     const engine = createAudition(() => fakeContext(record));
-    const release = engine.play({
+    const note = engine.play({
       pcm: new Int16Array(18000),
       sampleRate: 18000,
       root: 60,
@@ -326,14 +326,14 @@ describe("the loop cap moves at key up", () => {
       releaseLoop: bounds,
     });
     expect(record.loop).toBe(false);
-    release();
+    note.release();
     expect(record.loop).toBe(true);
   });
 
   it("leaves a voice with no release loop as it was", () => {
     const record = blank();
     const engine = createAudition(() => fakeContext(record));
-    const release = engine.play({
+    const note = engine.play({
       pcm: new Int16Array(18000),
       sampleRate: 18000,
       root: 60,
@@ -341,7 +341,7 @@ describe("the loop cap moves at key up", () => {
       velocity: 100,
       loop: { start: 500, end: 1200 },
     });
-    release();
+    note.release();
     expect(record.loopStart).toBeCloseTo(500 / 18000, 10);
     expect(record.loopEnd).toBeCloseTo(1200 / 18000, 10);
   });
@@ -351,7 +351,7 @@ describe("the loop cap moves at key up", () => {
   it("ignores a release loop whose end sits at or below its start", () => {
     const record = blank();
     const engine = createAudition(() => fakeContext(record));
-    const release = engine.play({
+    const note = engine.play({
       pcm: new Int16Array(18000),
       sampleRate: 18000,
       root: 60,
@@ -359,14 +359,14 @@ describe("the loop cap moves at key up", () => {
       velocity: 100,
       releaseLoop: { start: 900, end: 900 },
     });
-    release();
+    note.release();
     expect(record.loop).toBe(false);
   });
 
   it("holds a release loop that overruns the samples to what it has", () => {
     const record = blank();
     const engine = createAudition(() => fakeContext(record));
-    const release = engine.play({
+    const note = engine.play({
       pcm: new Int16Array(9000),
       sampleRate: 18000,
       root: 60,
@@ -374,7 +374,7 @@ describe("the loop cap moves at key up", () => {
       velocity: 100,
       releaseLoop: { start: 100, end: 99999 },
     });
-    release();
+    note.release();
     expect(record.loopEnd).toBeCloseTo(9000 / 18000, 10);
   });
 });
@@ -421,14 +421,14 @@ describe("release fades before stopping", () => {
       }),
     };
     const engine = createAudition(() => context);
-    const release = engine.play({
+    const note = engine.play({
       pcm: new Int16Array(64),
       sampleRate: 18000,
       root: 60,
       note: 60,
       velocity: 100,
     });
-    release();
+    note.release();
     expect(stopArgs).toHaveLength(1);
     expect(stopArgs[0]).toBeGreaterThanOrEqual(1.05);
     // The gain detaches when the source ends, never synchronously:
@@ -507,7 +507,7 @@ describe("the DCA envelope reaches the scheduler", () => {
   it("holds the note until its release stages finish", () => {
     const record = blank();
     const engine = createAudition(() => fakeContext(record));
-    const release = engine.play({
+    const note = engine.play({
       pcm: new Int16Array(64),
       sampleRate: 18000,
       root: 60,
@@ -515,7 +515,7 @@ describe("the DCA envelope reaches the scheduler", () => {
       velocity: 100,
       dca: pluck,
     });
-    release();
+    note.release();
     // The source stops when the release finishes, not during it. The
     // model is tested on its own, so the assertion is that the engine
     // honours whatever it says rather than a figure copied here. This
@@ -605,7 +605,7 @@ describe("the DCA envelope reaches the scheduler", () => {
     // Halfway up a stage that the firmware takes 0.387 s to climb.
     clock.now = 0.1935;
     record.events.length = 0;
-    stop();
+    stop.release();
     // Half way up by the clock, so half way along the ramp the engine
     // scheduled, which is a straight line in dB rather than in level.
     const hold = record.events.find((e) => e.kind === "hold");
@@ -632,7 +632,7 @@ describe("the DCA envelope reaches the scheduler", () => {
         stops: [99, 0, 0, 0, 0, 0, 0, 0],
       },
     });
-    stop();
+    stop.release();
     expect(record.stopAt).toBeGreaterThan(1);
     expect(record.stopAt).toBeLessThanOrEqual(30.02);
   });
@@ -652,7 +652,7 @@ describe("the DCA envelope reaches the scheduler", () => {
       velocity: 127,
       dca: pluck,
     });
-    stop();
+    stop.release();
     const last = record.events.at(-1);
     expect(last?.kind).toBe("ramp");
     expect(last?.value).toBe(0);
@@ -706,13 +706,60 @@ describe("the DCA envelope reaches the scheduler", () => {
   it("keeps the short fade for a voice with no envelope", () => {
     const record = blank();
     const engine = createAudition(() => fakeContext(record));
-    engine.play({
-      pcm: new Int16Array(64),
+    engine
+      .play({
+        pcm: new Int16Array(64),
+        sampleRate: 18000,
+        root: 60,
+        note: 60,
+        velocity: 100,
+      })
+      .release();
+    expect(record.stopAt ?? 0).toBeLessThan(0.2);
+  });
+});
+
+describe("the note's playhead", () => {
+  it("tracks the clock, folds into the sustain loop, and moves at the key", () => {
+    const record = blank();
+    const context = fakeContext(record);
+    const engine = createAudition(() => context);
+    const note = engine.play({
+      pcm: new Int16Array(61200),
       sampleRate: 18000,
       root: 60,
       note: 60,
       velocity: 100,
-    })();
-    expect(record.stopAt ?? 0).toBeLessThan(0.2);
+      loop: { start: 3600, end: 21600 },
+      releaseLoop: { start: 39600, end: 57600 },
+    });
+
+    expect(note.frameAt(0)).toBe(0);
+    expect(note.frameAt(0.1)).toBeCloseTo(1800, 6);
+    const held = note.frameAt(1.5);
+    expect(held).toBeGreaterThanOrEqual(3600);
+    expect(held).toBeLessThan(21600);
+
+    context.currentTime = 1.5;
+    note.release();
+    // The release window sits ahead, so the playhead travels to it and
+    // then repeats inside it.
+    const landed = note.frameAt(4.5);
+    expect(landed).toBeGreaterThanOrEqual(39600);
+    expect(landed).toBeLessThan(57600);
+  });
+
+  it("plays through with no loop, and pitch carries the rate", () => {
+    const record = blank();
+    const engine = createAudition(() => fakeContext(record));
+    const note = engine.play({
+      pcm: new Int16Array(18000),
+      sampleRate: 18000,
+      root: 60,
+      note: 72,
+      velocity: 100,
+    });
+    expect(note.frameAt(0.1)).toBeCloseTo(3600, 6);
+    expect(note.frameAt(60)).toBe(17999);
   });
 });

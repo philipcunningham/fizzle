@@ -388,7 +388,7 @@ function Shell({ core }: { core: Core }) {
               ...(slotFollow ? { dcaFollow: slotFollow } : {}),
               ...(loop ? { loop } : {}),
               ...(onRelease ? { releaseLoop: onRelease } : {}),
-            }),
+            }).release,
           );
         });
       }
@@ -411,7 +411,7 @@ function Shell({ core }: { core: Core }) {
     const loop = sustainLoop(focusVoice?.voice);
     const onRelease = releaseLoop(focusVoice?.voice);
     const follow = dcaFollow(focusVoice);
-    const release = audition.play({
+    const sounded = audition.play({
       pcm: auditionData.pcm,
       sampleRate: focusVoice?.voice?.sampleRate ?? auditionData.sampleRate,
       root: focusRoot ?? auditionData.root,
@@ -422,7 +422,7 @@ function Shell({ core }: { core: Core }) {
       ...(loop ? { loop } : {}),
       ...(onRelease ? { releaseLoop: onRelease } : {}),
     });
-    heldNotes.current.set(note, { release, fromMIDI });
+    heldNotes.current.set(note, { release: sounded.release, fromMIDI });
     setAuditioning(true);
   };
   const noteOff = (note: number) => {

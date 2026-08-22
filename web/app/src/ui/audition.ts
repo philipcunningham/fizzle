@@ -6,6 +6,7 @@
 import type { EnvelopeSnapshot } from "../boundary/contract";
 import type { Scaling } from "./dca";
 import { amplitude, amplitudeAt, attack, levelAt, oneShot, release, totalSeconds } from "./dca";
+import { frameAt, type PlayheadPlan, type Span } from "./playhead";
 
 /**
  * The longest release the preview holds a source open for. The
@@ -73,6 +74,7 @@ function loopWindow(
 /** The slice of AudioContext the engine touches, faked in tests. */
 export interface AudioContextLike {
   currentTime: number;
+  readonly outputLatency?: number;
   state: string;
   resume(): Promise<void>;
   destination: unknown;
@@ -105,9 +107,24 @@ export interface AudioContextLike {
   };
 }
 
+/** A sounding note: how to release it, and where its playhead is. */
+export interface Note {
+  release: () => void;
+  /** The frame the playhead sits on at a context time. */
+  frameAt: (now: number) => number;
+}
+
+/** A note that never sounded still answers, so callers need no guard. */
+const silent: Note = { release: () => undefined, frameAt: () => 0 };
+
 export interface AuditionEngine {
-  /** Starts a note; the returned function releases it. Never throws. */
-  play(options: PlayOptions): () => void;
+  /** Starts a note; the returned note releases it. Never throws. */
+  play(options: PlayOptions): Note;
+  /**
+   * The clock the playhead reads, behind the schedule by what the
+   * output stage has yet to play, so the line matches what is heard.
+   */
+  now(): number;
 }
 
 export function createAudition(
@@ -132,9 +149,13 @@ export function createAudition(
   };
 
   return {
-    play(options: PlayOptions): () => void {
+    now(): number {
+      if (!context) return 0;
+      return context.currentTime - (context.outputLatency ?? 0);
+    },
+    play(options: PlayOptions): Note {
       const ctx = ensure();
-      if (!ctx || options.pcm.length === 0) return () => undefined;
+      if (!ctx || options.pcm.length === 0) return silent;
 
       const buffer = ctx.createBuffer(1, options.pcm.length, options.sampleRate);
       const channel = buffer.getChannelData(0);
@@ -153,6 +174,22 @@ export function createAudition(
         source.loopEnd = window.end;
         source.loop = true;
       }
+
+      // The same window in frames, under the guards the seconds went
+      // through: a window Web Audio would not honour repeats nothing.
+      const framesOf = (span: { start: number; end: number } | undefined): Span | null => {
+        if (!loopWindow(span, options.pcm.length, options.sampleRate) || !span) return null;
+        return { start: span.start, end: Math.min(span.end, options.pcm.length) };
+      };
+      const plan: PlayheadPlan = {
+        startedAt: ctx.currentTime,
+        rate: source.playbackRate.value,
+        sampleRate: options.sampleRate,
+        frames: options.pcm.length,
+        window: framesOf(options.loop),
+        releasedAt: null,
+        releaseWindow: framesOf(options.releaseLoop),
+      };
 
       const gain = ctx.createGain();
       const now = ctx.currentTime;
@@ -219,11 +256,14 @@ export function createAudition(
       }
 
       let released = false;
-      return () => {
+      const releaseNote = () => {
         if (released) return;
         released = true;
+        const at = ctx.currentTime;
+        // Recorded before the scheduling, so a throw below still
+        // leaves the playhead honest about where the note is.
+        plan.releasedAt = at;
         try {
-          const at = ctx.currentTime;
           // The cap moves to the end loop, and Chrome carries the
           // playhead there: a window ahead traces to it, and a window
           // behind wraps into it within a render quantum.
@@ -284,6 +324,8 @@ export function createAudition(
           // A source that already ended throws on stop; harmless.
         }
       };
+
+      return { release: releaseNote, frameAt: (when: number) => frameAt(plan, when) };
     },
   };
 }
