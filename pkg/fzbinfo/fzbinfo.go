@@ -177,7 +177,7 @@ func Render(w io.Writer, info *BankDump) {
 		header = append(header, "Velocity")
 	}
 	if info.ShowVolume {
-		header = append(header, "Vol")
+		header = append(header, "Level")
 	}
 	t.AppendHeader(header)
 
@@ -211,7 +211,9 @@ func Render(w io.Writer, info *BankDump) {
 			row = append(row, vel)
 		}
 		if info.ShowVolume {
-			row = append(row, v.BankVolume)
+			// The panel's AREA LEVEL row, where 127 is loudest. The
+			// stored bvol byte counts the other way.
+			row = append(row, disk.AreaLevelFromByte(v.BankVolume))
 		}
 		t.AppendRow(row)
 	}

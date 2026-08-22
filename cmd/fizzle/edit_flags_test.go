@@ -2,6 +2,7 @@ package main
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/urfave/cli/v3"
@@ -50,30 +51,21 @@ func TestEditFlagUsageNamesThePanelScale(t *testing.T) {
 
 	if got := usage["tune"]; got == "" {
 		t.Fatal("the tune flag has no usage string")
-	} else if !contains(got, "cents") {
+	} else if !strings.Contains(got, "cents") {
 		t.Errorf("tune usage = %q, want it to name cents", got)
 	}
 	if got := usage["vel-dcq-kf"]; got == "" {
 		t.Fatal("the vel-dcq-kf flag has no usage string")
-	} else if contains(got, "-127") {
+	} else if strings.Contains(got, "-127") {
 		t.Errorf("vel-dcq-kf usage = %q, but the panel's row is unsigned", got)
 	}
 	// The panel's DELAY row stops at 127. Advertising the stored word's
 	// range invites a value the flag then refuses.
 	if got := usage["lfo-delay"]; got == "" {
 		t.Fatal("the lfo-delay flag has no usage string")
-	} else if contains(got, "65535") {
+	} else if strings.Contains(got, "65535") {
 		t.Errorf("lfo-delay usage = %q, but the panel's row stops at 127", got)
 	}
-}
-
-func contains(haystack, needle string) bool {
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return true
-		}
-	}
-	return false
 }
 
 // The tune flag speaks the panel's cents, so it has to convert before
@@ -138,5 +130,37 @@ func TestLFOSyncFlagKeepsTheWaveform(t *testing.T) {
 	}
 	if !found {
 		t.Error("--lfo-sync on produced no patch at the lfo_name offset")
+	}
+}
+
+// Both flags write the same byte, so setting them together has to yield
+// one patch carrying both halves. Two patches at one offset means the
+// last one wins and the other edit vanishes.
+func TestLFOWaveAndSyncTogetherKeepBoth(t *testing.T) {
+	cmd := &cli.Command{Flags: editFlags()}
+	if err := cmd.Set("lfo-wave", "triangle"); err != nil {
+		t.Fatalf("set lfo-wave: %v", err)
+	}
+	if err := cmd.Set("lfo-sync", "on"); err != nil {
+		t.Fatalf("set lfo-sync: %v", err)
+	}
+	// A voice on sine with sync off.
+	params := &fzvinfo.VoiceParams{LFOName: 0}
+
+	patches, err := collectLFOPatches(cmd, params)
+	if err != nil {
+		t.Fatalf("collectLFOPatches: %v", err)
+	}
+	var atName []uint16
+	for _, p := range patches {
+		if p.Offset == disk.VoiceLFONameOffset {
+			atName = append(atName, p.Value)
+		}
+	}
+	if len(atName) != 1 {
+		t.Fatalf("got %d patches at the lfo_name offset, want 1: %v", len(atName), atName)
+	}
+	if atName[0] != 0x83 {
+		t.Errorf("wave and sync together wrote %#02x, want 0x83 (triangle with sync on)", atName[0])
 	}
 }

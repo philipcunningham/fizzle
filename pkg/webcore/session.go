@@ -298,7 +298,7 @@ func voiceParams(vp *fzvinfo.VoiceParams, voiceBytes []byte) map[string]any {
 		mode = "synth"
 	}
 	// fzvinfo reports tune in semitones and KF in raw bytes; the schema
-	// speaks the setters' units (raw DCP, hardware display scale), so
+	// speaks the setters' units (the panel's cents, hardware display scale), so
 	// both convert here.
 	tune := 0
 	sync := "off"

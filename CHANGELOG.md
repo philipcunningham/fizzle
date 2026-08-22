@@ -12,6 +12,8 @@
 
 - Velocity to resonance is 0 to 127, not -127 to 127. The panel's row has no sign column and refuses to go below zero.
 
+- Editing one envelope stage in the browser leaves the others alone. Saving used to rewrite all sixteen bytes through the display scale, which is lossy in both directions, so stages nobody touched could come back changed.
+
 - The sample rate is no longer editable on a recorded voice. The panel fixes it when the sample is taken.
 
 - The waveform draws a playhead while a note sounds, so a loop is visible and not only audible. It snaps back at the loop's end under a held key, then travels on to the end loop when the key comes up.

@@ -3,9 +3,10 @@ type: topic
 title: Front-panel display scales
 description: How the FZ front panel maps raw header bytes to its 0 to 99 and -15 to +15 displays; calibrated on hardware, absent from the spec.
 tags: [fzv, display, hardware]
-updated: 2026-08-18
+updated: 2026-08-22
 sources:
   - FZ-10M hardware (calibration disk images; BRASS1 D3 1)
+  - FZ-1 system ROM executed under an emulator (panel driven, bytes read back)
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
 status: confirmed-hardware
 ---
@@ -45,9 +46,34 @@ Validated on FZ-10M with calibration images at bytes 0, 1, 4, 8, 15,
 `disk.KFDisplayToByte` in `pkg/disk/voice.go`; `pkg/fzvinfo`,
 `pkg/webcore`, and `pkg/sfzexport` render through them.
 
+## Mappings read off the panel under an emulator
+
+These come from driving the FZ-1 firmware under an emulator: set the
+value on the panel, save, and read the bytes back. That beats a static
+read of the ROM and falls short of a measurement on a real device.
+Treat each row as provisional until hardware confirms it.
+
+| Field | Panel range | Mapping |
+|---|---|---|
+| `vel_dca_kf`, `vel_dca_rs`, `vel_dcf_kf`, `vel_dcf_rs` | -127 to +127 | the raw signed byte |
+| `vel_dcq_kf` | 0 to 127 | the same byte unsigned; the row carries no sign column and refuses to go below zero |
+| `dcp` (TUNE) | -100 to +100 | `word = display * 255 / 100`, truncated toward zero. Reading back, the panel takes the magnitude from the low byte and the sign from the word, so a word beyond the span wraps |
+| `lfo_delay` (DELAY) | 0 to 127 | `word = display * 16`. The same row writes `lfo_atck` as `18 - ceil(display / 8)`: there is no independent attack row |
+| `bvol` (AREA LEVEL) | 0 to 127 | `byte = 127 - display`, so a stored 0 is the panel's loudest |
+
+Two rows here replaced earlier readings taken statically from the ROM's
+bounds table. Velocity to resonance was recorded as plus or minus 100,
+and the DCF rate as 0 to 127. Both came from misjudging the 24 byte
+record's phase by one, which still decodes into plausible bounds.
+
+`lfo_atck` and `lfo_dcq` have no panel row at all. The DELAY row derives
+the attack, and nothing reaches the resonance depth. `lfo_dcq` is zero
+in all 735 voices unpacked from the Casio factory library, and it can't
+be used on a physical unit.
+
 ## Open questions
 
-- The five velocity sensitivity fields (`vel_dca_kf`, `vel_dca_rs`,
-  `vel_dcf_kf`, `vel_dcf_rs`, `vel_dcq_kf`) almost certainly have a
-  narrower display range too, but the mapping is uncalibrated; fizzle
-  exposes the raw signed byte for now.
+- Whether the four writes an emulated panel makes with no edit also
+  happen on hardware: rate sign bits set across all eight envelope
+  stages, one stop level rewritten, a loop sustain index set past the
+  last loop, and a tune word nudged by one.

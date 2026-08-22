@@ -201,7 +201,7 @@ func TestEnvelopePatchesOnlyChangedStages(t *testing.T) {
 	// 256 possible stop bytes fail it; this is one of them.
 	const lossyStop = 2
 	if disk.StopDisplayToByte(disk.StopByteToDisplay(lossyStop)) == lossyStop {
-		t.Fatal("240 round trips cleanly, so this test proves nothing")
+		t.Fatalf("stop byte %d round trips cleanly, so this test proves nothing", lossyStop)
 	}
 
 	vp := &fzvinfo.VoiceParams{}
