@@ -1143,6 +1143,38 @@ await step("a stored loop chain moves the window at the key (WASM core)", async 
     throw new Error(`1 LOW HIGH frees to ${showWindow(lowHigh.freed)}, want the high window`);
   }
 
+  // The cursor is the visible half of the same claim: hidden at rest,
+  // and inside the window the chain is repeating while a key is down.
+  const cursor = () =>
+    page.evaluate(() => {
+      const host = document.querySelector('[data-testid="waveform"] div');
+      const parts = [...(host?.shadowRoot?.querySelectorAll("[part]") ?? [])];
+      const el = parts.find((n) => n.getAttribute("part") === "cursor");
+      const wrapper = parts.find((n) => n.getAttribute("part") === "wrapper");
+      if (!el || !wrapper) return null;
+      const c = el.getBoundingClientRect();
+      const w = wrapper.getBoundingClientRect();
+      return { fraction: (c.x - w.x) / w.width, width: c.width };
+    });
+
+  const atRest = await cursor();
+  if (atRest && atRest.width > 0) {
+    throw new Error(`the cursor is ${atRest.width}px wide at rest, want it hidden`);
+  }
+
+  await page.locator('table[aria-label="instrument voices"] tbody tr').nth(0).click();
+  await page.getByText("61,200 frames").waitFor({ timeout: 5000 });
+  const key = page.locator('[data-testid="key-60"]');
+  await pressUntilSounding(key);
+  await page.waitForTimeout(500);
+  const drawn = await cursor();
+  await key.dispatchEvent("pointerup", { pointerId: 1 });
+  if (!drawn || drawn.width === 0) throw new Error("no cursor while a key sounds");
+  const frame = drawn.fraction * 61200;
+  if (frame < LOW[0] || frame > LOW[1]) {
+    throw new Error(`the cursor sits at frame ${Math.round(frame)}, want the low window`);
+  }
+
   // No sustain loop, so the cap is the end loop from note on
   // (F000:122B) and the high window repeats from the press.
   const highOnly = await pressAndRelease(2);
