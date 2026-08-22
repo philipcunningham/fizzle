@@ -507,7 +507,10 @@ const (
 	MaxResonance          = 127
 	MaxKFDisplay          = 15
 	MinKFDisplay          = -15
-	MaxLFODelay           = 65535
+	// MaxLFODelay is the largest value the stored lfo_delay word holds.
+	// It isn't a range anything offers: the panel's DELAY row reaches
+	// MaxLFODelayDisplay, which is 127, and stores 16 per step.
+	MaxLFODelay = 65535
 	// LFOAtckDefault is the in-spec default for the lfo_atck byte at offset
 	// 0x9f. The spec (§2-1) defines the valid range as 1-127 with smaller =
 	// slower rise and larger = faster. 127 means the LFO reaches full level
