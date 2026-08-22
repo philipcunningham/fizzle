@@ -91,6 +91,8 @@ When voices in a full dump have different MIDI receive channels, the sampler ope
 
 The sampler's front panel shows envelope rates and stop levels on a 0-to-99 scale. The actual bytes in the file are 0-to-127 (rates) or 0-to-255 (stop levels). `fizzle fzv edit --dca-rate-1 99` takes the display value: what you type matches the panel, and fizzle converts to bytes internally. The formulae are documented in [display-scales](../llm-wiki/topics/display-scales.md).
 
+The same rule reaches every parameter, not only envelopes. Tune is in cents, and LFO delay uses the panel's 0 to 127. An area's level counts the way `AREA LEVEL` counts, where 127 is loudest. Where the panel has no control for a byte, fizzle has none either: it round trips the byte untouched.
+
 ---
 
 ## The FZ-1 at a glance
@@ -413,14 +415,15 @@ A single low-frequency oscillator that can modulate pitch, amplitude, filter cut
 |------|----------------|-------|
 | `--lfo-wave` | `sine`, `saw-up`, `saw-down`, `triangle`, `rectangle`, `random` | LFO waveform. The sampler labels these Sin, AscSaw, DecSaw, Tri, Square, Rand. |
 | `--lfo-rate` | 0-127 | Oscillation rate. |
-| `--lfo-delay` | 0-65535 | Delay between note-on and LFO onset, in 2ms units. |
+| `--lfo-delay` | 0-127 | Delay between note-on and LFO onset, on the panel's `DELAY` scale. The same row writes the LFO attack rate, so one flag sets both. |
 | `--lfo-pitch` | 0-127 | Depth of LFO into voice pitch. |
 | `--lfo-amp` | 0-127 | Depth of LFO into amplitude (DCA). |
 | `--lfo-filter` | 0-127 | Depth of LFO into filter cutoff (DCF). |
-| `--lfo-attack` | 0-127 | LFO attack rate. Not visible on the FZ front panel and not described in the owner's manual. |
-| `--lfo-q` | 0-127 | Depth of LFO into filter resonance. Not visible on the FZ front panel and not described in the owner's manual. |
+| `--lfo-sync` | `on`, `off` | LFO phase sync, the panel's `LFO SYNC` row. |
 
-`--lfo-wave` carries a phase-sync flag internally (bit 7 of the byte that names the waveform). fizzle doesn't yet expose phase sync as a CLI flag.
+`--lfo-sync` and `--lfo-wave` share one byte: bit 7 is the sync flag and the low bits name the waveform. Setting either keeps the other.
+
+There is no `--lfo-attack` and no `--lfo-q`. The panel's `DELAY` row derives the attack and writes it, and no panel row reaches the resonance depth at all. fizzle round trips both bytes untouched.
 
 ### Modulation routing
 
@@ -467,7 +470,7 @@ Playback mode can be changed with `fzv edit --playback-mode` (normal, reverse, c
 |------|-------|
 | `--name` | New voice name, up to 12 ASCII characters. Names are space-padded to 12 bytes when stored. |
 
-Tuning can be changed with `fzv edit --tune` (in DCP units: 1/256 semitone). Tuning is set to zero at import time by default. The SFZ `tune` opcode (in cents) is applied during conversion.
+Tuning can be changed with `fzv edit --tune`, in cents from -100 to +100, matching the panel's `TUNE` row. fizzle converts to the stored 1/256 semitone units. Tuning is set to zero at import time by default. The SFZ `tune` opcode (also in cents) is applied during conversion.
 
 ### Keyboard range
 
@@ -766,11 +769,10 @@ Every fizzle subcommand and flag, alphabetical.
 | `--dcf-stop-N` (N=1..8) | [DCF envelope and filter](#dcf-envelope-and-filter) |
 | `--dcf-sustain` | [DCF envelope and filter](#dcf-envelope-and-filter) |
 | `--lfo-amp` | [LFO](#lfo) |
-| `--lfo-attack` | [LFO](#lfo) |
 | `--lfo-delay` | [LFO](#lfo) |
 | `--lfo-filter` | [LFO](#lfo) |
 | `--lfo-pitch` | [LFO](#lfo) |
-| `--lfo-q` | [LFO](#lfo) |
+| `--lfo-sync` | [LFO](#lfo) |
 | `--lfo-rate` | [LFO](#lfo) |
 | `--lfo-wave` | [LFO](#lfo) |
 | `--name` | [Tuning and voice naming](#tuning-and-voice-naming) |
