@@ -697,3 +697,36 @@ func TestSwapAreasMovesMIDIChannel(t *testing.T) {
 		t.Errorf("area 0 kept channel 5 after the swap")
 	}
 }
+
+// The panel's AREA LEVEL row and the stored bvol byte run in opposite
+// directions, so the web surface speaks the panel's scale and the byte
+// underneath holds its inverse.
+func TestSetAreaVolumeSpeaksThePanelScale(t *testing.T) {
+	s := twoVoiceSession(t)
+
+	for _, level := range []int{0, 30, 64, 127} {
+		if _, cerr := s.SetAreaField(0, 0, "volume", level); cerr != nil {
+			t.Fatalf("SetAreaField(volume, %d): %v", level, cerr)
+		}
+		if got := instrument(t, s).Banks[0].Areas[0].Volume; got != level {
+			t.Errorf("volume = %d, want %d", got, level)
+		}
+	}
+
+	// Out of range values clamp on the panel's scale, not the byte's.
+	if _, cerr := s.SetAreaField(0, 0, "volume", 900); cerr != nil {
+		t.Fatalf("SetAreaField: %v", cerr)
+	}
+	if got := instrument(t, s).Banks[0].Areas[0].Volume; got != 127 {
+		t.Errorf("clamped volume = %d, want 127", got)
+	}
+}
+
+// A fresh voice stores bvol 0, which the panel calls its loudest. The
+// web surface has to agree, or full level reads as silence.
+func TestUntouchedAreaReadsAsFullLevel(t *testing.T) {
+	s := twoVoiceSession(t)
+	if got := instrument(t, s).Banks[0].Areas[0].Volume; got != disk.MaxAreaLevel {
+		t.Errorf("an untouched area reads %d, want %d", got, disk.MaxAreaLevel)
+	}
+}

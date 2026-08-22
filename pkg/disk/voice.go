@@ -281,6 +281,12 @@ const (
 	// rules out a plain continuous attenuator here; the field may be read
 	// only at load time, or the editor may target a different byte. 0
 	// matches factory disks and gives the loudest reliable playback seen.
+	//
+	// The panel counts the opposite way. Its AREA LEVEL row displays
+	// MaxAreaLevel minus the byte, so the stored 0 above is the panel's
+	// 127, its loudest setting. That agrees with the FZ-10M reading
+	// noted above, where a bvol=127 disk played quieter.
+	// AreaLevelFromByte and AreaLevelToByte carry the conversion.
 	DefaultBankVolume  = 0
 	BankVoiceNumOffset = 0x202
 	// VPEntrySize is the size of a single vp[] entry in a bank
