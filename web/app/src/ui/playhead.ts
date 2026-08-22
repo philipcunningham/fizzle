@@ -31,7 +31,7 @@ function fold(frame: number, span: Span | null, frames: number): number {
 export function frameAt(plan: PlayheadPlan, now: number): number {
   const travelled = (from: number) => Math.max(0, (now - from) * plan.rate * plan.sampleRate);
   const held = fold(travelled(plan.startedAt), plan.window, plan.frames);
-  if (plan.releasedAt === null) return held;
+  if (plan.releasedAt === null || now < plan.releasedAt) return held;
   const atRelease = fold(
     Math.max(0, (plan.releasedAt - plan.startedAt) * plan.rate * plan.sampleRate),
     plan.window,

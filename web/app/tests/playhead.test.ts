@@ -61,16 +61,27 @@ describe("the playhead's position", () => {
   });
 
   it("wraps at once into a release window that sits behind", () => {
-    // Held in the high window and released into the low one: there is
-    // no material to travel through, so Chrome folds it on the spot.
+    // Held to 3 s, which is frame 54000 and inside the high window it
+    // repeats. The low window sits behind that, with no material to
+    // travel through, so the fold lands inside it on the spot.
+    const high = { start: 39600, end: 57600 };
+    expect(frameAt(plan({ window: high }), 13)).toBeCloseTo(54000, 6);
+
     const back = plan({
-      window: { start: 39600, end: 57600 },
-      releasedAt: 11,
+      window: high,
+      releasedAt: 13,
       releaseWindow: { start: 3600, end: 21600 },
     });
-    const frame = frameAt(back, 11.05);
+    const frame = frameAt(back, 13.05);
     expect(frame).toBeGreaterThanOrEqual(3600);
     expect(frame).toBeLessThan(21600);
+  });
+
+  it("reads a time before the key came up as a held note", () => {
+    // The shell only ever reads forwards, but a reader that answered
+    // the release path for an earlier time would be lying about it.
+    const back = plan({ releasedAt: 13, releaseWindow: { start: 39600, end: 57600 } });
+    expect(frameAt(back, 12.5)).toBeCloseTo(frameAt(plan(), 12.5), 6);
   });
 
   it("keeps repeating the sustain window when no release window is named", () => {

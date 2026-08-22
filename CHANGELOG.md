@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased (last updated 2026-08-20)
+## Unreleased (last updated 2026-08-22)
 
-- The browser editor's preview repeats a voice's sustain loop while a key is held, and the waveform marks the loop that repeats. The release loop, the cross-fade, and the multi-loop time stay out for now.
+- The browser editor's preview follows the FZ's loop chain. A held key repeats the loop the chain caps at, which is the lower of the two designations rather than the sustain one alone. The key coming up moves the chain to the end loop, which then repeats while the note fades. The waveform marks each of the two, and `testdata/synthetic/LOOPDEMO.img` is a built instrument whose five voices differ only in which loops they name, so the rule can be heard. The cross-fade and the multi-loop time stay out for now.
+
+- The waveform draws a playhead while a note sounds, so a repeat is visible and not only audible. Web Audio reports no position for a playing sample, so the line is modelled from the note's own start, pitch, and loop window. Watch it snap back at the loop's end while a key is held, then travel on to the end loop when the key comes up.
 
 ## v0.5.0 (2026-08-18)
 

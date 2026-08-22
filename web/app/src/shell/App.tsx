@@ -414,7 +414,14 @@ function Shell({ core }: { core: Core }) {
     const loop = sustainLoop(focusVoice?.voice);
     const onRelease = releaseLoop(focusVoice?.voice);
     const follow = dcaFollow(focusVoice);
+    // The strip follows the most recent note, and keeps following it
+    // until the note itself is over rather than until its key comes
+    // up: the window moves at the key, which is what there is to see.
+    let reader: (() => number) | undefined;
     const sounded = audition.play({
+      onEnded: () => {
+        setPlayhead((current) => (current === reader ? null : current));
+      },
       pcm: auditionData.pcm,
       sampleRate: focusVoice?.voice?.sampleRate ?? auditionData.sampleRate,
       root: focusRoot ?? auditionData.root,
@@ -427,15 +434,24 @@ function Shell({ core }: { core: Core }) {
     });
     heldNotes.current.set(note, { release: sounded.release, fromMIDI });
     setAuditioning(true);
-    setPlayhead(() => () => sounded.frameAt(audition.now()));
+    if (sounded.sounding) {
+      const read = () => sounded.frameAt(audition.now());
+      reader = read;
+      setPlayhead(() => read);
+    }
   };
+  // The strip draws one voice, so a note sounding while another voice
+  // is picked has nothing to draw on: its reader would put a position
+  // from one sample on another's waveform.
+  const focusSlot = focusVoice?.slot ?? null;
+  useEffect(() => {
+    setPlayhead(null);
+  }, [focusSlot]);
+
   const noteOff = (note: number) => {
     heldNotes.current.get(note)?.release();
     heldNotes.current.delete(note);
-    if (heldNotes.current.size === 0) {
-      setAuditioning(false);
-      setPlayhead(null);
-    }
+    if (heldNotes.current.size === 0) setAuditioning(false);
   };
   const noteOnRef = useRef(noteOn);
   noteOnRef.current = noteOn;

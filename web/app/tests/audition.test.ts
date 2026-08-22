@@ -31,6 +31,8 @@ interface Scheduled {
   loopStart: number;
   loopEnd: number;
   stopAt: number | undefined;
+  /** The handler the engine hung on the source, for the test to fire. */
+  onended: ((ev: Event) => void) | null;
 }
 
 function blank(): Scheduled {
@@ -43,6 +45,7 @@ function blank(): Scheduled {
     loopStart: 0,
     loopEnd: 0,
     stopAt: undefined,
+    onended: null,
   };
 }
 
@@ -63,6 +66,7 @@ function fakeContext(record: Scheduled) {
   };
   return {
     currentTime: 0,
+    outputLatency: 0,
     state: "running" as const,
     resume: () => Promise.resolve(),
     destination: {},
@@ -108,7 +112,12 @@ function fakeContext(record: Scheduled) {
         record.stopped = true;
         record.stopAt = at;
       },
-      onended: null,
+      get onended() {
+        return record.onended;
+      },
+      set onended(fn: ((ev: Event) => void) | null) {
+        record.onended = fn;
+      },
     }),
   };
 }
@@ -761,5 +770,42 @@ describe("the note's playhead", () => {
     });
     expect(note.frameAt(0.1)).toBeCloseTo(3600, 6);
     expect(note.frameAt(60)).toBe(17999);
+  });
+});
+
+describe("when a note is over", () => {
+  it("tells the caller once, after the release tail", () => {
+    const record = blank();
+    const context = fakeContext(record);
+    const engine = createAudition(() => context);
+    let ended = 0;
+    const note = engine.play({
+      pcm: new Int16Array(18000),
+      sampleRate: 18000,
+      root: 60,
+      note: 60,
+      velocity: 100,
+      loop: { start: 0, end: 9000 },
+      onEnded: () => {
+        ended += 1;
+      },
+    });
+    expect(ended).toBe(0);
+    note.release();
+    // The engine detaches on the source ending as well as on a timer,
+    // and a note is over once, however many of those arrive.
+    record.onended?.(new Event("ended"));
+    record.onended?.(new Event("ended"));
+    expect(ended).toBe(1);
+  });
+
+  it("reads the clock behind the schedule, by what the output has yet to play", () => {
+    const record = blank();
+    const context = fakeContext(record);
+    const engine = createAudition(() => context);
+    engine.play({ pcm: new Int16Array(64), sampleRate: 18000, root: 60, note: 60, velocity: 100 });
+    context.currentTime = 2;
+    context.outputLatency = 0.008;
+    expect(engine.now()).toBeCloseTo(1.992, 9);
   });
 });
