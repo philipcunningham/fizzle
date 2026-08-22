@@ -22,6 +22,8 @@ export interface VoiceEditorProps {
   selectedLoop: number;
   /** Peaks for the selected slot; null while loading or under jsdom. */
   peaks: Int16Array | null;
+  /** Reads the sounding note's frame, or null when nothing sounds. */
+  playhead: (() => number) | null;
   onSelectVoice: (slot: number) => void;
   onSelectLoop: (index: number) => void;
   onSetParamNumber: (slot: number, field: string, value: number) => void;
@@ -290,6 +292,7 @@ export function VoiceEditor(props: VoiceEditorProps) {
               voiceKey={`slot-${String(voice.slot)}`}
               frames={detail.frames}
               peaks={props.peaks}
+              playhead={props.playhead}
               loopIndex={props.selectedLoop}
               loop={activeLoop ?? { start: 0, end: detail.frames, xf: 0, tm: 0 }}
               sustain={isSustainLoop(detail, props.selectedLoop)}

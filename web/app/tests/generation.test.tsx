@@ -30,6 +30,7 @@ function Harness({ core, first }: { core: Core; first: InstrumentSnapshot }) {
       selectedSlot={0}
       selectedLoop={0}
       peaks={null}
+      playhead={null}
       onSelectVoice={noop}
       onSelectLoop={noop}
       onSetParamNumber={noop}

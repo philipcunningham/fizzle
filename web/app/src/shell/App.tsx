@@ -273,6 +273,10 @@ function Shell({ core }: { core: Core }) {
   // margin, and cheaper than sounding a pitch twice.
   const heldNotes = useRef(new Map<number, { release: () => void; fromMIDI: boolean }>());
   const [auditioning, setAuditioning] = useState(false);
+  // The sounding note's playhead, for the strip to draw. The strip
+  // renders on the voices tab alone, so the banks tab's layered notes
+  // set nothing.
+  const [playhead, setPlayhead] = useState<(() => number) | null>(null);
   const auditionQuery = useQuery({
     queryKey: ["audition", focusVoice?.slot ?? -1, focusVoice?.audioKey ?? ""],
     queryFn: () => core.auditionSlot(focusVoice?.slot ?? 0),
@@ -377,19 +381,18 @@ function Shell({ core }: { core: Core }) {
         const slotFollow = dcaFollow(slotVoice);
         void slotPCM(matched.voiceSlot, slotVoice?.audioKey ?? "").then((r) => {
           if (!r.ok || released) return;
-          releases.push(
-            audition.play({
-              pcm: r.value.pcm,
-              sampleRate: slotVoice?.voice?.sampleRate ?? r.value.sampleRate,
-              root: matched.root,
-              note,
-              velocity,
-              ...(slotVoice?.voice ? { dca: slotVoice.voice.dca } : {}),
-              ...(slotFollow ? { dcaFollow: slotFollow } : {}),
-              ...(loop ? { loop } : {}),
-              ...(onRelease ? { releaseLoop: onRelease } : {}),
-            }).release,
-          );
+          const sounded = audition.play({
+            pcm: r.value.pcm,
+            sampleRate: slotVoice?.voice?.sampleRate ?? r.value.sampleRate,
+            root: matched.root,
+            note,
+            velocity,
+            ...(slotVoice?.voice ? { dca: slotVoice.voice.dca } : {}),
+            ...(slotFollow ? { dcaFollow: slotFollow } : {}),
+            ...(loop ? { loop } : {}),
+            ...(onRelease ? { releaseLoop: onRelease } : {}),
+          });
+          releases.push(sounded.release);
         });
       }
       heldNotes.current.set(note, {
@@ -424,11 +427,15 @@ function Shell({ core }: { core: Core }) {
     });
     heldNotes.current.set(note, { release: sounded.release, fromMIDI });
     setAuditioning(true);
+    setPlayhead(() => () => sounded.frameAt(audition.now()));
   };
   const noteOff = (note: number) => {
     heldNotes.current.get(note)?.release();
     heldNotes.current.delete(note);
-    if (heldNotes.current.size === 0) setAuditioning(false);
+    if (heldNotes.current.size === 0) {
+      setAuditioning(false);
+      setPlayhead(null);
+    }
   };
   const noteOnRef = useRef(noteOn);
   noteOnRef.current = noteOn;
@@ -1737,6 +1744,7 @@ function Shell({ core }: { core: Core }) {
                         selectedSlot={selectedSlot}
                         selectedLoop={selectedLoop}
                         peaks={peaks}
+                        playhead={playhead}
                         onSelectVoice={setSelectedSlot}
                         onSelectLoop={setSelectedLoop}
                         onSetParamNumber={(slot, field, value) => {

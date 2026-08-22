@@ -21,6 +21,8 @@ interface Props {
   sustain: boolean;
   /** The drawn loop is the one the voice repeats after the key comes up. */
   release: boolean;
+  /** Reads the sounding note's frame, or null when nothing sounds. */
+  playhead?: (() => number) | null;
   onSetLoop: (start: number, end: number) => void;
   onGestureBegin?: () => void;
   onGestureCommit?: () => void;
@@ -68,6 +70,7 @@ export function Waveform({
   loop,
   sustain,
   release,
+  playhead,
   onSetLoop,
   onGestureBegin,
   onGestureCommit,
@@ -287,7 +290,7 @@ export function Waveform({
   // Without a canvas (jsdom) the strip disappears; the numeric loop
   // fields keep working, and the browser smoke covers the drawing.
   return (
-    <div className="waveform-wrap">
+    <div className="waveform-wrap" data-playhead={playhead ? "" : undefined}>
       {!failed && <div ref={containerRef} className="waveform" data-testid="waveform" />}
       <div className="loopnums">
         <span className="loopname">Loop {loopIndex + 1}</span>
