@@ -958,3 +958,63 @@ func TestRenderShowsTheDelayOnThePanelScale(t *testing.T) {
 		t.Errorf("render still shows the stored word:\n%s", out)
 	}
 }
+
+// The readout is a display, so tune shows the way the panel's TUNE row
+// shows it: cents, not whole semitones. A voice tuned within a semitone
+// used to show nothing at all, because the semitone count rounded to
+// zero and the line was skipped.
+func TestRenderShowsTuneOnThePanelScale(t *testing.T) {
+	// The panel stores 127 for +050.
+	p := &VoiceParams{Name: "T", DCP: 127}
+	var buf bytes.Buffer
+	Render(&buf, p)
+	if got := buf.String(); !strings.Contains(got, "Tune:") || !strings.Contains(got, "+50") {
+		t.Errorf("render does not show the panel's tune:\n%s", got)
+	}
+}
+
+// The panel's velocity RESONANCE row carries no sign column, so the
+// readout doesn't print one either.
+func TestRenderShowsVelocityResonanceUnsigned(t *testing.T) {
+	p := &VoiceParams{Name: "T", VelDCQKF: 50}
+	var buf bytes.Buffer
+	Render(&buf, p)
+	out := buf.String()
+	if strings.Contains(out, "dcq KF=+50") {
+		t.Errorf("velocity resonance printed with a sign the panel has no column for:\n%s", out)
+	}
+	if !strings.Contains(out, "dcq KF=50") {
+		t.Errorf("velocity resonance missing from the readout:\n%s", out)
+	}
+}
+
+// The attack and the resonance depth are real bytes with no panel row.
+// Printing them beside panel values invites a reader to look for them
+// on the machine, so they go on their own line, named for what they are.
+func TestRenderSeparatesTheBytesThePanelDoesNotShow(t *testing.T) {
+	p := &VoiceParams{
+		Name:          "T",
+		LFOWaveform:   "sine",
+		LFODelay:      1600,
+		LFOAttack:     5,
+		LFODepthPitch: 30,
+		LFODepthQ:     7,
+	}
+	var buf bytes.Buffer
+	Render(&buf, p)
+	out := buf.String()
+
+	if strings.Contains(out, "Rate: 0   Attack:") {
+		t.Errorf("the attack still sits on the panel's own line:\n%s", out)
+	}
+	if !strings.Contains(out, "No panel row:") {
+		t.Errorf("no line names the bytes the panel doesn't show:\n%s", out)
+	}
+	if !strings.Contains(out, "attack=5") || !strings.Contains(out, "resonance depth=7") {
+		t.Errorf("the unexposed bytes are missing from the readout:\n%s", out)
+	}
+	// The panel's own depths keep their line, without the q.
+	if strings.Contains(out, "q=7") {
+		t.Errorf("the resonance depth still sits with the panel's depths:\n%s", out)
+	}
+}
