@@ -287,10 +287,11 @@ func BuildLFOPatches(wave, rate, delay, attack, pitch, amp, filter, q int, origL
 
 // BuildModulationPatches creates patches for modulation routing parameters.
 // KF parameters (dcaKF, dcaRS, dcfKF, dcfRS) use the hardware display scale
-// (-15 to +15). All five velocity-modulation parameters (velDCAKF, velDCFKF,
-// velDCQKF, velDCARS, velDCFRS) are signed -127 to +127 per spec §2-1 and
-// are stored as two's-complement bytes. Pass Unchanged for any parameter to
-// leave it unmodified.
+// (-15 to +15). velDCAKF, velDCFKF, velDCARS and velDCFRS are signed -127 to
+// +127 and are stored as two's-complement bytes. velDCQKF is unsigned 0 to
+// 127: the panel's row has no sign column and refuses to go below zero, so
+// spec §2-1's blanket claim is wrong for that one. Pass Unchanged for any
+// parameter to leave it unmodified.
 func BuildModulationPatches(dcaKF, dcaRS, dcfKF, dcfRS, velDCAKF, velDCFKF, velDCQKF, velDCARS, velDCFRS int) ([]Patch, error) {
 	type kfParam struct {
 		name   string
@@ -326,7 +327,13 @@ func BuildModulationPatches(dcaKF, dcaRS, dcfKF, dcfRS, velDCAKF, velDCFKF, velD
 	}
 	for _, p := range signedParams {
 		if p.val != Unchanged {
-			if err := ValidateByte(p.name, p.val, -127, 127); err != nil {
+			lo := -127
+			if p.name == "vel-dcq-kf" {
+				// The panel's row carries no sign column and refuses to
+				// go below zero, whatever spec section 2-1 says.
+				lo = 0
+			}
+			if err := ValidateByte(p.name, p.val, lo, 127); err != nil {
 				return nil, err
 			}
 			patches = append(patches, Patch{Offset: p.offset, Size: 1, Value: uint16(uint8(int8(p.val)))}) //nolint:gosec // G115: intentional two's complement conversion; value validated above

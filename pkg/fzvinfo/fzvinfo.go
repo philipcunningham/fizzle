@@ -503,8 +503,11 @@ func Render(w io.Writer, p *VoiceParams) {
 			render.Printf(w, " (phase sync)")
 		}
 		render.Println(w)
+		// Delay shows the way the panel's DELAY row shows it. Attack has
+		// no panel row of its own: the DELAY row derives it, so the
+		// stored byte is the only honest thing to print.
 		render.Printf(w, "  Rate: %d   Attack: %d   Delay: %d\n",
-			p.LFORate, p.LFOAttack, p.LFODelay)
+			p.LFORate, p.LFOAttack, disk.LFODelayWordToDisplay(p.LFODelay))
 		render.Printf(w, "  Depth: pitch=%d  amp=%d  filter=%d  q=%d\n", p.LFODepthPitch, p.LFODepthAmp, p.LFODepthFilter, p.LFODepthQ)
 	}
 

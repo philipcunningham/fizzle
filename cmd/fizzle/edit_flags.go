@@ -17,11 +17,10 @@ func editFlags() []cli.Flag {
 		&cli.StringFlag{Name: "lfo-wave", Usage: "LFO waveform: sine, saw-up, saw-down, triangle, rectangle, random"},
 		&cli.IntFlag{Name: "lfo-rate", Usage: "LFO rate (0-127)"},
 		&cli.IntFlag{Name: "lfo-delay", Usage: "LFO delay (0-65535)"},
-		&cli.IntFlag{Name: "lfo-attack", Usage: "LFO attack rate (0-127)"},
 		&cli.IntFlag{Name: "lfo-pitch", Usage: "LFO pitch depth (0-127)"},
 		&cli.IntFlag{Name: "lfo-amp", Usage: "LFO amplitude depth (0-127)"},
 		&cli.IntFlag{Name: "lfo-filter", Usage: "LFO filter depth (0-127)"},
-		&cli.IntFlag{Name: "lfo-q", Usage: "LFO resonance depth (0-127)"},
+		&cli.StringFlag{Name: "lfo-sync", Usage: "LFO phase sync: on, off"},
 		&cli.IntFlag{Name: "cutoff", Usage: "filter cutoff offset (0-127)"},
 		&cli.IntFlag{Name: "resonance", Usage: "filter resonance (0-127)"},
 		&cli.IntFlag{Name: "dca-level-kf", Usage: "DCA level KF (-15 to +15)"},
@@ -30,11 +29,11 @@ func editFlags() []cli.Flag {
 		&cli.IntFlag{Name: "dcf-rate-kf", Usage: "DCF rate KF (-15 to +15)"},
 		&cli.IntFlag{Name: "vel-dca-kf", Usage: "velocity to amplitude (-127 to +127)"},
 		&cli.IntFlag{Name: "vel-dcf-kf", Usage: "velocity to filter (-127 to +127)"},
-		&cli.IntFlag{Name: "vel-dcq-kf", Usage: "initial-touch DCQ follow (-127 to +127)"},
+		&cli.IntFlag{Name: "vel-dcq-kf", Usage: "initial-touch DCQ follow (0 to 127)"},
 		&cli.IntFlag{Name: "vel-dca-rs", Usage: "initial-touch amp rate scale (-127 to +127)"},
 		&cli.IntFlag{Name: "vel-dcf-rs", Usage: "initial-touch DCF rate scale (-127 to +127)"},
 		&cli.StringFlag{Name: "name", Usage: "voice name (max 12 characters)"},
-		&cli.IntFlag{Name: "tune", Usage: "voice tuning in DCP units (1/256 semitone)"},
+		&cli.IntFlag{Name: "tune", Usage: "voice tuning in cents, as the panel shows it (-100 to +100)"},
 		&cli.IntFlag{Name: "key-low", Usage: "lowest MIDI note (0-127)"},
 		&cli.IntFlag{Name: "key-high", Usage: "highest MIDI note (0-127)"},
 		&cli.IntFlag{Name: "root", Usage: "root key MIDI note (0-127)"},
@@ -131,17 +130,39 @@ func collectLFOPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceed
 		origLFOName |= disk.LFOPhaseFlag
 	}
 
-	return voiceedit.BuildLFOPatches(
+	const u = voiceedit.Unchanged
+	patches, err := voiceedit.BuildLFOPatches(
 		wave,
 		intIfSet(cmd, "lfo-rate"),
-		intIfSet(cmd, "lfo-delay"),
-		intIfSet(cmd, "lfo-attack"),
+		u, // the delay flag writes two bytes; see below
+		u, // attack has no flag: the panel derives it from the delay
 		intIfSet(cmd, "lfo-pitch"),
 		intIfSet(cmd, "lfo-amp"),
 		intIfSet(cmd, "lfo-filter"),
-		intIfSet(cmd, "lfo-q"),
+		u, // the resonance depth has no panel control
 		origLFOName,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	// The panel's DELAY row writes the delay word and the attack byte
+	// together, so the one flag drives both.
+	if cmd.IsSet("lfo-delay") {
+		delayPatches, derr := voiceedit.BuildLFODelayPatches(cmd.Int("lfo-delay"))
+		if derr != nil {
+			return nil, derr
+		}
+		patches = append(patches, delayPatches...)
+	}
+	if cmd.IsSet("lfo-sync") {
+		syncPatches, serr := voiceedit.BuildLFOSyncPatch(cmd.String("lfo-sync"), origLFOName)
+		if serr != nil {
+			return nil, serr
+		}
+		patches = append(patches, syncPatches...)
+	}
+	return patches, nil
 }
 
 func collectFilterPatches(cmd *cli.Command) ([]voiceedit.Patch, error) {
@@ -177,7 +198,7 @@ func collectMetaPatches(cmd *cli.Command) ([]voiceedit.Patch, error) {
 	}
 
 	if cmd.IsSet("tune") {
-		tunePatches, err := voiceedit.BuildTunePatch(cmd.Int("tune"))
+		tunePatches, err := voiceedit.BuildTunePatch(int(disk.TuneDisplayToWord(cmd.Int("tune"))))
 		if err != nil {
 			return nil, err
 		}
