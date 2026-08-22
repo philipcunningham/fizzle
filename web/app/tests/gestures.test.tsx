@@ -524,15 +524,15 @@ describe("the editor that unmounts mid-drag", () => {
 
     // An unrelated edit, then two undos: one for the edit, one for the
     // whole held key.
-    const tune = screen.getByLabelText("Tune (1/256 semi)");
+    const tune = screen.getByLabelText("Tune (cents)");
     fireEvent.change(tune, { target: { value: "5" } });
     fireEvent.blur(tune);
     await waitFor(() => {
-      expect(screen.getByLabelText<HTMLInputElement>("Tune (1/256 semi)").value).toBe("5");
+      expect(screen.getByLabelText<HTMLInputElement>("Tune (cents)").value).toBe("5");
     });
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => {
-      expect(screen.getByLabelText<HTMLInputElement>("Tune (1/256 semi)").value).toBe("0");
+      expect(screen.getByLabelText<HTMLInputElement>("Tune (cents)").value).toBe("0");
     });
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => {
