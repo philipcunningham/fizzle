@@ -55,25 +55,24 @@ export interface PlayOptions {
   /**
    * Called once when the note is over, whether it played itself out or
    * a key released it. The strip stops drawing its playhead there.
+   * It runs on the schedule rather than on now()'s latency corrected
+   * clock, so on a slow sink it lands a few tens of milliseconds
+   * before the last of the fade reaches the ear.
    */
   onEnded?: () => void;
 }
 
 /**
- * The loop window a buffer can honour, in buffer seconds, or null when
- * it cannot. Web Audio answers bounds it cannot honour by playing
+ * The loop window a buffer can honour, in frames, or null when it
+ * cannot. Web Audio answers bounds it cannot honour by playing
  * something worse than no loop: an end at or below the start repeats
  * the whole sample, and a start past the buffer plays silence.
  */
-function loopWindow(
-  loop: { start: number; end: number } | undefined,
-  frames: number,
-  sampleRate: number,
-): { start: number; end: number } | null {
+function loopWindow(loop: Span | undefined, frames: number): Span | null {
   if (!loop) return null;
   const end = Math.min(loop.end, frames);
   if (loop.start >= frames || end <= loop.start) return null;
-  return { start: loop.start / sampleRate, end: end / sampleRate };
+  return { start: loop.start, end };
 }
 
 /** The slice of AudioContext the engine touches, faked in tests. */
@@ -176,28 +175,22 @@ export function createAudition(
       source.playbackRate.value = rate;
       // Web Audio loops the buffer itself, in buffer seconds, so the
       // playback rate carries the loop along with the pitch.
-      const window = loopWindow(options.loop, options.pcm.length, options.sampleRate);
+      const window = loopWindow(options.loop, options.pcm.length);
       if (window) {
-        source.loopStart = window.start;
-        source.loopEnd = window.end;
+        source.loopStart = window.start / options.sampleRate;
+        source.loopEnd = window.end / options.sampleRate;
         source.loop = true;
       }
 
       const now = ctx.currentTime;
-      // The same window in frames, under the guards the seconds went
-      // through: a window Web Audio would not honour repeats nothing.
-      const framesOf = (span: { start: number; end: number } | undefined): Span | null => {
-        if (!loopWindow(span, options.pcm.length, options.sampleRate) || !span) return null;
-        return { start: span.start, end: Math.min(span.end, options.pcm.length) };
-      };
       const plan: PlayheadPlan = {
         startedAt: now,
         rate,
         sampleRate: options.sampleRate,
         frames: options.pcm.length,
-        window: framesOf(options.loop),
+        window,
         releasedAt: null,
-        releaseWindow: framesOf(options.releaseLoop),
+        releaseWindow: loopWindow(options.releaseLoop, options.pcm.length),
       };
 
       const gain = ctx.createGain();
@@ -276,10 +269,10 @@ export function createAudition(
           // The cap moves to the end loop, and Chrome carries the
           // playhead there: a window ahead traces to it, and a window
           // behind wraps into it within a render quantum.
-          const onRelease = loopWindow(options.releaseLoop, options.pcm.length, options.sampleRate);
+          const onRelease = plan.releaseWindow;
           if (onRelease) {
-            source.loopStart = onRelease.start;
-            source.loopEnd = onRelease.end;
+            source.loopStart = onRelease.start / options.sampleRate;
+            source.loopEnd = onRelease.end / options.sampleRate;
             source.loop = true;
           }
           // Where the envelope had got to, from the model rather than

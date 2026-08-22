@@ -1180,10 +1180,16 @@ await step("a stored loop chain moves the window at the key (WASM core)", async 
     throw new Error(`the cursor reads ${JSON.stringify(held)} while held, want the low window`);
   }
   // The key coming up moves the chain, and the cursor is what shows
-  // it: 2.4 s is long enough to trace to the high window and wrap in.
+  // it. Where it lands holds until the note's own end hides the
+  // cursor, so poll for it: a sleep long enough to trace there is
+  // also long enough to race the tail and blame the wrong window.
   await key.dispatchEvent("pointerup", { pointerId: 1 });
-  await page.waitForTimeout(2400);
-  const freed = await cursor();
+  const deadline = Date.now() + 5000;
+  let freed = await cursor();
+  while (!inside(freed, HIGH) && Date.now() < deadline) {
+    await page.waitForTimeout(100);
+    freed = await cursor();
+  }
   if (!inside(freed, HIGH)) {
     throw new Error(
       `the cursor reads ${JSON.stringify(freed)} after the key, want the high window`,

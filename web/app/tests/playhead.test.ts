@@ -54,16 +54,23 @@ describe("the playhead's position", () => {
       releasedAt: 11,
       releaseWindow: { start: 39600, end: 57600 },
     });
+    // Measured the same way: released at 18000 into a window ahead,
+    // Chrome carries straight on (18256 at 256 frames past the move,
+    // 19024 at 1024, 22096 at 4096) rather than jumping to it.
     expect(frameAt(moved, 11.5)).toBeCloseTo(27000, 6);
     const wrapped = frameAt(moved, 13.3);
     expect(wrapped).toBeGreaterThanOrEqual(39600);
     expect(wrapped).toBeLessThan(57600);
   });
 
-  it("wraps at once into a release window that sits behind", () => {
-    // Held to 3 s, which is frame 54000 and inside the high window it
-    // repeats. The low window sits behind that, with no material to
-    // travel through, so the fold lands inside it on the spot.
+  it("restarts a release window that sits behind, at its start", () => {
+    // Measured in Chrome, rendering a ramp offline and reading the
+    // source frame back out of the output. Held in the high window to
+    // frame 54000 and released into the low one, Chrome reads 3600
+    // plus the time since the move: it resets to the window's start
+    // rather than folding the overshoot, so the phase is lost.
+    // (3840 at 256 frames past the move, 4608 at 1024, 7680 at 4096,
+    // each a render quantum behind the model's own straight line.)
     const high = { start: 39600, end: 57600 };
     expect(frameAt(plan({ window: high }), 13)).toBeCloseTo(54000, 6);
 
@@ -72,9 +79,8 @@ describe("the playhead's position", () => {
       releasedAt: 13,
       releaseWindow: { start: 3600, end: 21600 },
     });
-    const frame = frameAt(back, 13.05);
-    expect(frame).toBeGreaterThanOrEqual(3600);
-    expect(frame).toBeLessThan(21600);
+    expect(frameAt(back, 13.05)).toBeCloseTo(3600 + 900, 6);
+    expect(frameAt(back, 13.5)).toBeCloseTo(3600 + 9000, 6);
   });
 
   it("reads a time before the key came up as a held note", () => {
