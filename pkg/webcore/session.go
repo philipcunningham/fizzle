@@ -11,7 +11,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
@@ -302,39 +301,37 @@ func voiceParams(vp *fzvinfo.VoiceParams, voiceBytes []byte) map[string]any {
 	// speaks the setters' units (raw DCP, hardware display scale), so
 	// both convert here.
 	tune := 0
+	sync := "off"
+	if lfoNameByte(voiceBytes)&disk.LFOPhaseFlag != 0 {
+		sync = "on"
+	}
 	if len(voiceBytes) >= disk.VoiceDCPOffset+2 {
 		tune = int(int16(binary.LittleEndian.Uint16(voiceBytes[disk.VoiceDCPOffset : disk.VoiceDCPOffset+2]))) // #nosec G115 -- intentional signed reinterpretation
 	}
 	return map[string]any{
 		fieldPlaybackMode: mode,
-		// The rate reads back as the identifier the setter accepts. A
-		// header carrying an index the hardware has no rate for parses as
-		// 0 Hz, which is not an option, so the control shows nothing
-		// rather than a rate the voice does not play at.
-		fieldSampleRate: strconv.FormatUint(uint64(vp.SampleRate), 10),
-		fieldTune:       tune,
-		fieldRootKey:    int(vp.KeyCentre),
-		fieldKeyLow:     int(vp.KeyLow),
-		fieldKeyHigh:    int(vp.KeyHigh),
-		fieldCutoff:     int(vp.FilterCutoff),
-		fieldResonance:  int(vp.FilterQ),
-		fieldDcaLevelKF: disk.KFByteToDisplay(uint8(vp.DCALevelKF)), // #nosec G115 -- two's complement round trip
-		fieldDcaRateKF:  disk.KFByteToDisplay(uint8(vp.DCARateKF)),  // #nosec G115
-		fieldDcfLevelKF: disk.KFByteToDisplay(uint8(vp.DCFLevelKF)), // #nosec G115
-		fieldDcfRateKF:  disk.KFByteToDisplay(uint8(vp.DCFRateKF)),  // #nosec G115
-		fieldVelDcaKF:   int(vp.VelDCAKF),
-		fieldVelDcfKF:   int(vp.VelDCFKF),
-		fieldVelDcqKF:   int(vp.VelDCQKF),
-		fieldVelDcaRS:   int(vp.VelDCARS),
-		fieldVelDcfRS:   int(vp.VelDCFRS),
-		fieldLfoWave:    wave,
-		fieldLfoRate:    int(vp.LFORate),
-		fieldLfoDelay:   int(vp.LFODelay),
-		fieldLfoAttack:  int(vp.LFOAttack),
-		fieldLfoPitch:   int(vp.LFODepthPitch),
-		fieldLfoAmp:     int(vp.LFODepthAmp),
-		fieldLfoFilter:  int(vp.LFODepthFilter),
-		fieldLfoQ:       int(vp.LFODepthQ),
+		fieldTune:         disk.TuneWordToDisplay(int16(tune)), //nolint:gosec // read back as int16 above
+		fieldRootKey:      int(vp.KeyCentre),
+		fieldKeyLow:       int(vp.KeyLow),
+		fieldKeyHigh:      int(vp.KeyHigh),
+		fieldCutoff:       int(vp.FilterCutoff),
+		fieldResonance:    int(vp.FilterQ),
+		fieldDcaLevelKF:   disk.KFByteToDisplay(uint8(vp.DCALevelKF)), // #nosec G115 -- two's complement round trip
+		fieldDcaRateKF:    disk.KFByteToDisplay(uint8(vp.DCARateKF)),  // #nosec G115
+		fieldDcfLevelKF:   disk.KFByteToDisplay(uint8(vp.DCFLevelKF)), // #nosec G115
+		fieldDcfRateKF:    disk.KFByteToDisplay(uint8(vp.DCFRateKF)),  // #nosec G115
+		fieldVelDcaKF:     int(vp.VelDCAKF),
+		fieldVelDcfKF:     int(vp.VelDCFKF),
+		fieldVelDcqKF:     disk.VelDCQByteToDisplay(uint8(vp.VelDCQKF)), //nolint:gosec // two's complement round trip
+		fieldVelDcaRS:     int(vp.VelDCARS),
+		fieldVelDcfRS:     int(vp.VelDCFRS),
+		fieldLfoWave:      wave,
+		fieldLfoRate:      int(vp.LFORate),
+		fieldLfoDelay:     disk.LFODelayWordToDisplay(vp.LFODelay),
+		fieldLfoPitch:     int(vp.LFODepthPitch),
+		fieldLfoAmp:       int(vp.LFODepthAmp),
+		fieldLfoFilter:    int(vp.LFODepthFilter),
+		fieldLfoSync:      sync,
 	}
 }
 

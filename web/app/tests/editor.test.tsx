@@ -22,11 +22,12 @@ describe("voice editor", () => {
 
   it("edits a stepper field and clamps typed values to the schema", async () => {
     await openInstrumentDisk();
-    const tune = await screen.findByLabelText("Tune (1/256 semi)");
+    const tune = await screen.findByLabelText("Tune (cents)");
     fireEvent.change(tune, { target: { value: "99999" } });
     fireEvent.blur(tune);
     await waitFor(() => {
-      expect(screen.getByLabelText<HTMLInputElement>("Tune (1/256 semi)").value).toBe("32767");
+      // The panel's TUNE row stops at a semitone either way.
+      expect(screen.getByLabelText<HTMLInputElement>("Tune (cents)").value).toBe("100");
     });
   });
 

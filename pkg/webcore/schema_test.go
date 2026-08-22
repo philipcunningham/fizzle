@@ -1,11 +1,13 @@
 package webcore
 
 import (
+	"encoding/binary"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/voiceedit"
@@ -71,9 +73,16 @@ func TestSchemaShape(t *testing.T) {
 			t.Fatalf("field %q has unknown kind %q", f.ID, f.Kind)
 		}
 	}
-	// R15: the parameters some prior tools hide are present.
-	if !seen["lfoAttack"] || !seen["lfoQ"] {
-		t.Fatal("R15 fields missing from the schema")
+	// R15 used to require lfoAttack and lfoQ here, because other tools
+	// hide them. Measurement retired it. The panel derives attack from
+	// its DELAY row and has no row at all for the resonance depth, and
+	// the resonance depth can't be used on a physical unit.
+	if seen["lfoAttack"] || seen["lfoQ"] {
+		t.Fatal("lfoAttack and lfoQ have no panel control and should not be in the schema")
+	}
+	// The panel's LFO SYNC row does earn a control.
+	if !seen["lfoSync"] {
+		t.Fatal("lfoSync missing from the schema")
 	}
 }
 
@@ -243,5 +252,105 @@ func TestSetParamMatchesCLIPipeline(t *testing.T) {
 	}
 	if string(out) != string(ref) {
 		t.Fatal("session edit differs from the CLI pipeline")
+	}
+}
+
+// Every converted field has a read path and a write path, and the two
+// live in different files. A value set on the panel's scale must read
+// back as the same number, or one of the two is missing its conversion.
+func TestConvertedFieldsRoundTripOnThePanelScale(t *testing.T) {
+	for _, c := range []struct {
+		field  string
+		values []int
+	}{
+		{fieldTune, []int{-100, -50, -1, 0, 1, 50, 100}},
+		{fieldLfoDelay, []int{0, 1, 50, 127}},
+		{fieldVelDcqKF, []int{0, 1, 64, 127}},
+	} {
+		for _, v := range c.values {
+			s := twoVoiceSession(t)
+			if _, cerr := s.SetSlotParamNumber(0, c.field, v); cerr != nil {
+				t.Fatalf("SetSlotParamNumber(%s, %d): %v", c.field, v, cerr)
+			}
+			if got := instrument(t, s).Voices[0].Params[c.field]; got != v {
+				t.Errorf("%s set to %d reads back %v", c.field, v, got)
+			}
+		}
+	}
+}
+
+// A round trip alone can't catch a scale that is wrong the same way on
+// both sides: it round trips perfectly. These pin the stored bytes a
+// panel value has to produce.
+func TestConvertedFieldsStoreThePanelsBytes(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		field string
+		value int
+		check func(t *testing.T, hdr []byte)
+	}{
+		{"tune +50 stores the word 127", fieldTune, 50, func(t *testing.T, hdr []byte) {
+			if got := int16(binary.LittleEndian.Uint16(hdr[disk.VoiceDCPOffset:])); got != 127 { //nolint:gosec // signed reinterpretation
+				t.Errorf("stored tune word = %d, want 127", got)
+			}
+		}},
+		{"tune -100 stores the word -255", fieldTune, -100, func(t *testing.T, hdr []byte) {
+			if got := int16(binary.LittleEndian.Uint16(hdr[disk.VoiceDCPOffset:])); got != -255 { //nolint:gosec // signed reinterpretation
+				t.Errorf("stored tune word = %d, want -255", got)
+			}
+		}},
+		{"delay 50 stores the word 800", fieldLfoDelay, 50, func(t *testing.T, hdr []byte) {
+			if got := binary.LittleEndian.Uint16(hdr[disk.VoiceLFODelayOffset:]); got != 800 {
+				t.Errorf("stored delay word = %d, want 800", got)
+			}
+		}},
+		{"velDcqKF 50 stores the byte 50", fieldVelDcqKF, 50, func(t *testing.T, hdr []byte) {
+			if got := hdr[disk.VoiceVelDCQKFOffset]; got != 50 {
+				t.Errorf("stored velDcqKF byte = %d, want 50", got)
+			}
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := twoVoiceSession(t)
+			if _, cerr := s.SetSlotParamNumber(0, c.field, c.value); cerr != nil {
+				t.Fatalf("SetSlotParamNumber: %v", cerr)
+			}
+			c.check(t, unpackSlot(t, s, 0))
+		})
+	}
+}
+
+// The panel's LFO SYNC row shares a byte with the waveform, so setting
+// one must leave the other alone.
+func TestLfoSyncAndWaveformShareAByteSafely(t *testing.T) {
+	s := twoVoiceSession(t)
+	if _, cerr := s.SetSlotParamOption(0, fieldLfoSync, "on"); cerr != nil {
+		t.Fatalf("SetSlotParamOption(lfoSync): %v", cerr)
+	}
+	if _, cerr := s.SetSlotParamOption(0, fieldLfoWave, "triangle"); cerr != nil {
+		t.Fatalf("SetSlotParamOption(lfoWave): %v", cerr)
+	}
+	params := instrument(t, s).Voices[0].Params
+	if params[fieldLfoSync] != "on" {
+		t.Errorf("sync reads %v after a waveform change, want on", params[fieldLfoSync])
+	}
+	if params[fieldLfoWave] != "triangle" {
+		t.Errorf("waveform reads %v, want triangle", params[fieldLfoWave])
+	}
+}
+
+// Editing the delay writes the attack byte too, the way the panel's
+// DELAY row does. Nothing else offers a way to set the attack.
+func TestSettingDelayAlsoWritesTheAttack(t *testing.T) {
+	s := twoVoiceSession(t)
+	if _, cerr := s.SetSlotParamNumber(0, fieldLfoDelay, 50); cerr != nil {
+		t.Fatalf("SetSlotParamNumber(lfoDelay): %v", cerr)
+	}
+	hdr := unpackSlot(t, s, 0)
+	if got := binary.LittleEndian.Uint16(hdr[disk.VoiceLFODelayOffset:]); got != 800 {
+		t.Errorf("delay word = %d, want 800", got)
+	}
+	if got := hdr[disk.VoiceLFOAtckOffset]; got != 11 {
+		t.Errorf("attack byte = %d, want 11, the value the panel derives", got)
 	}
 }

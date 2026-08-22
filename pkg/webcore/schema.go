@@ -1,8 +1,6 @@
 package webcore
 
 import (
-	"strconv"
-
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/voiceedit"
 )
@@ -59,11 +57,10 @@ const (
 	fieldLfoWave      = "lfoWave"
 	fieldLfoRate      = "lfoRate"
 	fieldLfoDelay     = "lfoDelay"
-	fieldLfoAttack    = "lfoAttack"
 	fieldLfoPitch     = "lfoPitch"
 	fieldLfoAmp       = "lfoAmp"
 	fieldLfoFilter    = "lfoFilter"
-	fieldLfoQ         = "lfoQ"
+	fieldLfoSync      = "lfoSync"
 )
 
 // lfoWaveNames maps the stored waveform index to the identifier the
@@ -77,17 +74,6 @@ var lfoWaveNames = [...]string{
 	disk.LFORandom:    "random",
 }
 
-// sampleRateOptions lists the three rates the FZ hardware has, as the
-// identifiers the setter accepts. disk.SampleRates is the canonical
-// list, so a rate the hardware gains here would arrive with it.
-var sampleRateOptions = func() []string {
-	out := make([]string, 0, len(disk.SampleRates))
-	for _, rate := range disk.SampleRates {
-		out = append(out, strconv.FormatUint(uint64(rate), 10))
-	}
-	return out
-}()
-
 // voiceSchema is the flat scalar surface of a voice: the parameters
 // the CLI's fzv edit exposes, minus name, envelopes, loops, and the
 // generation window, which get bespoke treatment because their bounds
@@ -97,10 +83,8 @@ var sampleRateOptions = func() []string {
 var voiceSchema = []SchemaField{
 	{ID: fieldPlaybackMode, Label: "Playback", Group: groupSample, Kind: kindSelect,
 		Options: []string{"normal", "reverse", "cue", "synth"}},
-	{ID: fieldSampleRate, Label: "Sample rate (Hz)", Group: groupSample, Kind: kindSelect,
-		Options: sampleRateOptions},
 
-	{ID: fieldTune, Label: "Tune (1/256 semi)", Group: groupIdentity, Kind: kindStepper, Min: -32768, Max: 32767},
+	{ID: fieldTune, Label: "Tune (cents)", Group: groupIdentity, Kind: kindStepper, Min: disk.MinTuneDisplay, Max: disk.MaxTuneDisplay},
 	{ID: fieldRootKey, Label: "Root", Group: groupIdentity, Kind: kindNote, Min: 0, Max: 127},
 	{ID: fieldKeyLow, Label: "Key low", Group: groupIdentity, Kind: kindNote, Min: 0, Max: 127},
 	{ID: fieldKeyHigh, Label: "Key high", Group: groupIdentity, Kind: kindNote, Min: 0, Max: 127},
@@ -115,17 +99,17 @@ var voiceSchema = []SchemaField{
 
 	{ID: fieldVelDcaKF, Label: "To amplitude", Group: groupVelocity, Kind: kindStepper, Min: -127, Max: 127},
 	{ID: fieldVelDcfKF, Label: "To filter", Group: groupVelocity, Kind: kindStepper, Min: -127, Max: 127},
-	{ID: fieldVelDcqKF, Label: "To resonance", Group: groupVelocity, Kind: kindStepper, Min: -127, Max: 127},
+	{ID: fieldVelDcqKF, Label: "To resonance", Group: groupVelocity, Kind: kindStepper, Min: 0, Max: disk.MaxVelDCQDisplay},
 	{ID: fieldVelDcaRS, Label: "Amp rate scale", Group: groupVelocity, Kind: kindStepper, Min: -127, Max: 127},
 	{ID: fieldVelDcfRS, Label: "Filter rate scale", Group: groupVelocity, Kind: kindStepper, Min: -127, Max: 127},
 
 	{ID: fieldLfoRate, Label: "Rate", Group: groupLFO, Kind: kindKnob, Min: 0, Max: 127},
-	{ID: fieldLfoDelay, Label: "Delay", Group: groupLFO, Kind: kindStepper, Min: 0, Max: 65535},
-	{ID: fieldLfoAttack, Label: "Attack", Group: groupLFO, Kind: kindKnob, Min: 0, Max: 127},
+	{ID: fieldLfoDelay, Label: "Delay", Group: groupLFO, Kind: kindStepper, Min: 0, Max: disk.MaxLFODelayDisplay},
 	{ID: fieldLfoPitch, Label: "Pitch depth", Group: groupLFO, Kind: kindKnob, Min: 0, Max: 127},
 	{ID: fieldLfoAmp, Label: "Amp depth", Group: groupLFO, Kind: kindKnob, Min: 0, Max: 127},
 	{ID: fieldLfoFilter, Label: "Filter depth", Group: groupLFO, Kind: kindKnob, Min: 0, Max: 127},
-	{ID: fieldLfoQ, Label: "Resonance depth", Group: groupLFO, Kind: kindKnob, Min: 0, Max: 127},
+	{ID: fieldLfoSync, Label: "Sync", Group: groupLFO, Kind: kindSelect,
+		Options: []string{"off", "on"}},
 	{ID: fieldLfoWave, Label: "Waveform", Group: groupLFO, Kind: kindSelect,
 		Options: append([]string{}, lfoWaveNames[:]...)},
 }
@@ -153,7 +137,8 @@ func numberPatches(id string, n int, voiceBytes []byte) ([]voiceedit.Patch, erro
 	const u = voiceedit.Unchanged
 	switch id {
 	case fieldTune:
-		return voiceedit.BuildTunePatch(n)
+		// n arrives on the panel's scale, so convert before storing.
+		return voiceedit.BuildTunePatch(int(disk.TuneDisplayToWord(n)))
 	case fieldRootKey:
 		return voiceedit.BuildKeyRangePatch(u, u, n)
 	case fieldKeyLow:
@@ -185,17 +170,15 @@ func numberPatches(id string, n int, voiceBytes []byte) ([]voiceedit.Patch, erro
 	case fieldLfoRate:
 		return voiceedit.BuildLFOPatches(u, n, u, u, u, u, u, u, lfoNameByte(voiceBytes))
 	case fieldLfoDelay:
-		return voiceedit.BuildLFOPatches(u, u, n, u, u, u, u, u, lfoNameByte(voiceBytes))
-	case fieldLfoAttack:
-		return voiceedit.BuildLFOPatches(u, u, u, n, u, u, u, u, lfoNameByte(voiceBytes))
+		// The panel's DELAY row writes the delay word and the attack
+		// byte together; there is no independent attack control.
+		return voiceedit.BuildLFODelayPatches(n)
 	case fieldLfoPitch:
 		return voiceedit.BuildLFOPatches(u, u, u, u, n, u, u, u, lfoNameByte(voiceBytes))
 	case fieldLfoAmp:
 		return voiceedit.BuildLFOPatches(u, u, u, u, u, n, u, u, lfoNameByte(voiceBytes))
 	case fieldLfoFilter:
 		return voiceedit.BuildLFOPatches(u, u, u, u, u, u, n, u, lfoNameByte(voiceBytes))
-	case fieldLfoQ:
-		return voiceedit.BuildLFOPatches(u, u, u, u, u, u, u, n, lfoNameByte(voiceBytes))
 	default:
 		return nil, errf("invalid-field", "%q is not a numeric field", id)
 	}
@@ -208,37 +191,17 @@ func optionPatches(id, option string, voiceBytes []byte) ([]voiceedit.Patch, err
 	switch id {
 	case fieldPlaybackMode:
 		return voiceedit.BuildPlaybackModePatch(option)
-	case fieldSampleRate:
-		return sampleRatePatches(option)
 	case fieldLfoWave:
 		idx, ok := voiceedit.WaveformIndex(option)
 		if !ok {
 			return nil, errf(codeInvalidValue, "unknown LFO waveform %q", option)
 		}
 		return voiceedit.BuildLFOPatches(idx, u, u, u, u, u, u, u, lfoNameByte(voiceBytes))
+	case fieldLfoSync:
+		return voiceedit.BuildLFOSyncPatch(option, lfoNameByte(voiceBytes))
 	default:
 		return nil, errf("invalid-field", "%q is not a select field", id)
 	}
-}
-
-// sampleRatePatches writes the rate index byte for one of the three
-// rates the hardware has. The byte is an index into disk.SampleRates
-// and nothing else in the header moves with it: the samples keep their
-// bytes and their count, and only the speed they are read back at
-// changes. voiceedit has no builder of its own here (the CLI's fzv edit
-// does not expose the rate), so the one byte patch is written directly
-// against disk's own offset.
-// A rate the hardware has no index for is refused rather than rounded.
-func sampleRatePatches(option string) ([]voiceedit.Patch, error) {
-	hz, err := strconv.ParseUint(option, 10, 32)
-	if err != nil {
-		return nil, errf(codeInvalidValue, "sample rate %q is not a number of hertz", option)
-	}
-	idx, ok := disk.RateIndexFor(uint32(hz))
-	if !ok {
-		return nil, errf(codeInvalidValue, "%v", disk.ValidateRate(uint32(hz)))
-	}
-	return []voiceedit.Patch{{Offset: disk.VoiceSampOffset, Size: 1, Value: uint16(idx)}}, nil
 }
 
 func lfoNameByte(voiceBytes []byte) uint8 {

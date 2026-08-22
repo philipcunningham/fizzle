@@ -72,23 +72,14 @@ export const FAKE_SCHEMA: SchemaField[] = [
     options: ["normal", "reverse", "cue", "synth"],
   },
   {
-    // The core declares this one too, with the same id, label, and
-    // options (from disk.SampleRates), so a UI test sees the real field.
-    id: "sampleRate",
-    label: "Sample rate (Hz)",
-    group: "Sample",
-    kind: "select",
-    min: 0,
-    max: 0,
-    options: ["36000", "18000", "9000"],
-  },
-  {
+    // The panel's TUNE row reads as cents, one semitone either way, and
+    // the core converts to the stored 1/256 semitone word.
     id: "tune",
-    label: "Tune (1/256 semi)",
+    label: "Tune (cents)",
     group: "Identity and mapping",
     kind: "stepper",
-    min: -32768,
-    max: 32767,
+    min: -100,
+    max: 100,
   },
   { id: "rootKey", label: "Root", group: "Identity and mapping", kind: "note", min: 0, max: 127 },
   { id: "keyLow", label: "Key low", group: "Identity and mapping", kind: "note", min: 0, max: 127 },
@@ -101,14 +92,25 @@ export const FAKE_SCHEMA: SchemaField[] = [
     max: 127,
   },
   { id: "cutoff", label: "Cutoff", group: "Filter", kind: "knob", min: 0, max: 127 },
+  {
+    // A select whose options aren't numbers, and which shares a stored
+    // byte with the waveform.
+    id: "lfoSync",
+    label: "Sync",
+    group: "LFO",
+    kind: "select",
+    min: 0,
+    max: 0,
+    options: ["off", "on"],
+  },
   { id: "wobble", label: "Wobble", group: "Filter", kind: "hyper-dial", min: 0, max: 99 },
 ];
 
 function defaultParams(): Record<string, number | string> {
   return {
     playbackMode: "normal",
-    sampleRate: "18000",
     tune: 0,
+    lfoSync: "off",
     rootKey: 60,
     keyLow: 36,
     keyHigh: 96,

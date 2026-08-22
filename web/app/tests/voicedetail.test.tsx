@@ -104,14 +104,22 @@ describe("loops on a slot", () => {
   });
 });
 
-// R14's Sample group. Sample rate is a schema select, so it must reach
-// the screen through the schema-driven control path with no code of its
-// own, and the value shown must be the params readout's.
+// The rate is fixed when a sample is taken, and the FZ panel offers no
+// way to change a loaded voice's rate, so fizzle offers no control for
+// it either. The LFO sync row is the schema select that replaced it,
+// and it has to reach the screen through the same schema-driven path
+// with no code of its own.
 describe("the Sample group on a slot", () => {
-  it("renders sample rate as a select carrying the voice's rate", async () => {
+  it("offers no sample rate control, because the panel offers none", async () => {
     await openInstrumentDisk();
-    const trigger = await screen.findByRole("combobox", { name: "Sample rate (Hz)" });
-    expect(trigger.textContent).toContain("18000");
+    await screen.findByRole("combobox", { name: "Playback" });
+    expect(screen.queryByRole("combobox", { name: "Sample rate (Hz)" })).toBeNull();
+  });
+
+  it("renders LFO sync as a select carrying the voice's flag", async () => {
+    await openInstrumentDisk();
+    const trigger = await screen.findByRole("combobox", { name: "Sync" });
+    expect(trigger.textContent).toContain("off");
   });
 });
 

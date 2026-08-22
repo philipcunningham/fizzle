@@ -2,7 +2,6 @@ package webcore
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
@@ -127,43 +126,26 @@ func TestSlotLoopRebasesAbsoluteAddresses(t *testing.T) {
 	}
 }
 
-// R14's Sample group: the rate is one of the three the hardware has,
-// and it is a schema select like every other fixed-option field, so the
-// same edit reaches a loose file and a dump slot.
-func TestSampleRateIsAnEditableSchemaField(t *testing.T) {
-	field, ok := schemaField(fieldSampleRate)
-	if !ok {
-		t.Fatal("the schema carries no sample rate field")
-	}
-	if field.Group != groupSample || field.Kind != kindSelect {
-		t.Fatalf("sample rate field = %+v, want a %s select in the %s group", field, kindSelect, groupSample)
+// The rate is fixed when a sample is taken. The FZ panel offers no way
+// to change a loaded voice's rate, so neither does fizzle. The value
+// still reads out through VoiceDetail; it just isn't editable.
+func TestSampleRateIsNotAnEditableSchemaField(t *testing.T) {
+	if _, ok := schemaField(fieldSampleRate); ok {
+		t.Fatal("the schema still carries a sample rate field")
 	}
 
 	s := twoVoiceSession(t)
-	for _, opt := range field.Options {
-		if _, cerr := s.SetSlotParamOption(0, fieldSampleRate, opt); cerr != nil {
-			t.Fatalf("SetSlotParamOption(%s): %v", opt, cerr)
-		}
-		if got := instrument(t, s).Voices[0].Params[fieldSampleRate]; got != opt {
-			t.Errorf("sample rate reads back %v, want %q", got, opt)
-		}
-		vp, err := fzvinfo.ParseBytes(unpackSlot(t, s, 0))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := fmt.Sprintf("%d", vp.SampleRate); got != opt {
-			t.Errorf("the unpacked voice reads %s Hz, want %s", got, opt)
-		}
-	}
-
-	// The clamp on a fixed-option field is the refusal: a rate the
-	// hardware has no index for never reaches the byte.
 	before := mustExport(t, s)
-	if _, cerr := s.SetSlotParamOption(0, fieldSampleRate, "44100"); cerr == nil || cerr.Code != codeInvalidValue {
-		t.Fatalf("expected invalid-value for an unsupported rate, got %v", cerr)
+	if _, cerr := s.SetSlotParamOption(0, fieldSampleRate, "18000"); cerr == nil {
+		t.Fatal("expected a refusal for a field the schema no longer carries")
 	}
 	if !bytes.Equal(mustExport(t, s), before) {
 		t.Error("the refused rate changed the image")
+	}
+
+	// The readout survives even though the control is gone.
+	if got := instrument(t, s).Voices[0].Voice.SampleRate; got == 0 {
+		t.Error("the voice detail no longer reports a sample rate")
 	}
 }
 
