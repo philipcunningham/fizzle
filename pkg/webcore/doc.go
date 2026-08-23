@@ -57,11 +57,7 @@ func (s *Session) DeleteFile(name string) (Snapshot, *Error) {
 		return s.Snapshot(), errf(codeNotFound, "%v", err)
 	}
 	if name == disk.FullDumpName {
-		walk := false
-		s.nextDISMode = &walk
-		snap, cerr := s.adoptPair(img, nil)
-		s.nextDISMode = nil
-		return snap, cerr
+		return s.adoptPair(img, nil, modeDerive)
 	}
 	return s.adopt(img)
 }
@@ -168,11 +164,7 @@ func (s *Session) NewInstrument(name string) (Snapshot, *Error) {
 	if err := diskadd.AddToImage(img, emptyInstrumentDump(name), 0); err != nil {
 		return s.Snapshot(), addError(err)
 	}
-	walk := false
-	s.nextDISMode = &walk
-	snap, cerr := s.adopt(img)
-	s.nextDISMode = nil
-	return snap, cerr
+	return s.adoptPair(img, s.image2, modeDerive)
 }
 
 // emptyInstrumentDump builds the smallest dump the format accepts:

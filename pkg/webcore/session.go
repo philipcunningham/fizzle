@@ -147,10 +147,6 @@ type Session struct {
 	// at document boundaries and held through edits, so an edit that
 	// moves a bstep cannot flip it.
 	disMode bool
-	// nextDISMode is the mode a pending wholesale replacement adopts
-	// under; adoptPair applies it after recording the outgoing mode in
-	// the history.
-	nextDISMode *bool
 
 	past        []imagePair // undo stack, oldest first
 	future      []imagePair // redo stack
@@ -242,16 +238,16 @@ func dumpAudioBytes(fzf []byte, disVN int) int {
 	return len(d.fzf) - d.audioStart
 }
 
-// refreshDISMode re-derives the parse mode after a mutation that
-// replaced the instrument wholesale rather than editing it.
-func (s *Session) refreshDISMode() {
-	img, err := disk.ReadImage(bytes.NewReader(s.image))
-	if err != nil {
-		s.disMode = false
-		return
-	}
-	s.disMode = documentDISMode(img)
-}
+// parseMode says how a document transition decides the dump's parse
+// mode: an edit keeps it, a wholesale replacement re-derives it from
+// the image being adopted.
+type parseMode uint8
+
+// The two transitions.
+const (
+	modeKeep parseMode = iota
+	modeDerive
+)
 
 // documentDISMode reports whether the disk's dump parses under its
 // DIS voice count rather than the walk.
@@ -659,7 +655,7 @@ func (s *Session) adoptFresh(img *disk.Image, img2 []byte) (Snapshot, *Error) {
 // adopt takes a parsed image as the session's disk as a user-visible
 // mutation, keeping the document's disk 2 half as it was.
 func (s *Session) adopt(img *disk.Image) (Snapshot, *Error) {
-	return s.adoptPair(img, s.image2)
+	return s.adoptPair(img, s.image2, modeKeep)
 }
 
 // checkWholeDocument refuses a mutation while half of a split pair is
@@ -688,17 +684,17 @@ func (s *Session) checkWholeDocument() *Error {
 // missing half of its pair refuses one. Opening and undo go through
 // adoptState instead, which is what lets the user open the other half,
 // or a different document, from here.
-func (s *Session) adoptPair(img *disk.Image, img2 []byte) (Snapshot, *Error) {
+func (s *Session) adoptPair(img *disk.Image, img2 []byte, mode parseMode) (Snapshot, *Error) {
 	if cerr := s.checkWholeDocument(); cerr != nil {
 		return s.Snapshot(), cerr
 	}
 	prev := imagePair{img1: s.image, img2: s.image2, disMode: s.disMode}
-	if s.nextDISMode != nil {
-		s.disMode = *s.nextDISMode
-		s.nextDISMode = nil
+	if mode == modeDerive {
+		s.disMode = documentDISMode(img)
 	}
 	snap, cerr := s.adoptState(img, img2)
 	if cerr != nil {
+		s.disMode = prev.disMode
 		return snap, cerr
 	}
 	if prev.img1 != nil {

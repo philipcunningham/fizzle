@@ -199,12 +199,12 @@ func (s *Session) stitchedDump(img *disk.Image) ([]byte, *Error) {
 // one when it no longer does. img is the parsed disk 1 scratch image;
 // on error the session state is untouched. vn is the voice count the
 // DIS tail must carry, 0 to let content detection derive it.
-func (s *Session) replaceDump(img *disk.Image, fzf []byte, vn int) (Snapshot, *Error) {
+func (s *Session) replaceDump(img *disk.Image, fzf []byte, vn int, mode parseMode) (Snapshot, *Error) {
 	if len(fzf) <= voicebuild.MaxDiskFileBytes {
 		if cerr := putDump(img, fzf, 0, nil, vn); cerr != nil {
 			return s.Snapshot(), cerr
 		}
-		return s.adoptPair(img, nil)
+		return s.adoptPair(img, nil, mode)
 	}
 
 	var result voicebuild.MultiDiskResult
@@ -217,7 +217,7 @@ func (s *Session) replaceDump(img *disk.Image, fzf []byte, vn int) (Snapshot, *E
 	if serr != nil {
 		return s.Snapshot(), splitError(serr)
 	}
-	return s.placeSplitResult(img, result)
+	return s.placeSplitResult(img, result, mode)
 }
 
 // looseFileCount counts directory entries other than the full dump.

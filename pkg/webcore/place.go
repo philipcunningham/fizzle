@@ -35,17 +35,13 @@ func (s *Session) LoadFZF(data []byte) (Snapshot, *Error) {
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	// The mode rides through adoptPair, so the history records the
-	// outgoing mode and the snapshot parses under the new one.
+	// A stamped export reloads under its carried count; the DIS the
+	// write-back produces is what the adopted mode derives from.
 	vn := 0
 	if hdr, src, err := fzutil.ResolveFZFHeader(data, 0); err == nil && src == fzutil.VoiceCountMarker {
 		vn = hdr.NVoice
 	}
-	mode := vn > 0
-	s.nextDISMode = &mode
-	snap, cerr := s.replaceDump(img, data, vn)
-	s.nextDISMode = nil
-	return snap, cerr
+	return s.replaceDump(img, data, vn, modeDerive)
 }
 
 // AddVoice places an .fzv per the placement matrix (R7): with no disk
@@ -98,11 +94,7 @@ func (s *Session) AddVoice(fzvData []byte) (Snapshot, *Error) {
 	// Through replaceDump rather than diskadd directly: a first voice
 	// too large for one disk then splits across a pair, the same way
 	// a join or an SFZ conversion does.
-	snap, cerr := s.replaceDump(img, fzf, 0)
-	if cerr == nil {
-		s.refreshDISMode()
-	}
-	return snap, cerr
+	return s.replaceDump(img, fzf, 0, modeDerive)
 }
 
 // ImportWAVToInstrument converts a WAV through the CLI's importer and
@@ -141,11 +133,7 @@ func (s *Session) AddBank(data []byte, slot int) (Snapshot, *Error) {
 	if err := diskadd.AddToImage(img, data, 0); err != nil {
 		return s.Snapshot(), addError(err)
 	}
-	snap, cerr := s.adopt(img)
-	if cerr == nil {
-		s.refreshDISMode()
-	}
-	return snap, cerr
+	return s.adoptPair(img, s.image2, modeDerive)
 }
 
 // noSkipArea marks a key-range choice with no area of its own to
