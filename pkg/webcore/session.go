@@ -260,7 +260,7 @@ func documentDISMode(img *disk.Image) bool {
 	if err != nil {
 		return false
 	}
-	_, src, rerr := fzutil.ResolveFZFHeader(fzf, vn)
+	_, src, rerr := fzutil.ResolveDiskFZF(fzf, vn)
 	return rerr == nil && src == fzutil.VoiceCountDIS
 }
 

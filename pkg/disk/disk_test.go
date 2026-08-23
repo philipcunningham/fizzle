@@ -1582,3 +1582,22 @@ func TestDirectorySkipsPrintableRubbish(t *testing.T) {
 		t.Fatalf("entries = %+v, want none", entries)
 	}
 }
+
+func TestDirSlotClassification(t *testing.T) {
+	t.Parallel()
+	img := buildFormattedImage(t)
+	addFakeVoice(t, img, "LIVE")
+	base := DirSector * SectorSize
+	for i := range DirEntrySize {
+		img.Bytes()[base+2*DirEntrySize+i] = 0xE5
+	}
+	if _, kind := img.DirSlot(0); kind != DirSlotEntry {
+		t.Errorf("slot 0 = %v, want DirSlotEntry", kind)
+	}
+	if _, kind := img.DirSlot(1); kind != DirSlotBlank {
+		t.Errorf("slot 1 = %v, want DirSlotBlank", kind)
+	}
+	if e, kind := img.DirSlot(2); kind != DirSlotRubbish || e.DisSector != 0xE5E5 {
+		t.Errorf("slot 2 = %v (%+v), want DirSlotRubbish with the raw bytes", kind, e)
+	}
+}

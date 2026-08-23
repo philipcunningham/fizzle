@@ -52,7 +52,7 @@ func areaOpsFor(t *testing.T, fzf []byte, hdr *fzutil.FZFHeader) []areaOp {
 // resolvedVN is the count a dump's geometry reads under: the resolved
 // explicit count, or 0 where the walk decides.
 func resolvedVN(data []byte, candidate int) int {
-	hdr, src, err := fzutil.ResolveFZFHeader(data, candidate)
+	hdr, src, err := fzutil.ResolveDiskFZF(data, candidate)
 	if err != nil || src == fzutil.VoiceCountWalk {
 		return 0
 	}

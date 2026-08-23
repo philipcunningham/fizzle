@@ -413,3 +413,42 @@ func TestParseImageMatchesParse(t *testing.T) {
 		t.Fatalf("listings differ:\n%+v\n%+v", fromPath, fromImage)
 	}
 }
+
+// A named entry whose DIS pointer was damaged lists as a corrupt row
+// rather than vanishing; Directory() alone would omit it.
+func TestParseShowsDamagedPointerAsCorrupt(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	imgPath := filepath.Join(dir, "damaged.img")
+	if err := diskformat.Format(imgPath, "DAMAGED"); err != nil {
+		t.Fatal(err)
+	}
+	fzv := make([]byte, disk.SectorSize*2)
+	copy(fzv[disk.VoiceNameOffset:], "KICK        ")
+	fzvPath := filepath.Join(dir, "kick.fzv")
+	if err := os.WriteFile(fzvPath, fzv, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := diskadd.Add(imgPath, fzvPath, 0); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(imgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirOff := disk.SectorSize
+	binary.LittleEndian.PutUint16(raw[dirOff+disk.LabelSize+2:], 0xFFFF)
+	if err := os.WriteFile(imgPath, raw, 0644); err != nil { //nolint:gosec // G703: test image path from t.TempDir
+		t.Fatal(err)
+	}
+	listing, err := Parse(imgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listing.Entries) != 1 {
+		t.Fatalf("entries = %d, want 1 corrupt row", len(listing.Entries))
+	}
+	if listing.Entries[0].TypeName != CorruptTypeName || listing.Entries[0].Name != "KICK" {
+		t.Errorf("row = %+v, want KICK marked %q", listing.Entries[0], CorruptTypeName)
+	}
+}

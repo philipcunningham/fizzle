@@ -96,3 +96,56 @@ func TestMarkerVoiceCountRequiresMagic(t *testing.T) {
 		t.Errorf("MarkerVoiceCount without magic = %d, want 0", got)
 	}
 }
+
+// The marker binds to the dump it describes: a structural edit or a
+// length change after stamping invalidates it.
+func TestMarkerBindsToTheDump(t *testing.T) {
+	t.Parallel()
+	base := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(base, fzfbuilder.BanklessDumpVoices)
+	if got := fzutil.MarkerVoiceCount(base); got != fzfbuilder.BanklessDumpVoices {
+		t.Fatalf("fresh marker = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+
+	t.Run("voice header edit invalidates", func(t *testing.T) {
+		t.Parallel()
+		edited := append([]byte(nil), base...)
+		off := disk.VoiceSlotOffset(fzfbuilder.BanklessDumpBanks*disk.SectorSize, 0)
+		edited[off+disk.VoiceNameOffset] ^= 0x01
+		if got := fzutil.MarkerVoiceCount(edited); got != 0 {
+			t.Errorf("marker after header edit = %d, want 0", got)
+		}
+	})
+
+	t.Run("length change invalidates", func(t *testing.T) {
+		t.Parallel()
+		grown := append(append([]byte(nil), base...), make([]byte, disk.SectorSize)...)
+		if got := fzutil.MarkerVoiceCount(grown); got != 0 {
+			t.Errorf("marker after growth = %d, want 0", got)
+		}
+	})
+
+	t.Run("audio-only edit keeps the marker", func(t *testing.T) {
+		t.Parallel()
+		edited := append([]byte(nil), base...)
+		edited[len(edited)-1] ^= 0xFF
+		if got := fzutil.MarkerVoiceCount(edited); got != fzfbuilder.BanklessDumpVoices {
+			t.Errorf("marker after audio edit = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+		}
+	})
+}
+
+// A disk's DIS candidate never falls through to an embedded marker:
+// the two authorities have different lifetimes.
+func TestResolveDiskFZFIgnoresMarker(t *testing.T) {
+	t.Parallel()
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
+	_, src, err := fzutil.ResolveDiskFZF(data, 63)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if src != fzutil.VoiceCountWalk {
+		t.Errorf("source = %v, want the walk (an unusable DIS count must not fall to the marker)", src)
+	}
+}

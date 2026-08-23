@@ -50,26 +50,40 @@ func Parse(path string) (*Listing, error) {
 // ParseImage returns the listing for an in-memory disk image: the same
 // result as Parse with no filesystem access.
 func ParseImage(img *disk.Image) (*Listing, error) {
-	entries, err := img.Directory()
-	if err != nil {
-		return nil, fmt.Errorf("disklist: reading directory: %w", err)
-	}
-
 	listing := &Listing{
 		Label:   img.Label(),
 		Entries: []FileEntry{},
 	}
 
-	for i, e := range entries {
-		// An out-of-range DIS pointer, or one whose contents fail to
-		// decode, yields a CorruptTypeName placeholder row rather than a
-		// failed listing. See CorruptTypeName for why.
-		if int(e.DisSector) < disk.ReservedSectors || int(e.DisSector) >= disk.SectorCount {
-			log.Warn().
-				Str("name", e.NameString()).
-				Int("entry", i+1).
-				Uint16("dis_sector", e.DisSector).
-				Msg("disklist: directory entry points at reserved or out-of-range sector; marking as corrupt")
+	// Rows come out in slot order: entries plus corrupt rows for
+	// damaged named slots. Rubbish without a printable name is old
+	// media's noise and stays out. See CorruptTypeName.
+	type row struct {
+		e       disk.DirEntry
+		corrupt bool
+	}
+	rows := make([]row, 0, disk.MaxDirEntries)
+	for slot := range disk.MaxDirEntries {
+		e, kind := img.DirSlot(slot)
+		switch kind {
+		case disk.DirSlotEntry:
+			rows = append(rows, row{e: e})
+		case disk.DirSlotRubbish:
+			if disk.IsPrintableName(e.Name[:]) {
+				log.Warn().
+					Str("name", e.NameString()).
+					Int("slot", slot).
+					Uint16("dis_sector", e.DisSector).
+					Msg("disklist: named directory slot points outside the data sectors; marking as corrupt")
+				rows = append(rows, row{e: e, corrupt: true})
+			}
+		case disk.DirSlotBlank:
+		}
+	}
+
+	for i, r := range rows {
+		e := r.e
+		if r.corrupt {
 			listing.Entries = append(listing.Entries, FileEntry{
 				Index:    i + 1,
 				Name:     e.NameString(),

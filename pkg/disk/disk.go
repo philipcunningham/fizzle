@@ -395,28 +395,45 @@ func (img *Image) SetLabel(name string) {
 	copy(img.data[LabelOffset:LabelOffset+LabelSize], padded[:])
 }
 
-// dirSlotEntry decodes directory slot i, reporting false for a slot
-// that is no entry: a NULL first name byte (firmware deletion, spec
-// section 1-3) or a DIS pointer outside the data sectors, which is
-// what old media's trailing rubbish carries. The gap or rubbish stays
-// in place; it just never lists.
-func (img *Image) dirSlotEntry(i int) (DirEntry, bool) {
+// DirSlotKind classifies one raw directory slot.
+type DirSlotKind uint8
+
+// The three kinds: a blank slot (NULL first name byte, firmware
+// deletion per spec section 1-3), an entry (decodable, DIS pointer in
+// the data sectors), and rubbish (nonzero bytes that are no entry).
+const (
+	DirSlotBlank DirSlotKind = iota
+	DirSlotEntry
+	DirSlotRubbish
+)
+
+// DirSlot classifies directory slot i and decodes what it holds. The
+// returned entry is meaningful for DirSlotEntry and best effort for
+// DirSlotRubbish, where a caller may want the bytes for reporting.
+func (img *Image) DirSlot(i int) (DirEntry, DirSlotKind) {
 	off := DirSector*SectorSize + i*DirEntrySize
 	if img.data[off] == 0 {
-		return DirEntry{}, false
+		return DirEntry{}, DirSlotBlank
 	}
 	e, err := DecodeDirEntry(img.data[off : off+DirEntrySize])
 	if err != nil || int(e.DisSector) < ReservedSectors || int(e.DisSector) >= SectorCount {
-		return DirEntry{}, false
+		return e, DirSlotRubbish
 	}
-	return e, true
+	return e, DirSlotEntry
+}
+
+// dirSlotEntry reports slot i's entry where it holds one.
+func (img *Image) dirSlotEntry(i int) (DirEntry, bool) {
+	e, kind := img.DirSlot(i)
+	return e, kind == DirSlotEntry
 }
 
 // Directory reads all directory entries from sector 1, stepping over
-// blank and rubbish slots (see dirSlotEntry). It is a forgiving view,
-// not a validator: every entry it returns already carries an in-range
-// DIS pointer, and damage never surfaces as an error here. Strict
-// per-entry reporting lives in pkg/disklist's corrupt rows.
+// blank and rubbish slots (see DirSlot). It is a forgiving view, not
+// a validator: every entry it returns already carries an in-range DIS
+// pointer, and damage never surfaces as an error here. Slot-level
+// reporting, including pkg/disklist's corrupt rows, goes through
+// DirSlot instead.
 func (img *Image) Directory() ([]DirEntry, error) {
 	var entries []DirEntry
 	for i := range MaxDirEntries {
