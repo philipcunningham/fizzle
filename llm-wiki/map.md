@@ -19,7 +19,7 @@ authorities.
 | Topic | Spec | fizzle code | Wiki |
 |---|---|---|---|
 | Disk geometry, head, CAT | 1-1, 1-2 | `pkg/disk`, `pkg/diskformat` | |
-| Directory, file types | 1-3 | `pkg/disk`, `pkg/disklist` | |
+| Directory, file types | 1-3 | `pkg/disk`, `pkg/disklist` | [directory-blank-slots](findings/directory-blank-slots.md) |
 | DIS / file head | 1-4 | `pkg/disk`, `pkg/diskget`, `pkg/diskadd` | [dis-file-head](findings/dis-file-head.md) |
 | Sample memory per machine | 4 | `pkg/disk/disk.go`, `pkg/webcore/session.go`, `pkg/webcore/estimate.go` | [sample-memory](topics/sample-memory.md) |
 | Multi-disk full dumps | 1-3 | `pkg/disk/disk.go`, `pkg/diskadd`, `pkg/fzfinfo` | [multi-disk-dumps](topics/multi-disk-dumps.md) |
