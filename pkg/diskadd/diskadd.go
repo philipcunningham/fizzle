@@ -222,10 +222,8 @@ func ReplaceInMemory(img *disk.Image, oldName string, fileData []byte, diskNum u
 	return addToImage(img, fileData, fi.name, fi.fileType, diskNum, fi.nbank, fi.nvoice, fi.nwave)
 }
 
-// AddToImageWithVoiceCount is AddToImage for a full dump whose voice
-// count is known from the source disk's DIS tail. The known count
-// overrides detection's bstep sum, and wn moves with it, or the
-// sampler reads the audio a sector early.
+// AddToImageWithVoiceCount is AddToImage with a known voice count. It
+// overrides detection's bstep sum, and wn moves with it.
 func AddToImageWithVoiceCount(img *disk.Image, fileData []byte, diskNum uint8, vn int) error {
 	if len(fileData) == 0 {
 		return errors.New("diskadd: file is empty")

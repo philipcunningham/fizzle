@@ -395,12 +395,9 @@ func (img *Image) SetLabel(name string) {
 	copy(img.data[LabelOffset:LabelOffset+LabelSize], padded[:])
 }
 
-// Directory reads all non-empty directory entries from sector 1.
-//
-// A NULL first name byte marks that one entry blank (spec section 1-3),
-// not the end of the directory: the firmware deletes a file by zeroing
-// the byte and leaves the gap in place, so live entries can follow a
-// blank slot. The scan steps over blanks rather than stopping.
+// Directory reads all non-empty directory entries from sector 1. A
+// NULL first name byte marks that one entry blank (spec section 1-3),
+// not the end: firmware deletion leaves the gap in place.
 func (img *Image) Directory() ([]DirEntry, error) {
 	var entries []DirEntry
 	base := DirSector * SectorSize
@@ -469,9 +466,8 @@ func (img *Image) CATClearAllocated(n int) error {
 // sectors in the CAT bitmap and compacts the directory so there are no gaps.
 // The match is case-insensitive.
 func (img *Image) RemoveFile(name string) error {
-	// Work on raw slots rather than the filtered Directory() listing: a
-	// firmware-deleted entry leaves its slot blank in place, so a live
-	// entry's listing index need not equal its slot index.
+	// Match on raw slots: behind a blank slot, a listing index is not a
+	// slot index.
 	base := DirSector * SectorSize
 	target := -1
 	var targetEntry DirEntry
@@ -526,9 +522,8 @@ func (img *Image) RemoveFile(name string) error {
 		}
 	}
 
-	// Compact the directory: pack the surviving entries densely from
-	// slot 0 (stepping over any blank slots the firmware left) and zero
-	// the tail.
+	// Pack the survivors densely from slot 0 and zero the tail, so a
+	// reader that stops at the first blank entry still sees them all.
 	dst := 0
 	for src := range MaxDirEntries {
 		if src == target {
@@ -544,9 +539,7 @@ func (img *Image) RemoveFile(name string) error {
 		}
 		dst++
 	}
-	for off := base + dst*DirEntrySize; off < base+MaxDirEntries*DirEntrySize; off++ {
-		img.data[off] = 0
-	}
+	clear(img.data[base+dst*DirEntrySize : base+MaxDirEntries*DirEntrySize])
 
 	return nil
 }

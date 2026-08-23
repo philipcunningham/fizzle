@@ -92,7 +92,7 @@ type InstrumentSnapshot struct {
 // the CLI agree on every field. disVN is the DIS tail's voice count, 0
 // when unknown; it reaches voices the bstep walk misses.
 func instrumentFrom(fileName string, fzfData []byte, disVN int) (*InstrumentSnapshot, error) {
-	hdr, err := dumpHeaderFor(fzfData, normalizedDISVoiceCount(fzfData, disVN))
+	hdr, err := dumpHeaderFor(fzfData, normalisedDISVoiceCount(fzfData, disVN))
 	if err != nil {
 		return nil, fmt.Errorf("webcore: %w", err)
 	}

@@ -1428,9 +1428,7 @@ func TestAddBytesToImageEmptyErrors(t *testing.T) {
 	}
 }
 
-// TestAddToImageWithVoiceCount pins the write path for dumps holding
-// voices no bank references: the DIS tail carries the caller's vn,
-// and wn moves with it.
+// The DIS tail carries the caller's vn, and wn moves with it.
 func TestAddToImageWithVoiceCount(t *testing.T) {
 	t.Parallel()
 	dump := fzfbuilder.MakeBanklessVoiceDump(t)
@@ -1441,7 +1439,7 @@ func TestAddToImageWithVoiceCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dis := readFullDumpDIS(t, img)
+	dis := fzfbuilder.FullDumpDISTail(t, img)
 	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
 		t.Errorf("DIS vn = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
 	}
@@ -1468,7 +1466,7 @@ func TestReplaceInMemoryWithVoiceCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dis := readFullDumpDIS(t, img)
+	dis := fzfbuilder.FullDumpDISTail(t, img)
 	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
 		t.Errorf("DIS vn = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
 	}
@@ -1486,28 +1484,4 @@ func formattedImage(t *testing.T) *disk.Image {
 		t.Fatal(err)
 	}
 	return img
-}
-
-// readFullDumpDIS decodes the DIS sector of the image's FULL-DATA-FZ.
-func readFullDumpDIS(t *testing.T, img *disk.Image) disk.DisSector {
-	t.Helper()
-	entries, err := img.Directory()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range entries {
-		if e.NameString() == disk.FullDumpName {
-			sec, err := img.SectorRef(int(e.DisSector))
-			if err != nil {
-				t.Fatal(err)
-			}
-			dis, err := disk.DecodeDisSector(sec)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return dis
-		}
-	}
-	t.Fatal("no FULL-DATA-FZ entry on image")
-	return disk.DisSector{}
 }

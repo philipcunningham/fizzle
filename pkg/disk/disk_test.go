@@ -428,9 +428,7 @@ func TestDirectory(t *testing.T) {
 	})
 
 	t.Run("skips blank slots", func(t *testing.T) {
-		// Firmware deletion zeroes the first name byte and leaves the
-		// gap, so a live entry can follow a blank slot (PREY.img holds
-		// its dump in slot 1 behind a deleted voice in slot 0).
+		// Firmware deletion leaves the gap; live entries can follow it.
 		t.Parallel()
 		data := make([]byte, ImageSize)
 		img, err := ReadImage(bytes.NewReader(data))
@@ -1150,8 +1148,7 @@ func TestRemoveFileCompactsDirectory(t *testing.T) {
 }
 
 func TestRemoveFileAfterBlankSlot(t *testing.T) {
-	// Behind a blank slot, a live entry's listing index no longer
-	// equals its slot index; RemoveFile must zero the right slot.
+	// Behind a blank slot, a listing index is not a slot index.
 	t.Parallel()
 	img := buildFormattedImage(t)
 

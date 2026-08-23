@@ -13,6 +13,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
+	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )
 
 // banklessVoiceName names the dump's fifth voice, the one in no bank.
@@ -53,25 +54,7 @@ func fullDumpDISTail(t *testing.T, imageData []byte) disk.DisSector {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entries, err := img.Directory()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range entries {
-		if e.NameString() == disk.FullDumpName {
-			sec, err := img.SectorRef(int(e.DisSector))
-			if err != nil {
-				t.Fatal(err)
-			}
-			dis, err := disk.DecodeDisSector(sec)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return dis
-		}
-	}
-	t.Fatal("no FULL-DATA-FZ on image")
-	return disk.DisSector{}
+	return fzfbuilder.FullDumpDISTail(t, img)
 }
 
 func TestOpenDiskWithBanklessVoice(t *testing.T) {
@@ -147,6 +130,98 @@ func TestExtractBanklessVoiceSlot(t *testing.T) {
 	got := disk.TrimPadded(fzv[disk.VoiceNameOffset : disk.VoiceNameOffset+disk.LabelSize])
 	if got != banklessVoiceName {
 		t.Errorf("FZV header name = %q, want %q", got, banklessVoiceName)
+	}
+}
+
+// A shared-voice kit's summed bstep runs above its DIS vn, and the
+// walk agrees with the DIS, so the document parses in walk mode. An
+// edit must stamp the parsed count back, not the bstep sum.
+func TestEditKeepsSharedVoiceKitDISCounts(t *testing.T) {
+	t.Parallel()
+	data, err := diskformat.BuildImage("KIT")
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := disk.ReadImage(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dump := fzfbuilder.MakeSharedVoiceDump(t)
+	if err := diskadd.AddToImageWithVoiceCount(img, dump, 0, fzfbuilder.SharedVoiceDumpVoices); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewSession()
+	if _, cerr := s.OpenImage(img.Bytes()); cerr != nil {
+		t.Fatalf("OpenImage: %v", cerr)
+	}
+	if _, cerr := s.RenameBank(0, "RENAMED"); cerr != nil {
+		t.Fatalf("RenameBank: %v", cerr)
+	}
+	out, cerr := s.ExportImage()
+	if cerr != nil {
+		t.Fatalf("ExportImage: %v", cerr)
+	}
+	dis := fullDumpDISTail(t, out)
+	if got := int(dis.VoiceCount); got != fzfbuilder.SharedVoiceDumpVoices {
+		t.Errorf("DIS vn after edit = %d, want %d (bstep sum stamped over the parsed count)",
+			got, fzfbuilder.SharedVoiceDumpVoices)
+	}
+	wantWn := disk.SectorsNeeded(len(dump)) - 1 - disk.VoiceAreaSectors(fzfbuilder.SharedVoiceDumpVoices)
+	if got := int(dis.WaveCount); got != wantWn {
+		t.Errorf("DIS wn after edit = %d, want %d", got, wantWn)
+	}
+}
+
+// An edit that changes the voice count must stamp the new count, not
+// the one the document opened with.
+func TestAddVoiceAdvancesDISCounts(t *testing.T) {
+	t.Parallel()
+	s, _ := openBanklessDisk(t)
+
+	fzv := voiceimport.Encode(make([]int16, 1024), 1, "FRESH", 0, voiceimport.NoLoop())
+	if _, cerr := s.AddVoice(fzv); cerr != nil {
+		t.Fatalf("AddVoice: %v", cerr)
+	}
+	out, cerr := s.ExportImage()
+	if cerr != nil {
+		t.Fatalf("ExportImage: %v", cerr)
+	}
+	dis := fullDumpDISTail(t, out)
+	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices+1 {
+		t.Errorf("DIS vn after AddVoice = %d, want %d", got, fzfbuilder.BanklessDumpVoices+1)
+	}
+	fzf, gerr := s.ExtractFile(disk.FullDumpName)
+	if gerr != nil {
+		t.Fatalf("ExtractFile: %v", gerr)
+	}
+	wantWn := disk.SectorsNeeded(len(fzf)) - fzfbuilder.BanklessDumpBanks -
+		disk.VoiceAreaSectors(fzfbuilder.BanklessDumpVoices+1)
+	if got := int(dis.WaveCount); got != wantWn {
+		t.Errorf("DIS wn after AddVoice = %d, want %d", got, wantWn)
+	}
+}
+
+// Deleting an area in DIS mode keeps the freed voice's slot and the
+// DIS counts: the firmware keeps a voice no bank plays.
+func TestDeleteAreaKeepsDISCounts(t *testing.T) {
+	t.Parallel()
+	s, _ := openBanklessDisk(t)
+
+	snap, cerr := s.DeleteArea(1, 0)
+	if cerr != nil {
+		t.Fatalf("DeleteArea: %v", cerr)
+	}
+	if got := len(snap.Disk.Instrument.Voices); got != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("voices after DeleteArea = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+	out, cerr := s.ExportImage()
+	if cerr != nil {
+		t.Fatalf("ExportImage: %v", cerr)
+	}
+	dis := fullDumpDISTail(t, out)
+	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("DIS vn after DeleteArea = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
 	}
 }
 
