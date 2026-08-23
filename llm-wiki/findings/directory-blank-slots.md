@@ -1,0 +1,23 @@
+---
+type: finding
+title: Deleted directory entries leave blank slots in place
+description: The firmware deletes a file by zeroing the first name byte and leaves the gap; live entries can follow a blank slot, so blank means skip, not end.
+tags: [disk, directory, firmware]
+updated: 2026-08-23
+sources:
+  - llm-wiki/sources/casio-fz1-data-structures.md section 1-3
+  - testdata/synthetic/PREY.img
+status: confirmed-hardware
+---
+
+# Deleted directory entries leave blank slots in place
+
+The spec (section 1-3) says a directory entry whose first name byte is NULL "is regarded as blank". The sentence covers that one entry, not the rest of the sector. The firmware deletes a file by zeroing the first name byte and leaves the other 15 bytes in place. It writes later files into later slots, so a live entry can sit behind any number of blank ones.
+
+## Evidence
+
+`testdata/synthetic/PREY.img`, saved by an FZ-1 (serial 001969) through a Gotek drive. Slot 0 holds a deleted voice: the first name byte is 0x00 and the rest still reads `DDICTED` plus a voice type and a DIS pointer. The CAT no longer allocates that DIS's sectors. Slot 1 holds the live `FULL-DATA-FZ` entry the machine itself loads. A reader that stops at the first blank slot sees an empty disk.
+
+## What fizzle implements
+
+`pkg/disk/disk.go` (`Directory`) steps over blank slots, and `RemoveFile` resolves a name to its raw slot rather than its position in the filtered listing, then compacts the directory. fizzle's own writes keep the directory dense; the firmware's tolerance of gaps means both layouts load.

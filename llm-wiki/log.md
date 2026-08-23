@@ -176,3 +176,14 @@ AREA LEVEL beside them floors at 000. A velocity of zero silences the
 voice. fizzle's area setter allowed it and now clamps to the panel's
 floor.
 
+## [2026-08-23] ingest | Deleted directory entries leave blank slots
+
+New finding from a customer disk a real FZ-1 saved, now the PREY.img fixture under testdata/synthetic. Deletion zeroes the first name byte and leaves the gap, so live entries follow blank slots. Mapped the directory row to the new page.
+
+## [2026-08-23] ingest | DIS vn is the authority for voice-area sizing
+
+voice-area-sizing.md now carries the PREY evidence. Summed bstep can undercount vn (a voice in no bank), and stale slots past vn defeat the walk's other bound. Recorded the new fizzle plumbing and an open question on wavst monotonicity.
+
+## [2026-08-23] lint | Post-ingest pass
+
+Frontmatter complete on both touched pages. No stale citations: the pages touched today carry today's date, and no older page cites the code paths this branch changed. directory-blank-slots is linked from the map, so no orphan. No duplicate scope.

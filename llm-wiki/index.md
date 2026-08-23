@@ -15,6 +15,7 @@ Conventions: [AGENTS.md](AGENTS.md).
 - [DIS / file head deviates from the spec in three ways](findings/dis-file-head.md):
   extent area to 0x3F9, counts at the sector end in bn vn wn order,
   DIS first in its chain.
+- [Deleted directory entries leave blank slots in place](findings/directory-blank-slots.md): the firmware zeroes the first name byte and leaves the gap; blank means skip, not end.
 - [Full dumps carry up to 8 bank sectors](findings/multiple-bank-sectors.md):
   the spec shows one; the voice area follows the last.
 - [Audio blocks are sector-padded but waved stores the unpadded count](findings/audio-block-padding.md):
@@ -40,8 +41,7 @@ Conventions: [AGENTS.md](AGENTS.md).
   discovers which at power on.
 - [Multi-disk full dumps](topics/multi-disk-dumps.md): disk 1 carries
   all metadata, disk 2 is pure audio; FULL-DATA-FZ naming.
-- [Voice-area sizing](topics/voice-area-sizing.md): vn from the DIS or
-  a validated slot walk bounded by summed bstep.
+- [Voice-area sizing](topics/voice-area-sizing.md): the DIS tail's vn is the authority; the bounded slot walk is only for standalone files, and both of its bounds fail on firmware-authored dumps.
 - [Multi-loop playback](topics/multi-loops.md): the eight loops play
   as a chain in numerical order, capped by one byte that makes both
   the sustain hold and the end loop.
