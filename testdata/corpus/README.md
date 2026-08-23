@@ -3,6 +3,11 @@
 Real-world FZ-1 sampler files used as test fixtures, downloaded from
 https://zine.r-massive.com/casio-fz-sampler-archive/.
 
+`../layout-manifest.json` records each collection's provenance, evidence
+tier, parse context, expected authority, file count, and resolved-layout
+digest. `pkg/integration/layout_manifest_test.go` verifies that every corpus
+collection remains covered and that layout behavior changes deliberately.
+
 ## Archives
 
 | Directory                                    | Contents                                                   |
