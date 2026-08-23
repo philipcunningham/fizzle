@@ -2,6 +2,10 @@
 
 ## Unreleased (last updated 2026-08-23)
 
+- The browser core's filename now carries a content hash, so a deploy is picked up on the next visit instead of a cached core lingering.
+
+## Unreleased (last updated 2026-08-23)
+
 ## v0.6.0 (2026-08-23)
 
 - Disks saved on the FZ itself now open and edit correctly. A deleted file no longer hides the rest of the directory, and a voice in no bank is no longer dropped. An instrument the browser exports carries its voice count in a fizzle-only marker, so its bytes differ from a bare `disk get` of the same dump.
