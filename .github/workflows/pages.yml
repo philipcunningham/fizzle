@@ -39,9 +39,8 @@ jobs:
         working-directory: web/app
         run: npm ci
 
-      # A project site serves from /<repo>/, and the core is fetched at
-      # runtime rather than imported, so the base has to reach the
-      # bundle. npm run base-check proves it did.
+      # A project site serves from /<repo>/, so every asset URL has to
+      # carry the base. npm run base-check proves it did.
       - name: Build the site
         working-directory: web/app
         env:

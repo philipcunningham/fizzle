@@ -10,6 +10,7 @@ import type {
   Snapshot,
 } from "../boundary/contract";
 import "./generated/wasm_exec.js";
+import wasmUrl from "./fizzle.wasm?url";
 
 interface FizzleCore {
   snapshot(): CoreResult<Snapshot>;
@@ -242,9 +243,9 @@ void ready.catch(() => undefined);
 
 async function boot(): Promise<void> {
   const go = new Go();
-  // Relative to the deployed base, not the server root: a project site
-  // serves from a sub-path, where an absolute URL 404s the core.
-  const response = await fetch(`${import.meta.env.BASE_URL}fizzle.wasm`);
+  // Imported as an asset so vite hashes the filename: a new core gets a
+  // new URL, and no HTTP cache can pin a stale one after a deploy.
+  const response = await fetch(wasmUrl);
   if (!response.ok) {
     throw new Error(`the core module did not load (HTTP ${String(response.status)})`);
   }

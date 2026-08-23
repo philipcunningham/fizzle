@@ -84,7 +84,7 @@ wasm-check:
 # and the Go runtime shim into the generated sources. Both outputs are
 # gitignored; run this before `npm run dev` or `npm run smoke`.
 wasm:
-	GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o web/app/public/fizzle.wasm ./web/wasm/module
+	GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o web/app/src/core/fizzle.wasm ./web/wasm/module
 	mkdir -p web/app/src/core/generated
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" web/app/src/core/generated/wasm_exec.js
 

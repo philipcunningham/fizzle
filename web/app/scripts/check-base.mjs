@@ -1,8 +1,8 @@
 // A GitHub Pages project site serves from a sub-path, so the bundle has
-// to address its own assets relative to that base. The core is fetched
-// by the worker at runtime rather than imported, so vite cannot rewrite
-// it: an absolute "/fizzle.wasm" loads the shell and then 404s the core,
-// which looks like the app booting and then doing nothing.
+// to address its own assets relative to that base. The worker imports
+// the core as a hashed asset; a root-anchored URL that ignores the base
+// loads the shell and then 404s the core, which looks like the app
+// booting and then doing nothing.
 //
 // Builds into a temporary directory under a sub-path base and asserts
 // every reference carries it.
@@ -40,14 +40,20 @@ try {
     }
   }
 
-  // The worker fetches the core by URL, so the base has to be in the
-  // emitted string rather than resolved by the bundler.
+  // The worker fetches the core by the URL vite emits for the hashed
+  // asset, so that string has to carry the base.
   const workers = files.filter((f) => /worker.*\.js$/.test(f));
   if (workers.length === 0) problems.push("no worker bundle was emitted");
   for (const worker of workers) {
     const js = readFileSync(worker, "utf8");
-    if (js.includes('"/fizzle.wasm"') || js.includes("'/fizzle.wasm'")) {
-      problems.push(`${worker} fetches an absolute /fizzle.wasm, so a sub-path host cannot boot`);
+    const wasmRefs = [...js.matchAll(/["']([^"']*fizzle[^"']*\.wasm)["']/g)];
+    if (wasmRefs.length === 0) {
+      problems.push(`${worker} carries no reference to the core asset`);
+    }
+    for (const [, url] of wasmRefs) {
+      if (url.startsWith("/") && !url.startsWith(BASE)) {
+        problems.push(`${worker} fetches ${url}, which ignores the base`);
+      }
     }
     if (!js.includes(BASE)) {
       problems.push(`${worker} carries no reference to the base ${BASE}`);
