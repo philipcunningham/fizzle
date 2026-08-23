@@ -127,6 +127,7 @@ var syntheticImages = []string{
 	"HOOVER.img",
 	"LOOPDEMO.img",
 	"PAD-LFO.img",
+	"PREY.img",
 	"STAB.img",
 	"TECHNO.img",
 }

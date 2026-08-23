@@ -1,0 +1,14 @@
+{
+ "entries": [
+  {
+   "index": 1,
+   "name": "FULL-DATA-FZ",
+   "size": 67584,
+   "type": "Full Dump"
+  }
+ ],
+ "free_bytes": 1240064,
+ "label": "",
+ "total_bytes": 1308672,
+ "used_percent": 5
+}

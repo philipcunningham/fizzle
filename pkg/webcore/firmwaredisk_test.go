@@ -15,6 +15,9 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
 )
 
+// banklessVoiceName names the dump's fifth voice, the one in no bank.
+const banklessVoiceName = "VOICE4"
+
 // banklessDiskImage builds a disk holding the bankless-voice dump with
 // a correct DIS tail (vn counts the bank-less fifth voice).
 func banklessDiskImage(t *testing.T) []byte {
@@ -88,8 +91,8 @@ func TestOpenDiskWithBanklessVoice(t *testing.T) {
 			got, names, fzfbuilder.BanklessDumpVoices)
 	}
 	last := inst.Voices[len(inst.Voices)-1]
-	if last.Name != "VOICE4" {
-		t.Errorf("last voice = %q, want VOICE4 (the bank-less voice)", last.Name)
+	if last.Name != banklessVoiceName {
+		t.Errorf("last voice = %q, want %q (the bank-less voice)", last.Name, banklessVoiceName)
 	}
 	if last.Referenced {
 		t.Error("bank-less voice reported as referenced")
@@ -135,15 +138,15 @@ func TestExtractBanklessVoiceSlot(t *testing.T) {
 	if cerr != nil {
 		t.Fatalf("ExtractVoiceSlot: %v", cerr)
 	}
-	if name != "VOICE4" {
-		t.Errorf("extracted name = %q, want VOICE4", name)
+	if name != banklessVoiceName {
+		t.Errorf("extracted name = %q, want %q", name, banklessVoiceName)
 	}
 	if len(fzv) == 0 {
 		t.Error("extracted FZV is empty")
 	}
 	got := disk.TrimPadded(fzv[disk.VoiceNameOffset : disk.VoiceNameOffset+disk.LabelSize])
-	if got != "VOICE4" {
-		t.Errorf("FZV header name = %q, want VOICE4", got)
+	if got != banklessVoiceName {
+		t.Errorf("FZV header name = %q, want %q", got, banklessVoiceName)
 	}
 }
 
