@@ -3,6 +3,7 @@ package webcore
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -135,6 +136,122 @@ func TestOpenImageDoesNotAliasCallerBuffer(t *testing.T) {
 	}
 	if sha256.Sum256(out) != want {
 		t.Fatal("export changed when the caller's buffer was scribbled on")
+	}
+}
+
+func TestSnapshotDoesNotAliasSessionState(t *testing.T) {
+	const changed = "CHANGED"
+	s := twoVoiceSession(t)
+	if _, cerr := s.ImportWAV("LOOSE.wav", wavBytes(t, 1000), 18000, ChannelMix); cerr != nil {
+		t.Fatalf("ImportWAV: %v", cerr)
+	}
+	snap := s.Snapshot()
+	want, err := json.Marshal(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	file := &snap.Disk.Files[len(snap.Disk.Files)-1]
+	file.Params["name"] = changed
+	file.Voice.Loops[0].Start++
+	file.Voice.Dca.Rates[0]++
+	file.Voice.Dcf.Stops[0]++
+	inst := snap.Disk.Instrument
+	inst.Banks[0].Areas[0].VoiceName = changed
+	inst.Voices[0].Params["name"] = changed
+	inst.Voices[0].Voice.Loops[0].Start++
+	inst.Voices[0].Voice.Dca.Rates[0]++
+	inst.Voices[0].Voice.Dcf.Stops[0]++
+	inst.Effects.Matrix[0][0]++
+
+	got, err := json.Marshal(s.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatal("mutating a returned snapshot changed the session's next snapshot")
+	}
+}
+
+func TestAdoptStateRejectsBadSecondImageWithoutChangingSession(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.OpenImage(fixture(t)); cerr != nil {
+		t.Fatalf("OpenImage: %v", cerr)
+	}
+	beforeImage := bytes.Clone(s.image)
+	beforeSnapshot, err := json.Marshal(s.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeMode := s.disMode
+	beforePast, beforeFuture := len(s.past), len(s.future)
+	img, err := disk.ReadImage(bytes.NewReader(s.image))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, cerr := s.adoptState(img, []byte{1}, s.disMode); cerr == nil {
+		t.Fatal("adoptState accepted an unreadable second image")
+	}
+	afterSnapshot, err := json.Marshal(s.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(s.image, beforeImage) || !bytes.Equal(afterSnapshot, beforeSnapshot) ||
+		s.disMode != beforeMode || len(s.past) != beforePast || len(s.future) != beforeFuture {
+		t.Fatal("failed adoption changed session state")
+	}
+}
+
+func TestUndoFailurePreservesDocumentAndHistory(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.OpenImage(fixture(t)); cerr != nil {
+		t.Fatalf("OpenImage: %v", cerr)
+	}
+	s.past = []imagePair{{img1: bytes.Clone(s.image), img2: []byte{1}, disMode: !s.disMode}}
+	before, err := json.Marshal(s.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeImage := bytes.Clone(s.image)
+	beforeMode := s.disMode
+
+	if _, cerr := s.Undo(); cerr == nil {
+		t.Fatal("Undo succeeded with an unreadable disk 2 history entry")
+	}
+	after, err := json.Marshal(s.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) || !bytes.Equal(s.image, beforeImage) || s.disMode != beforeMode ||
+		len(s.past) != 1 || len(s.future) != 0 {
+		t.Fatal("failed Undo changed the document or history")
+	}
+}
+
+func TestRedoFailurePreservesDocumentAndHistory(t *testing.T) {
+	s := NewSession()
+	if _, cerr := s.OpenImage(fixture(t)); cerr != nil {
+		t.Fatalf("OpenImage: %v", cerr)
+	}
+	s.future = []imagePair{{img1: bytes.Clone(s.image), img2: []byte{1}, disMode: !s.disMode}}
+	before, err := json.Marshal(s.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeImage := bytes.Clone(s.image)
+	beforeMode := s.disMode
+
+	if _, cerr := s.Redo(); cerr == nil {
+		t.Fatal("Redo succeeded with an unreadable disk 2 history entry")
+	}
+	after, err := json.Marshal(s.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) || !bytes.Equal(s.image, beforeImage) || s.disMode != beforeMode ||
+		len(s.past) != 0 || len(s.future) != 1 {
+		t.Fatal("failed Redo changed the document or history")
 	}
 }
 
