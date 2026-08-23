@@ -371,15 +371,6 @@ func programNameFromPath(filePath string) [disk.LabelSize]byte {
 	base := filepath.Base(filePath)
 	base = strings.TrimSuffix(base, filepath.Ext(base))
 	base = strings.ToUpper(base)
-	// The FZ displays printable ASCII only; anything else becomes an
-	// underscore rather than a name no reader shows.
-	b := []byte(base)
-	for i, c := range b {
-		if c < disk.PrintableASCIIMin || c > disk.PrintableASCIIMax {
-			b[i] = '_'
-		}
-	}
-	base = string(b)
 	if len(base) > disk.LabelSize {
 		base = base[:disk.LabelSize]
 	}
