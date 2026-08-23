@@ -276,7 +276,7 @@ func TestInstrumentFromSixtyFourVoicesIsCheap(t *testing.T) {
 
 	start := time.Now()
 	for range 100 {
-		if _, err := instrumentFrom(disk.FullDumpName, fzf); err != nil {
+		if _, err := instrumentFrom(disk.FullDumpName, fzf, 0); err != nil {
 			t.Fatal(err)
 		}
 	}

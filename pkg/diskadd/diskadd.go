@@ -222,6 +222,60 @@ func ReplaceInMemory(img *disk.Image, oldName string, fileData []byte, diskNum u
 	return addToImage(img, fileData, fi.name, fi.fileType, diskNum, fi.nbank, fi.nvoice, fi.nwave)
 }
 
+// AddToImageWithVoiceCount is AddToImage for a full dump whose voice
+// count is known from the source disk's DIS tail. The known count
+// overrides detection's bstep sum, and wn moves with it, or the
+// sampler reads the audio a sector early.
+func AddToImageWithVoiceCount(img *disk.Image, fileData []byte, diskNum uint8, vn int) error {
+	if len(fileData) == 0 {
+		return errors.New("diskadd: file is empty")
+	}
+	fi, err := detectFullDumpWithVoiceCount(fileData, vn)
+	if err != nil {
+		return fmt.Errorf("diskadd: %w", err)
+	}
+	return addToImage(img, fileData, fi.name, fi.fileType, diskNum, fi.nbank, fi.nvoice, fi.nwave)
+}
+
+// ReplaceInMemoryWithVoiceCount is ReplaceInMemory with
+// AddToImageWithVoiceCount's known voice count semantics.
+func ReplaceInMemoryWithVoiceCount(img *disk.Image, oldName string, fileData []byte, diskNum uint8, vn int) (retErr error) {
+	snapshot := append([]byte(nil), img.Bytes()...)
+	defer func() {
+		if retErr != nil {
+			copy(img.Bytes(), snapshot)
+		}
+	}()
+
+	if err := img.RemoveFile(oldName); err != nil {
+		return fmt.Errorf("diskadd: %w", err)
+	}
+	return AddToImageWithVoiceCount(img, fileData, diskNum, vn)
+}
+
+// detectFullDumpWithVoiceCount runs content detection, then overrides
+// the full dump's voice count with the caller's known vn and rebuilds
+// the counts that derive from it.
+func detectFullDumpWithVoiceCount(fileData []byte, vn int) (fileInfo, error) {
+	fi, err := detectFile(fileData)
+	if err != nil {
+		return fileInfo{}, err
+	}
+	if fi.fileType != disk.TypeFullDump {
+		return fileInfo{}, fmt.Errorf("known voice count given for a %s file; only full dumps carry one", fi.fileType)
+	}
+	if vn < 1 || vn > disk.MaxVoices {
+		return fileInfo{}, fmt.Errorf("voice count %d outside 1..%d", vn, disk.MaxVoices)
+	}
+	fi.nvoice = vn
+	fi.nwave = disk.SectorsNeeded(len(fileData)) - fi.nbank - disk.VoiceAreaSectors(vn)
+	if fi.nwave < 0 {
+		fi.nwave = 0
+	}
+	applyMultiDiskMarker(fileData, &fi)
+	return fi, nil
+}
+
 // buildDIS constructs a DisSector from a list of allocated sector indices,
 // grouping contiguous sectors into extent (start, end) pairs. disSector is
 // the index of the DIS sector itself, which the FZ-1 expects to be ss of the

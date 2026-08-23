@@ -68,12 +68,17 @@ type dumpState struct {
 	// the count; where the count fell short, the walk ended on a byte
 	// pattern that is not a voice slot and the bound stops nothing.
 	walkBound int
+	// disVN is the DIS tail's voice count where it is the authority
+	// (see normalizedDISVoiceCount), 0 when header.NVoice was walked.
+	disVN int
 }
 
 // newDumpState parses a full dump into the context the area ops work
-// over.
-func newDumpState(fzf []byte) (*dumpState, *Error) {
-	hdr, err := fzutil.ParseFZFHeader(fzf)
+// over. disVN is the voice count from the document's DIS tail, 0 when
+// unknown.
+func newDumpState(fzf []byte, disVN int) (*dumpState, *Error) {
+	disVN = normalizedDISVoiceCount(fzf, disVN)
+	hdr, err := dumpHeaderFor(fzf, disVN)
 	if err != nil {
 		return nil, errf("invalid-image", "%v", err)
 	}
@@ -86,7 +91,37 @@ func newDumpState(fzf []byte) (*dumpState, *Error) {
 		header:     hdr,
 		audioStart: start,
 		walkBound:  min(bstepSum(fzf, hdr.NBankSectors), disk.MaxVoices),
+		disVN:      disVN,
 	}, nil
+}
+
+// normalizedDISVoiceCount decides which mode a dump parses under. It
+// returns disVN (DIS mode) only where the count is usable and the walk
+// yields something else: a firmware-authored dump with bank-less
+// voices or stale slots. Where the walk already agrees it returns 0
+// (walk mode), keeping fizzle-authored documents under the stricter
+// every-reader-agrees invariant; a count the dump's bytes cannot back
+// (corrupt DIS) also returns 0.
+func normalizedDISVoiceCount(fzf []byte, disVN int) int {
+	if disVN <= 0 {
+		return 0
+	}
+	if walk, err := fzutil.ParseFZFHeader(fzf); err == nil && walk.NVoice == disVN {
+		return 0
+	}
+	if _, err := fzutil.ParseFZFHeaderWithVoiceCount(fzf, disVN); err != nil {
+		return 0
+	}
+	return disVN
+}
+
+// dumpHeaderFor parses under the DIS count when vn is non-zero (a
+// normalized count), walking otherwise.
+func dumpHeaderFor(fzf []byte, vn int) (*fzutil.FZFHeader, error) {
+	if vn > 0 {
+		return fzutil.ParseFZFHeaderWithVoiceCount(fzf, vn)
+	}
+	return fzutil.ParseFZFHeader(fzf)
 }
 
 // voiceAreaSectors is the number of sectors the voice area physically
@@ -95,13 +130,21 @@ func (d *dumpState) voiceAreaSectors() int {
 	return (d.audioStart - d.header.VoiceAreaStart) / disk.SectorSize
 }
 
-// checkGeometry holds an operation to the one thing every reader agrees
-// on: the audio starts at the byte after the voice area the walked
-// count sizes (see bstepSum). When that byte is not where this
-// operation left the audio, every voice plays from the wrong offset, so
-// the operation is refused rather than written.
+// checkGeometry holds an operation to the one thing every reader
+// agrees on: the audio starts at the byte after the voice area the
+// voice count sizes. Walk mode re-derives that count the way every
+// standalone reader does (see bstepSum); DIS mode validates under the
+// count the write-back stamps into the DIS tail. When the byte is not
+// where this operation left the audio, every voice plays from the
+// wrong offset, so the operation is refused rather than written.
 func (d *dumpState) checkGeometry() *Error {
-	hdr, err := fzutil.ParseFZFHeader(d.fzf)
+	var hdr *fzutil.FZFHeader
+	var err error
+	if d.disVN > 0 {
+		hdr, err = fzutil.ParseFZFHeaderWithVoiceCount(d.fzf, d.header.NVoice)
+	} else {
+		hdr, err = fzutil.ParseFZFHeader(d.fzf)
+	}
 	if err != nil {
 		return errf(codeVoiceWalk, "the change leaves a dump no reader can parse: %v", err)
 	}
@@ -161,6 +204,12 @@ func slotReferenced(d *dumpState, slot int) bool {
 // walk ends on the audio's own bytes) one more area changes neither
 // and there is nothing to do.
 func ensureVoiceSlots(d *dumpState, delta, freed int) *Error {
+	if d.disVN > 0 {
+		// DIS mode: the write-back stamps the count into the DIS tail,
+		// so bsteps bound nothing. A voice outside every bank keeps its
+		// slot, the same way the firmware keeps it.
+		return nil
+	}
 	count := d.header.NVoice
 	sum := bstepSum(d.fzf, d.header.NBankSectors) + delta
 	target := count
@@ -408,34 +457,39 @@ func (s *Session) patchDump(build func(d *dumpState) ([]model.Patch, *Error)) (S
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	out, cerr := patchDumpBytes(fzf, build)
+	out, outVN, cerr := patchDumpBytes(fzf, disVoiceCount(img), build)
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	return s.replaceDump(img, out)
+	return s.replaceDump(img, out, outVN)
 }
 
 // patchDumpBytes runs one operation over a full dump's bytes: build
 // mutates the state in place or through the patches it returns, each
 // patch verifies its pre-image, and the result has to read back as the
-// dump the operation meant to write. It returns the new dump, leaving
-// the caller's bytes untouched on any refusal.
-func patchDumpBytes(fzf []byte, build func(d *dumpState) ([]model.Patch, *Error)) ([]byte, *Error) {
-	d, cerr := newDumpState(fzf)
+// dump the operation meant to write. It returns the new dump plus the
+// voice count the write-back must stamp into the DIS tail (0 in walk
+// mode), leaving the caller's bytes untouched on any refusal.
+func patchDumpBytes(fzf []byte, disVN int, build func(d *dumpState) ([]model.Patch, *Error)) ([]byte, int, *Error) {
+	d, cerr := newDumpState(fzf, disVN)
 	if cerr != nil {
-		return nil, cerr
+		return nil, 0, cerr
 	}
 	patches, cerr := build(d)
 	if cerr != nil {
-		return nil, cerr
+		return nil, 0, cerr
 	}
 	if err := applyModelPatches(d.fzf, patches); err != nil {
-		return nil, errf("patch-failed", "%v", err)
+		return nil, 0, errf("patch-failed", "%v", err)
 	}
 	if cerr := d.checkGeometry(); cerr != nil {
-		return nil, cerr
+		return nil, 0, cerr
 	}
-	return d.fzf, nil
+	outVN := 0
+	if d.disVN > 0 {
+		outVN = d.header.NVoice
+	}
+	return d.fzf, outVN, nil
 }
 
 // checkArea validates bank and area indices against the dump.

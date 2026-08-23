@@ -202,7 +202,7 @@ func (s *Session) profileDocument() (*docProfile, *Error) {
 	if cerr != nil {
 		return nil, cerr
 	}
-	d, cerr := newDumpState(fzf)
+	d, cerr := newDumpState(fzf, disVoiceCount(img))
 	if cerr != nil {
 		return nil, cerr
 	}

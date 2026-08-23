@@ -415,7 +415,7 @@ func TestAddBankAtSlotZeroKeepsTheTotalWaveMarker(t *testing.T) {
 	const marker = 4242
 	binary.LittleEndian.PutUint32(fzf[disk.BankTotalWaveOffset:], marker)
 
-	out, cerr := patchDumpBytes(bytes.Clone(fzf), func(d *dumpState) ([]model.Patch, *Error) {
+	out, _, cerr := patchDumpBytes(bytes.Clone(fzf), 0, func(d *dumpState) ([]model.Patch, *Error) {
 		return addBankPatches(d, fzbPlaying(t, 0), 0)
 	})
 	if cerr != nil {

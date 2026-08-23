@@ -89,9 +89,10 @@ type InstrumentSnapshot struct {
 
 // instrumentFrom parses a full dump's banks and voice list. It uses
 // the same per-area reader as fzfinfo and fzbinfo, so the Web UI and
-// the CLI agree on every field.
-func instrumentFrom(fileName string, fzfData []byte) (*InstrumentSnapshot, error) {
-	hdr, err := fzutil.ParseFZFHeader(fzfData)
+// the CLI agree on every field. disVN is the DIS tail's voice count, 0
+// when unknown; it reaches voices the bstep walk misses.
+func instrumentFrom(fileName string, fzfData []byte, disVN int) (*InstrumentSnapshot, error) {
+	hdr, err := dumpHeaderFor(fzfData, normalizedDISVoiceCount(fzfData, disVN))
 	if err != nil {
 		return nil, fmt.Errorf("webcore: %w", err)
 	}

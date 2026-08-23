@@ -35,7 +35,7 @@ func (s *Session) LoadFZF(data []byte) (Snapshot, *Error) {
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	return s.replaceDump(img, data)
+	return s.replaceDump(img, data, 0)
 }
 
 // AddVoice places an .fzv per the placement matrix (R7): with no disk
@@ -88,7 +88,7 @@ func (s *Session) AddVoice(fzvData []byte) (Snapshot, *Error) {
 	// Through replaceDump rather than diskadd directly: a first voice
 	// too large for one disk then splits across a pair, the same way
 	// a join or an SFZ conversion does.
-	return s.replaceDump(img, fzf)
+	return s.replaceDump(img, fzf, 0)
 }
 
 // ImportWAVToInstrument converts a WAV through the CLI's importer and

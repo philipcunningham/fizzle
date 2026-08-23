@@ -82,7 +82,7 @@ func (s *Session) ImportSFZ(files map[string][]byte, sfzPath string, rate int, f
 	if cerr != nil {
 		return fail(cerr)
 	}
-	snap, cerr := s.replaceDump(img, res.FZF)
+	snap, cerr := s.replaceDump(img, res.FZF, 0)
 	if cerr != nil {
 		return fail(cerr)
 	}
@@ -113,7 +113,7 @@ func (s *Session) ImportWAVFolder(files map[string][]byte, rate int, fitToDisk b
 	if cerr != nil {
 		return fail(cerr)
 	}
-	snap, cerr := s.replaceDump(img, res.FZF)
+	snap, cerr := s.replaceDump(img, res.FZF, 0)
 	if cerr != nil {
 		return fail(cerr)
 	}
@@ -136,14 +136,14 @@ func (s *Session) placeSplitResult(img *disk.Image, result voicebuild.MultiDiskR
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	if cerr := putDump(img1, result.Disks[0], 0, &result); cerr != nil {
+	if cerr := putDump(img1, result.Disks[0], 0, &result, 0); cerr != nil {
 		return s.Snapshot(), cerr
 	}
 	img2, cerr := s.disk2Image()
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	if cerr := putDump(img2, result.Disks[1], 1, &result); cerr != nil {
+	if cerr := putDump(img2, result.Disks[1], 1, &result, 0); cerr != nil {
 		return s.Snapshot(), cerr
 	}
 	return s.adoptPair(img1, img2.Bytes())

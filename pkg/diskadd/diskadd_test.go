@@ -13,6 +13,7 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )
 
@@ -1425,4 +1426,88 @@ func TestAddBytesToImageEmptyErrors(t *testing.T) {
 	if err := AddBytesToImage(img, nil, disk.PadLabel("X"), disk.TypeVoice, 0, 0, 1, 1); err == nil {
 		t.Error("expected an error for empty file data")
 	}
+}
+
+// TestAddToImageWithVoiceCount pins the write path for dumps holding
+// voices no bank references: the DIS tail carries the caller's vn,
+// and wn moves with it.
+func TestAddToImageWithVoiceCount(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeBanklessVoiceDump(t)
+	totalSectors := disk.SectorsNeeded(len(dump))
+
+	img := formattedImage(t)
+	if err := AddToImageWithVoiceCount(img, dump, 0, fzfbuilder.BanklessDumpVoices); err != nil {
+		t.Fatal(err)
+	}
+
+	dis := readFullDumpDIS(t, img)
+	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("DIS vn = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+	wantWn := totalSectors - fzfbuilder.BanklessDumpBanks - disk.VoiceAreaSectors(fzfbuilder.BanklessDumpVoices)
+	if got := int(dis.WaveCount); got != wantWn {
+		t.Errorf("DIS wn = %d, want %d", got, wantWn)
+	}
+	if got := int(dis.BankCount); got != fzfbuilder.BanklessDumpBanks {
+		t.Errorf("DIS bn = %d, want %d", got, fzfbuilder.BanklessDumpBanks)
+	}
+}
+
+// TestReplaceInMemoryWithVoiceCount covers the same vn plumbing on the
+// replace path webcore's write-back uses.
+func TestReplaceInMemoryWithVoiceCount(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeBanklessVoiceDump(t)
+
+	img := formattedImage(t)
+	if err := AddToImage(img, dump, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReplaceInMemoryWithVoiceCount(img, disk.FullDumpName, dump, 0, fzfbuilder.BanklessDumpVoices); err != nil {
+		t.Fatal(err)
+	}
+
+	dis := readFullDumpDIS(t, img)
+	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("DIS vn = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+}
+
+// formattedImage returns a blank formatted image parsed in memory.
+func formattedImage(t *testing.T) *disk.Image {
+	t.Helper()
+	imgPath := filepath.Join(t.TempDir(), "test.img")
+	if err := diskformat.Format(imgPath, "TEST"); err != nil {
+		t.Fatal(err)
+	}
+	img, err := disk.OpenImage(imgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return img
+}
+
+// readFullDumpDIS decodes the DIS sector of the image's FULL-DATA-FZ.
+func readFullDumpDIS(t *testing.T, img *disk.Image) disk.DisSector {
+	t.Helper()
+	entries, err := img.Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.NameString() == disk.FullDumpName {
+			sec, err := img.SectorRef(int(e.DisSector))
+			if err != nil {
+				t.Fatal(err)
+			}
+			dis, err := disk.DecodeDisSector(sec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return dis
+		}
+	}
+	t.Fatal("no FULL-DATA-FZ entry on image")
+	return disk.DisSector{}
 }

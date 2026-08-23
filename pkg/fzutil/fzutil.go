@@ -234,6 +234,43 @@ func ParseFZFHeader(data []byte) (*FZFHeader, error) {
 	}, nil
 }
 
+// ParseFZFHeaderWithVoiceCount parses the header of an FZF full dump
+// whose voice count is known from the disk's DIS tail. The firmware
+// sizes the voice area by that vn, never by a walk, and vn reaches
+// voices ParseFZFHeader's bstep-bounded walk misses (a voice in no
+// bank). The slots vn claims are still validated, so a corrupt DIS
+// errors instead of walking the parser into the audio. See
+// llm-wiki/topics/voice-area-sizing.md.
+func ParseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
+	if len(data) < disk.SectorSize {
+		return nil, fmt.Errorf("fzutil: FZF too small (%d bytes, need at least %d)", len(data), disk.SectorSize)
+	}
+	if vn < 1 || vn > disk.MaxVoices {
+		return nil, fmt.Errorf("fzutil: DIS voice count %d outside 1..%d", vn, disk.MaxVoices)
+	}
+	bstep := int(binary.LittleEndian.Uint16(data[disk.BankVoiceCountOffset : disk.BankVoiceCountOffset+2]))
+	if bstep == 0 || bstep > disk.MaxVoices {
+		return nil, fmt.Errorf("fzutil: invalid bstep %d (if this is a multi-disk continuation disk, run fzf info on disk 1 instead)", bstep)
+	}
+	nBankSectors := CountBankSectors(data)
+	voiceAreaStart := nBankSectors * disk.SectorSize
+	if voiceAreaStart+disk.VoiceAreaSectors(vn)*disk.SectorSize > len(data) {
+		return nil, fmt.Errorf("fzutil: DIS voice count %d needs a voice area running past the dump", vn)
+	}
+	for i := range vn {
+		off := disk.VoiceSlotOffset(voiceAreaStart, i)
+		if !disk.IsActiveOrEmptyVoiceSlot(data[off : off+disk.VoiceHeaderUsed]) {
+			return nil, fmt.Errorf("fzutil: DIS voice count %d claims slot %d, which does not read as a voice header", vn, i)
+		}
+	}
+	return &FZFHeader{
+		NVoice:         vn,
+		BStep0:         bstep,
+		NBankSectors:   nBankSectors,
+		VoiceAreaStart: voiceAreaStart,
+	}, nil
+}
+
 // InferVoiceCount walks voice slots from voiceAreaStart and counts the
 // contiguous ones that are plausible active voices or explicit
 // PlaybackModeNoSound placeholders. It stops at the first slot that doesn't

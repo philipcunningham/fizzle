@@ -24,3 +24,13 @@ func UnpackDataFromBytes(data []byte) ([][]byte, []int, error) {
 	}
 	return unpack(data, hdr)
 }
+
+// UnpackDataFromBytesWithVoiceCount is UnpackDataFromBytes for a dump
+// whose voice count is known from its disk's DIS tail.
+func UnpackDataFromBytesWithVoiceCount(data []byte, vn int) ([][]byte, []int, error) {
+	hdr, err := fzutil.ParseFZFHeaderWithVoiceCount(data, vn)
+	if err != nil {
+		return nil, nil, fmt.Errorf("voiceunpack: %w", err)
+	}
+	return unpack(data, hdr)
+}

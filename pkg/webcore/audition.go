@@ -72,7 +72,14 @@ func (s *Session) slotFZV(slot int) ([]byte, *Error) {
 	if cerr != nil {
 		return nil, cerr
 	}
-	voices, slots, uerr := voiceunpack.UnpackDataFromBytes(fzf)
+	var voices [][]byte
+	var slots []int
+	var uerr error
+	if vn := normalizedDISVoiceCount(fzf, disVoiceCount(img)); vn > 0 {
+		voices, slots, uerr = voiceunpack.UnpackDataFromBytesWithVoiceCount(fzf, vn)
+	} else {
+		voices, slots, uerr = voiceunpack.UnpackDataFromBytes(fzf)
+	}
 	if uerr != nil {
 		return nil, errf("invalid-image", "%v", uerr)
 	}

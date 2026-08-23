@@ -146,7 +146,7 @@ func TestAreaOpsOverTheCorpus(t *testing.T) {
 		}
 		for _, op := range areaOpsFor(t, fzf, hdr) {
 			tried++
-			out, cerr := patchDumpBytes(bytes.Clone(fzf), op.build)
+			out, _, cerr := patchDumpBytes(bytes.Clone(fzf), 0, op.build)
 			if cerr != nil {
 				refused++
 				refusedBy[op.name+": "+cerr.Code]++
@@ -173,7 +173,7 @@ func TestAddVoiceOverTheCorpus(t *testing.T) {
 	refusedBy := map[string]int{}
 	for path, fzf := range dumps {
 		before := dumpGeometryOf(t, fzf)
-		out, cerr := patchDumpBytes(bytes.Clone(fzf), func(d *dumpState) ([]model.Patch, *Error) {
+		out, _, cerr := patchDumpBytes(bytes.Clone(fzf), 0, func(d *dumpState) ([]model.Patch, *Error) {
 			newSlot, jerr := appendVoiceToDump(d, voice)
 			if jerr != nil {
 				return nil, jerr
@@ -225,7 +225,7 @@ func TestAreaOpSequencesHoldTheAudio(t *testing.T) {
 						t.Fatalf("step %d: %v", step, err)
 					}
 					op := randomAreaOp(t, fzf, hdr, rng)
-					out, cerr := patchDumpBytes(bytes.Clone(fzf), op.build)
+					out, _, cerr := patchDumpBytes(bytes.Clone(fzf), 0, op.build)
 					if cerr != nil {
 						refusedBy[cerr.Code]++
 						continue
