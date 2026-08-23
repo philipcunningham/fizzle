@@ -22,7 +22,7 @@ The write side is what these bytes prove: the firmware deletes in place and save
 
 ## What fizzle implements
 
-`pkg/disk/disk.go` (`Directory`) steps over blank slots. It also skips slots whose name isn't printable ASCII, the FZ's own name test. Trailing rubbish in sector 1 therefore neither lists nor refuses a disk. `RemoveFile` resolves a name to its raw slot rather than its position in the filtered listing, then compacts the directory. fizzle's own writes keep the directory dense.
+`pkg/disk/disk.go` (`Directory`) steps over blank slots. A slot whose DIS pointer lands outside the data sectors is no entry either, so trailing rubbish neither lists nor refuses a disk. `disklist` still shows a printable-named one as a corrupt row. `RemoveFile` resolves a name to its raw slot rather than its position in the filtered listing, then compacts the directory. fizzle's own writes keep the directory dense.
 
 ## Open questions
 

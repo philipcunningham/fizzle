@@ -119,3 +119,32 @@ func TestEditFallsBackOnCorruptDISVoiceCount(t *testing.T) {
 		t.Errorf("outVN = %d, want the walked %d after corrupt-count fallback", outVN, walk.NVoice)
 	}
 }
+
+// What the editor shows is what a reopen shows: an edit that raises
+// the bstep walk past the count must not let stale slots return as
+// voices on the next open.
+func TestReopenAfterEditsKeepsVoiceCount(t *testing.T) {
+	t.Parallel()
+	s, _ := openBanklessDisk(t)
+	for range 2 {
+		if _, cerr := s.AddArea(0, 0); cerr != nil {
+			t.Fatalf("AddArea: %v", cerr)
+		}
+	}
+	out, cerr := s.ExportImage()
+	if cerr != nil {
+		t.Fatalf("ExportImage: %v", cerr)
+	}
+	reopened := NewSession()
+	snap, cerr := reopened.OpenImage(out)
+	if cerr != nil {
+		t.Fatalf("OpenImage: %v", cerr)
+	}
+	if got := len(snap.Disk.Instrument.Voices); got != fzfbuilder.BanklessDumpVoices {
+		names := make([]string, 0, got)
+		for _, v := range snap.Disk.Instrument.Voices {
+			names = append(names, v.Name)
+		}
+		t.Fatalf("reopened voices = %d (%v), want %d", got, names, fzfbuilder.BanklessDumpVoices)
+	}
+}

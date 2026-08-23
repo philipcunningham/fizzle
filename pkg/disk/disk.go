@@ -406,9 +406,25 @@ const (
 	DirSlotRubbish
 )
 
-// DirSlot classifies directory slot i; the entry is meaningful for
-// DirSlotEntry and best effort for DirSlotRubbish reporting.
-func (img *Image) DirSlot(i int) (DirEntry, DirSlotKind) {
+// DirSlot is one classified directory slot; the entry is meaningful
+// for DirSlotEntry and best effort for DirSlotRubbish reporting.
+type DirSlot struct {
+	Entry DirEntry
+	Kind  DirSlotKind
+}
+
+// DirectorySlots classifies all MaxDirEntries raw slots in order. The
+// complete scan is the whole use case, so no indexed access leaks out.
+func (img *Image) DirectorySlots() []DirSlot {
+	slots := make([]DirSlot, MaxDirEntries)
+	for i := range slots {
+		e, kind := img.dirSlot(i)
+		slots[i] = DirSlot{Entry: e, Kind: kind}
+	}
+	return slots
+}
+
+func (img *Image) dirSlot(i int) (DirEntry, DirSlotKind) {
 	off := DirSector*SectorSize + i*DirEntrySize
 	if img.data[off] == 0 {
 		return DirEntry{}, DirSlotBlank
@@ -422,7 +438,7 @@ func (img *Image) DirSlot(i int) (DirEntry, DirSlotKind) {
 
 // dirSlotEntry reports slot i's entry where it holds one.
 func (img *Image) dirSlotEntry(i int) (DirEntry, bool) {
-	e, kind := img.DirSlot(i)
+	e, kind := img.dirSlot(i)
 	return e, kind == DirSlotEntry
 }
 
@@ -561,6 +577,18 @@ func (img *Image) RemoveFile(name string) error {
 	}
 	clear(img.data[base+dst*DirEntrySize : base+MaxDirEntries*DirEntrySize])
 
+	return nil
+}
+
+// ClearDirectorySlot zeroes one directory slot: the recovery step for
+// a corrupt row, whose DIS pointer is unsafe to free sectors through.
+// The slot is 0-based; nothing else on the disk moves.
+func (img *Image) ClearDirectorySlot(i int) error {
+	if i < 0 || i >= MaxDirEntries {
+		return fmt.Errorf("disk: directory slot must be 0 to %d, got %d", MaxDirEntries-1, i)
+	}
+	off := DirSector*SectorSize + i*DirEntrySize
+	clear(img.data[off : off+DirEntrySize])
 	return nil
 }
 

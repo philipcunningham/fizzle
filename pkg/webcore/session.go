@@ -276,9 +276,6 @@ func disVoiceCount(img *disk.Image) int {
 		if e.FileType != disk.TypeFullDump || e.NameString() != disk.FullDumpName {
 			continue
 		}
-		if int(e.DisSector) < disk.ReservedSectors || int(e.DisSector) >= disk.SectorCount {
-			return 0
-		}
 		sec, serr := img.SectorRef(int(e.DisSector))
 		if serr != nil {
 			return 0

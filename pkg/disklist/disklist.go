@@ -27,6 +27,9 @@ type FileEntry struct {
 	Name     string `json:"name"`
 	TypeName string `json:"type"`
 	Size     int    `json:"size"`
+	// Slot is the 1-based physical directory slot, set on corrupt rows
+	// only so repair tooling can address a row RemoveFile cannot match.
+	Slot int `json:"slot,omitempty"`
 }
 
 // Listing holds the parsed contents of a disk image.
@@ -61,10 +64,11 @@ func ParseImage(img *disk.Image) (*Listing, error) {
 	type row struct {
 		e       disk.DirEntry
 		corrupt bool
+		slot    int
 	}
 	rows := make([]row, 0, disk.MaxDirEntries)
-	for slot := range disk.MaxDirEntries {
-		e, kind := img.DirSlot(slot)
+	for slot, ds := range img.DirectorySlots() {
+		e, kind := ds.Entry, ds.Kind
 		switch kind {
 		case disk.DirSlotEntry:
 			rows = append(rows, row{e: e})
@@ -75,7 +79,7 @@ func ParseImage(img *disk.Image) (*Listing, error) {
 					Int("slot", slot).
 					Uint16("dis_sector", e.DisSector).
 					Msg("disklist: named directory slot points outside the data sectors; marking as corrupt")
-				rows = append(rows, row{e: e, corrupt: true})
+				rows = append(rows, row{e: e, corrupt: true, slot: slot + 1})
 			}
 		case disk.DirSlotBlank:
 		}
@@ -89,6 +93,7 @@ func ParseImage(img *disk.Image) (*Listing, error) {
 				Name:     e.NameString(),
 				TypeName: CorruptTypeName,
 				Size:     0,
+				Slot:     r.slot,
 			})
 			continue
 		}
