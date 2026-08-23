@@ -67,7 +67,7 @@ func (s *Session) ImportSFZ(files map[string][]byte, sfzPath string, rate int, f
 		if cerr != nil {
 			return fail(cerr)
 		}
-		snap, cerr := s.placeSplitResult(img, result)
+		snap, cerr := s.placeSplitResult(img, result, modeDerive)
 		if cerr != nil {
 			return fail(cerr)
 		}
@@ -82,11 +82,10 @@ func (s *Session) ImportSFZ(files map[string][]byte, sfzPath string, rate int, f
 	if cerr != nil {
 		return fail(cerr)
 	}
-	snap, cerr := s.replaceDump(img, res.FZF, 0)
+	snap, cerr := s.replaceDump(img, res.FZF, 0, modeDerive)
 	if cerr != nil {
 		return fail(cerr)
 	}
-	s.refreshDISMode()
 	return SFZResult{Snapshot: snap, Rate: int(res.Rate)}, nil
 }
 
@@ -114,11 +113,10 @@ func (s *Session) ImportWAVFolder(files map[string][]byte, rate int, fitToDisk b
 	if cerr != nil {
 		return fail(cerr)
 	}
-	snap, cerr := s.replaceDump(img, res.FZF, 0)
+	snap, cerr := s.replaceDump(img, res.FZF, 0, modeDerive)
 	if cerr != nil {
 		return fail(cerr)
 	}
-	s.refreshDISMode()
 	return SFZResult{Snapshot: snap, Rate: int(res.Rate)}, nil
 }
 
@@ -129,7 +127,7 @@ func (s *Session) ImportWAVFolder(files map[string][]byte, rate int, fitToDisk b
 // images can have odd sector maps that run one sector short), and the
 // placement refuses rather than silently drop the disk's other files
 // (R10).
-func (s *Session) placeSplitResult(img *disk.Image, result voicebuild.MultiDiskResult) (Snapshot, *Error) {
+func (s *Session) placeSplitResult(img *disk.Image, result voicebuild.MultiDiskResult, mode parseMode) (Snapshot, *Error) {
 	if others := looseFileCount(img); others > 0 {
 		return s.Snapshot(), errf("no-space",
 			"a two disk instrument fills disk 1 completely; extract the disk's %d other files first", others)
@@ -148,7 +146,7 @@ func (s *Session) placeSplitResult(img *disk.Image, result voicebuild.MultiDiskR
 	if cerr := putDump(img2, result.Disks[1], 1, &result, 0); cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	return s.adoptPair(img1, img2.Bytes())
+	return s.adoptPair(img1, img2.Bytes(), mode)
 }
 
 // codeInvalidChannel is the boundary code for an answer that is not

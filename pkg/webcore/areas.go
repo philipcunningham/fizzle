@@ -442,7 +442,7 @@ func (s *Session) patchDump(build func(d *dumpState) ([]model.Patch, *Error)) (S
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	return s.replaceDump(img, out, outVN)
+	return s.replaceDump(img, out, outVN, modeKeep)
 }
 
 // patchDumpBytes runs one operation over a full dump's bytes: build
