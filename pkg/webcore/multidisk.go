@@ -172,13 +172,13 @@ func checkCoversLastVoice(stitched []byte, hdr *fzutil.FZFHeader, voiceAreaEnd i
 	return nil
 }
 
-// stitchedDump returns the document's FULL-DATA-FZ payload. For a
-// split document it appends disk 2's audio continuation, the same
-// stitch the CLI's voice unpack performs on a pair.
 func (s *Session) stitchedDump(img *disk.Image) ([]byte, *Error) {
 	return stitchedDumpPair(img, s.image2)
 }
 
+// stitchedDumpPair returns a candidate document's FULL-DATA-FZ payload. For a
+// split document it appends disk 2's audio continuation, the same stitch the
+// CLI's voice unpack performs on a pair.
 func stitchedDumpPair(img *disk.Image, image2 []byte) ([]byte, *Error) {
 	fzf, gerr := diskget.FromImage(img, disk.FullDumpName)
 	if gerr != nil {

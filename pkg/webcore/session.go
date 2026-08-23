@@ -128,26 +128,11 @@ type imagePair struct {
 // Session holds one open disk set. Not safe for concurrent use; the
 // worker serialises calls.
 type Session struct {
+	preparedDocument
 	revision int
 	// memoryBytes is the sampler's sample memory as the user declared
 	// it. Zero means they haven't, so sampleMemory supplies the default.
 	memoryBytes int
-	// audioBytes is the open instrument's audio area, measured when the
-	// document changes rather than on every snapshot.
-	audioBytes int
-	label      string
-	image      []byte
-	image2     []byte // disk 2 of a split pair; nil for one disk documents
-	used       int
-	files      []FileSnapshot
-
-	instrument  *InstrumentSnapshot
-	missingDisk int // 1 or 2 when one half of a pair was opened alone
-	// disMode marks a dump parsing under its DIS voice count. Decided
-	// at document boundaries and held through edits, so an edit that
-	// moves a bstep cannot flip it.
-	disMode bool
-
 	past        []imagePair // undo stack, oldest first
 	future      []imagePair // redo stack
 	inGesture   bool
@@ -157,9 +142,14 @@ type Session struct {
 // preparedDocument is a fully parsed candidate state. Building one is
 // side-effect free; a Session installs it only after every derivation succeeds.
 type preparedDocument struct {
-	image       []byte
-	image2      []byte
-	disMode     bool
+	image  []byte
+	image2 []byte // disk 2 of a split pair; nil for one disk documents
+	// disMode marks a dump parsing under its DIS voice count. Decided
+	// at document boundaries and held through edits, so an edit that
+	// moves a bstep cannot flip it.
+	disMode bool
+	// audioBytes is the open instrument's audio area, measured when the
+	// document changes rather than on every snapshot.
 	audioBytes  int
 	label       string
 	used        int
@@ -723,15 +713,7 @@ func (s *Session) adoptState(img *disk.Image, img2 []byte, disMode bool) (Snapsh
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	s.image = next.image
-	s.image2 = next.image2
-	s.disMode = next.disMode
-	s.audioBytes = next.audioBytes
-	s.label = next.label
-	s.used = next.used
-	s.files = next.files
-	s.instrument = next.instrument
-	s.missingDisk = next.missingDisk
+	s.preparedDocument = next
 	s.revision++
 	return s.Snapshot(), nil
 }

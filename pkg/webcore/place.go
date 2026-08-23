@@ -358,7 +358,7 @@ func addBankPatches(d *dumpState, fzb []byte, slot int) ([]model.Patch, *Error) 
 	// step against the areas that end up playing rather than the ones
 	// the replaced bank held.
 	patch := []model.Patch{{Offset: off, Old: old, New: sector}}
-	if err := applyModelPatches(d.fzf, patch); err != nil {
+	if err := model.Apply(d.fzf, patch); err != nil {
 		return nil, errf("patch-failed", "%v", err)
 	}
 	if cerr := ensureVoiceSlots(d, 0, noFreedSlot); cerr != nil {

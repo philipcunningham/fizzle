@@ -10,14 +10,6 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
-// applyModelPatches applies container patches to raw dump
-// bytes, verifying each pre-image before it writes. A
-// mismatch means the caller's read of the container went stale, which
-// must fail loudly rather than corrupt a bank sector.
-func applyModelPatches(data []byte, patches []model.Patch) error {
-	return model.Apply(data, patches)
-}
-
 // Area field names, shared by the setter and the tests that drive it.
 const (
 	fieldAreaVelLow  = "velLow"
@@ -449,7 +441,7 @@ func patchDumpBytes(fzf []byte, disVN int, build func(d *dumpState) ([]model.Pat
 	if cerr != nil {
 		return nil, 0, cerr
 	}
-	if err := applyModelPatches(d.fzf, patches); err != nil {
+	if err := model.Apply(d.fzf, patches); err != nil {
 		return nil, 0, errf("patch-failed", "%v", err)
 	}
 	if cerr := d.checkGeometry(); cerr != nil {
@@ -572,6 +564,9 @@ func (s *Session) SwapAreas(bank, a, b int) (Snapshot, *Error) {
 		if cerr := d.checkArea(bank, b); cerr != nil {
 			return nil, cerr
 		}
+		if a == b {
+			return nil, nil
+		}
 		return container.SwapAreaPatches(d.fzf, container.SwapAreaParams{
 			Base: bank * disk.SectorSize, SrcArea: a, TgtArea: b,
 		}), nil
@@ -607,7 +602,7 @@ func deleteAreaPatches(d *dumpState, bank, area int) ([]model.Patch, *Error) {
 	})
 	// The lowered bstep goes in first, so the scan for slots areas still
 	// play sees the areas that survive rather than the one leaving.
-	if err := applyModelPatches(d.fzf, patches); err != nil {
+	if err := model.Apply(d.fzf, patches); err != nil {
 		return nil, errf("patch-failed", "%v", err)
 	}
 	if cerr := ensureVoiceSlots(d, 0, freed); cerr != nil {

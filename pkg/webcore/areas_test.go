@@ -483,6 +483,19 @@ func TestSwapAreasReorders(t *testing.T) {
 	}
 }
 
+func TestSwapAreaWithItselfIsAccepted(t *testing.T) {
+	s := twoVoiceSession(t)
+	beforeImage := mustExport(t, s)
+
+	_, cerr := s.SwapAreas(0, 0, 0)
+	if cerr != nil {
+		t.Fatalf("SwapAreas: %v", cerr)
+	}
+	if !bytes.Equal(mustExport(t, s), beforeImage) {
+		t.Fatal("self swap changed the image")
+	}
+}
+
 // R11 delete: the area goes and its voice goes with it, because the
 // format sizes the voice area from the banks' area counts and has
 // nowhere to keep a voice no area references. The voice that stays
