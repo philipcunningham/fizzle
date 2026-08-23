@@ -176,14 +176,18 @@ func checkCoversLastVoice(stitched []byte, hdr *fzutil.FZFHeader, voiceAreaEnd i
 // split document it appends disk 2's audio continuation, the same
 // stitch the CLI's voice unpack performs on a pair.
 func (s *Session) stitchedDump(img *disk.Image) ([]byte, *Error) {
+	return stitchedDumpPair(img, s.image2)
+}
+
+func stitchedDumpPair(img *disk.Image, image2 []byte) ([]byte, *Error) {
 	fzf, gerr := diskget.FromImage(img, disk.FullDumpName)
 	if gerr != nil {
 		return nil, errf(codeNotFound, "%v", gerr)
 	}
-	if s.image2 == nil {
+	if image2 == nil {
 		return fzf, nil
 	}
-	img2, rerr := disk.ReadImage(bytes.NewReader(s.image2))
+	img2, rerr := disk.ReadImage(bytes.NewReader(image2))
 	if rerr != nil {
 		return nil, errf("invalid-image", "disk 2 unreadable: %v", rerr)
 	}

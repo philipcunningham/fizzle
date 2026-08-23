@@ -154,6 +154,20 @@ type Session struct {
 	gestureBase *imagePair // pre-gesture document; nil until the first edit
 }
 
+// preparedDocument is a fully parsed candidate state. Building one is
+// side-effect free; a Session installs it only after every derivation succeeds.
+type preparedDocument struct {
+	image       []byte
+	image2      []byte
+	disMode     bool
+	audioBytes  int
+	label       string
+	used        int
+	files       []FileSnapshot
+	instrument  *InstrumentSnapshot
+	missingDisk int
+}
+
 // NewSession returns an empty session with no disk open.
 func NewSession() *Session {
 	return &Session{}
@@ -179,8 +193,8 @@ func (s *Session) Snapshot() Snapshot {
 			MemoryBytes:   s.sampleMemory(),
 			Disks:         disks,
 			MissingDisk:   s.missingDisk,
-			Files:         append([]FileSnapshot{}, s.files...),
-			Instrument:    s.instrument,
+			Files:         cloneFiles(s.files),
+			Instrument:    cloneInstrument(s.instrument),
 		}
 	}
 	return snap
@@ -554,10 +568,14 @@ func (s *Session) Undo() (Snapshot, *Error) {
 	if err != nil {
 		return s.Snapshot(), errf("invalid-image", "history entry unreadable: %v", err)
 	}
+	current := imagePair{img1: s.image, img2: s.image2, disMode: s.disMode}
+	snap, cerr := s.adoptState(img, prev.img2, prev.disMode)
+	if cerr != nil {
+		return snap, cerr
+	}
 	s.past = s.past[:len(s.past)-1]
-	s.future = append(s.future, imagePair{img1: s.image, img2: s.image2, disMode: s.disMode})
-	s.disMode = prev.disMode
-	return s.adoptState(img, prev.img2)
+	s.future = append(s.future, current)
+	return s.Snapshot(), nil
 }
 
 // Redo restores the state most recently undone.
@@ -571,10 +589,14 @@ func (s *Session) Redo() (Snapshot, *Error) {
 	if err != nil {
 		return s.Snapshot(), errf("invalid-image", "history entry unreadable: %v", err)
 	}
+	current := imagePair{img1: s.image, img2: s.image2, disMode: s.disMode}
+	snap, cerr := s.adoptState(img, next.img2, next.disMode)
+	if cerr != nil {
+		return snap, cerr
+	}
 	s.future = s.future[:len(s.future)-1]
-	s.pushHistory(imagePair{img1: s.image, img2: s.image2, disMode: s.disMode})
-	s.disMode = next.disMode
-	return s.adoptState(img, next.img2)
+	s.pushHistory(current)
+	return s.Snapshot(), nil
 }
 
 // ExportImage returns a copy of disk 1's image bytes. Opening then
@@ -623,8 +645,7 @@ func (s *Session) install(data []byte) (Snapshot, *Error) {
 // because undoing past an open would resurrect the disk the user just
 // left, and it would arrive under the new document's name.
 func (s *Session) adoptFresh(img *disk.Image, img2 []byte) (Snapshot, *Error) {
-	s.disMode = documentDISMode(img)
-	snap, cerr := s.adoptState(img, img2)
+	snap, cerr := s.adoptState(img, img2, documentDISMode(img))
 	if cerr != nil {
 		return snap, cerr
 	}
@@ -672,12 +693,12 @@ func (s *Session) adoptPair(img *disk.Image, img2 []byte, mode parseMode) (Snaps
 		return s.Snapshot(), cerr
 	}
 	prev := imagePair{img1: s.image, img2: s.image2, disMode: s.disMode}
+	nextMode := s.disMode
 	if mode == modeDerive {
-		s.disMode = documentDISMode(img)
+		nextMode = documentDISMode(img)
 	}
-	snap, cerr := s.adoptState(img, img2)
+	snap, cerr := s.adoptState(img, img2, nextMode)
 	if cerr != nil {
-		s.disMode = prev.disMode
 		return snap, cerr
 	}
 	if prev.img1 != nil {
@@ -697,10 +718,36 @@ func (s *Session) adoptPair(img *disk.Image, img2 []byte, mode parseMode) (Snaps
 
 // adoptState installs a parsed image pair without touching history;
 // undo and redo use it directly.
-func (s *Session) adoptState(img *disk.Image, img2 []byte) (Snapshot, *Error) {
+func (s *Session) adoptState(img *disk.Image, img2 []byte, disMode bool) (Snapshot, *Error) {
+	next, cerr := prepareDocument(img, img2, disMode)
+	if cerr != nil {
+		return s.Snapshot(), cerr
+	}
+	s.image = next.image
+	s.image2 = next.image2
+	s.disMode = next.disMode
+	s.audioBytes = next.audioBytes
+	s.label = next.label
+	s.used = next.used
+	s.files = next.files
+	s.instrument = next.instrument
+	s.missingDisk = next.missingDisk
+	s.revision++
+	return s.Snapshot(), nil
+}
+
+func prepareDocument(img *disk.Image, img2 []byte, disMode bool) (preparedDocument, *Error) {
+	var parsedImage2 *disk.Image
+	if img2 != nil {
+		var err error
+		parsedImage2, err = disk.ReadImage(bytes.NewReader(img2))
+		if err != nil {
+			return preparedDocument{}, errf("invalid-image", "disk 2 unreadable: %v", err)
+		}
+	}
 	listing, err := disklist.ParseImage(img)
 	if err != nil {
-		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: %v", err)
+		return preparedDocument{}, errf("invalid-image", "not a readable FZ image: %v", err)
 	}
 	files := make([]FileSnapshot, 0, len(listing.Entries))
 	for _, e := range listing.Entries {
@@ -722,7 +769,7 @@ func (s *Session) adoptState(img *disk.Image, img2 []byte) (Snapshot, *Error) {
 	// carries no instrument; the file row still lists it.
 	var inst *InstrumentSnapshot
 	vn := 0
-	if s.disMode {
+	if disMode {
 		vn = disVoiceCount(img)
 	}
 	for _, f := range files {
@@ -734,26 +781,25 @@ func (s *Session) adoptState(img *disk.Image, img2 []byte) (Snapshot, *Error) {
 			}
 		}
 	}
-	s.instrument = inst
-	s.image = img.Bytes()
-	s.image2 = img2
-	s.label = img.Label()
-	s.used = disk.ImageSize - img.FreeSectors()*disk.SectorSize
-	if img2 != nil {
-		if i2, err := disk.ReadImage(bytes.NewReader(img2)); err == nil {
-			s.used += disk.ImageSize - i2.FreeSectors()*disk.SectorSize
-		}
+	next := preparedDocument{
+		image:       img.Bytes(),
+		image2:      img2,
+		disMode:     disMode,
+		label:       img.Label(),
+		used:        disk.ImageSize - img.FreeSectors()*disk.SectorSize,
+		files:       files,
+		instrument:  inst,
+		missingDisk: missingDiskOf(img, img2),
 	}
-	s.files = files
-	s.missingDisk = missingDiskOf(img, img2)
+	if parsedImage2 != nil {
+		next.used += disk.ImageSize - parsedImage2.FreeSectors()*disk.SectorSize
+	}
 	// Measured once here, where the document changes and both images
 	// are in hand, so a snapshot stays a plain read.
-	s.audioBytes = 0
 	if inst != nil {
-		if fzf, cerr := s.stitchedDump(img); cerr == nil {
-			s.audioBytes = dumpAudioBytes(fzf, vn)
+		if fzf, cerr := stitchedDumpPair(img, img2); cerr == nil {
+			next.audioBytes = dumpAudioBytes(fzf, vn)
 		}
 	}
-	s.revision++
-	return s.Snapshot(), nil
+	return next, nil
 }
