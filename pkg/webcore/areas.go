@@ -1,7 +1,6 @@
 package webcore
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 
@@ -16,16 +15,7 @@ import (
 // mismatch means the caller's read of the container went stale, which
 // must fail loudly rather than corrupt a bank sector.
 func applyModelPatches(data []byte, patches []model.Patch) error {
-	for _, p := range patches {
-		if p.Offset < 0 || p.Offset+len(p.Old) > len(data) {
-			return fmt.Errorf("patch at %d out of bounds", p.Offset)
-		}
-		if !bytes.Equal(data[p.Offset:p.Offset+len(p.Old)], p.Old) {
-			return fmt.Errorf("patch pre-image mismatch at %d", p.Offset)
-		}
-		copy(data[p.Offset:p.Offset+len(p.New)], p.New)
-	}
-	return nil
+	return model.Apply(data, patches)
 }
 
 // Area field names, shared by the setter and the tests that drive it.
