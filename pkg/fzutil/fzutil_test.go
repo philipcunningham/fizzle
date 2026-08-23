@@ -456,7 +456,6 @@ func TestParseFZFHeader(t *testing.T) {
 // stale but plausible slots behind them.
 func makePreyShapedDump() []byte {
 	const banks = 2
-	const liveVoices = 5
 	voiceAreaSectors := disk.VoiceAreaSectors(8) // 8 written slot positions
 	data := make([]byte, banks*disk.SectorSize+voiceAreaSectors*disk.SectorSize+2*disk.SectorSize)
 	binary.LittleEndian.PutUint16(data[disk.BankVoiceCountOffset:], 1)
@@ -470,7 +469,6 @@ func makePreyShapedDump() []byte {
 		off := disk.VoiceSlotOffset(voiceArea, i)
 		binary.LittleEndian.PutUint16(data[off+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
 	}
-	_ = liveVoices
 	return data
 }
 

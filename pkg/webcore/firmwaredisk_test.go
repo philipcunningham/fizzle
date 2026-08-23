@@ -150,6 +150,58 @@ func TestExtractBanklessVoiceSlot(t *testing.T) {
 	}
 }
 
+// makeBankFZB builds a .fzb (bank sector plus a voice-header area)
+// whose areas play the given voice slots.
+func makeBankFZB(t *testing.T, name string, slots ...int) []byte {
+	t.Helper()
+	voiceSectors := disk.VoiceAreaSectors(len(slots))
+	fzb := make([]byte, (1+voiceSectors)*disk.SectorSize)
+	binary.LittleEndian.PutUint16(fzb[disk.BankVoiceCountOffset:], uint16(len(slots))) //nolint:gosec // small test values
+	padded := disk.PadLabel(name)
+	copy(fzb[disk.BankNameOffset:], padded[:])
+	for i, slot := range slots {
+		binary.LittleEndian.PutUint16(fzb[disk.BankVoiceNumOffset+i*disk.VPEntrySize:], uint16(slot)) //nolint:gosec // small test values
+		off := disk.VoiceSlotOffset(disk.SectorSize, i)
+		binary.LittleEndian.PutUint16(fzb[off+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
+	}
+	return fzb
+}
+
+// In DIS mode the voice area neither grows nor shrinks with bsteps, so
+// an incoming bank's areas are bounded by the DIS count itself: a bank
+// playing slots past it must be refused (those bytes are stale
+// headers), and one playing existing slots must land even when it
+// carries fewer areas than the bank it replaces.
+func TestAddBankBoundsAreasByDISCount(t *testing.T) {
+	t.Parallel()
+
+	t.Run("refuses areas past the count", func(t *testing.T) {
+		t.Parallel()
+		s, _ := openBanklessDisk(t)
+		fzb := makeBankFZB(t, "STALE BANK", 5, 6, 7)
+		if _, cerr := s.AddBank(fzb, fzfbuilder.BanklessDumpBanks); cerr == nil {
+			t.Fatal("expected refusal: the bank's areas play stale slots past the DIS count")
+		}
+	})
+
+	t.Run("accepts a smaller bank playing an existing slot", func(t *testing.T) {
+		t.Parallel()
+		s, _ := openBanklessDisk(t)
+		fzb := makeBankFZB(t, "SMALL BANK", fzfbuilder.BanklessDumpVoices-1)
+		if _, cerr := s.AddBank(fzb, 1); cerr != nil {
+			t.Fatalf("AddBank: %v", cerr)
+		}
+		out, cerr := s.ExportImage()
+		if cerr != nil {
+			t.Fatalf("ExportImage: %v", cerr)
+		}
+		dis := fullDumpDISTail(t, out)
+		if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
+			t.Errorf("DIS vn after bank replace = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+		}
+	})
+}
+
 // A dump whose DIS vn is garbage must still open through the walk.
 func TestOpenFallsBackOnCorruptDISVoiceCount(t *testing.T) {
 	t.Parallel()

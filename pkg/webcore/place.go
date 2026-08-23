@@ -318,8 +318,13 @@ func addBankPatches(d *dumpState, fzb []byte, slot int) ([]model.Patch, *Error) 
 	}
 	// An area that plays a slot this instrument does not have is a
 	// broken area, so a bank lifted from a larger instrument is refused
-	// rather than spliced in half working.
+	// rather than spliced in half working. In DIS mode the voice area
+	// neither grows nor shrinks with bsteps (see ensureVoiceSlots), so
+	// the DIS count itself is the bound: past it lie stale headers.
 	slots := d.header.NVoice + incoming - replaced
+	if d.disVN > 0 {
+		slots = d.header.NVoice
+	}
 	for a := range incoming {
 		vp := int(binary.LittleEndian.Uint16(fzb[disk.BankVoiceNumOffset+a*disk.VPEntrySize:]))
 		if vp >= slots {
