@@ -245,6 +245,8 @@ fizzle fzf info FZF [--json]
 
 Show the voice map: index, name, root note, key range, MIDI channel, output assignment, velocity range, sample rate, duration, loop markers.
 
+A standalone `.fzf` doesn't record its own voice count, so the count is inferred from the bank data. On a dump saved by the sampler itself, a voice assigned to no bank can fall outside that inference. The browser editor reads the true count from the disk, and a dump it exports carries the count with it. `fzf info` on a bare `disk get` extraction can run short.
+
 | Flag | Type | Default | Notes |
 |------|------|---------|-------|
 | `--json` | bool | false | Emit JSON. |

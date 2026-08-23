@@ -187,3 +187,15 @@ voice-area-sizing.md now carries the PREY evidence. Summed bstep can undercount 
 ## [2026-08-23] lint | Post-ingest pass
 
 Frontmatter complete on both touched pages. No stale citations: the pages touched today carry today's date, and no older page cites the code paths this branch changed. directory-blank-slots is linked from the map, so no orphan. No duplicate scope.
+
+## [2026-08-23] ingest | The DIS vn is trusted upward only
+
+Adversarial review over the branch: TECHNO.img carries vn 30 with 32 live voices. A vn at or below the walk is an undercount, and the walk wins. voice-area-sizing.md records the direction rule and the new 0x294 voice-count marker for standalone exports.
+
+## [2026-08-23] ingest | The gap read tolerance is inference
+
+directory-blank-slots.md now scopes its claim: the bytes prove the firmware writes gaps, not that it reads past one. An open question asks for the firmware trace. Recorded the printable-name gate and the fixture's unconfirmed audio redistribution terms.
+
+## [2026-08-23] lint | Correction: multi-disk-dumps was stale
+
+The 2026-08-23 post-ingest pass claimed no older page cited the changed code paths. multi-disk-dumps.md cites pkg/disk and pkg/diskadd and was dated 2026-08-20. Its citations re-verified today and the page bumped, with the 0x294 marker cross-reference added.

@@ -6,11 +6,13 @@ package webcore
 import (
 	"bytes"
 	"encoding/binary"
+	"os"
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )
@@ -293,5 +295,137 @@ func TestOpenFallsBackOnCorruptDISVoiceCount(t *testing.T) {
 	}
 	if got := len(snap.Disk.Instrument.Voices); got != 4 {
 		t.Errorf("voices = %d, want 4 (the walked count)", got)
+	}
+}
+
+// A DIS count below the walk is not trusted: the walk found live
+// voices past it (TECHNO.img carries vn=30 with 32 live voices).
+func TestOpenKeepsVoicesPastLowDISCount(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile("../../testdata/synthetic/TECHNO.img")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSession()
+	snap, cerr := s.OpenImage(data)
+	if cerr != nil {
+		t.Fatalf("OpenImage: %v", cerr)
+	}
+	voices := snap.Disk.Instrument.Voices
+	if len(voices) != 32 {
+		t.Fatalf("voices = %d, want 32 (a low DIS vn must not hide live voices)", len(voices))
+	}
+	if got := voices[30].Name; got != "PPGISH BASS1" {
+		t.Errorf("slot 30 = %q, want PPGISH BASS1", got)
+	}
+
+	// A routine edit must not overwrite the live voices past vn.
+	if _, cerr := s.DuplicateArea(0, 0); cerr != nil {
+		t.Fatalf("DuplicateArea: %v", cerr)
+	}
+	snap = s.Snapshot()
+	names := make(map[string]bool)
+	for _, v := range snap.Disk.Instrument.Voices {
+		names[v.Name] = true
+	}
+	if !names["PPGISH BASS1"] || !names["PPGISH BASS2"] {
+		t.Error("PPGISH voices lost after DuplicateArea")
+	}
+}
+
+// The parse mode is a property of the document, not of the bytes an
+// operation just moved: adding an area and deleting it again must not
+// flip to walk mode and drop the bank-less voice.
+func TestAddThenDeleteAreaKeepsBanklessVoice(t *testing.T) {
+	t.Parallel()
+	s, _ := openBanklessDisk(t)
+
+	if _, cerr := s.AddArea(0, 0); cerr != nil {
+		t.Fatalf("AddArea: %v", cerr)
+	}
+	snap, cerr := s.DeleteArea(0, 1)
+	if cerr != nil {
+		t.Fatalf("DeleteArea: %v", cerr)
+	}
+	if got := len(snap.Disk.Instrument.Voices); got != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("voices after add+delete = %d, want %d (mode flipped mid-session)",
+			got, fzfbuilder.BanklessDumpVoices)
+	}
+	out, cerr := s.ExportImage()
+	if cerr != nil {
+		t.Fatalf("ExportImage: %v", cerr)
+	}
+	dis := fullDumpDISTail(t, out)
+	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("DIS vn after add+delete = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+}
+
+// The bank-less voice must be editable, not only listed: the slot
+// write path has to honour the DIS count too.
+func TestRenameBanklessVoiceSlot(t *testing.T) {
+	t.Parallel()
+	s, _ := openBanklessDisk(t)
+
+	snap, cerr := s.RenameVoiceSlot(fzfbuilder.BanklessDumpVoices-1, "RENAMED")
+	if cerr != nil {
+		t.Fatalf("RenameVoiceSlot: %v", cerr)
+	}
+	voices := snap.Disk.Instrument.Voices
+	if got := voices[len(voices)-1].Name; got != "RENAMED" {
+		t.Errorf("renamed slot = %q, want RENAMED", got)
+	}
+}
+
+// Exporting the instrument and loading it back must not lose the
+// bank-less voice: the extract stamps the count where detection finds
+// it again.
+func TestExtractThenLoadKeepsBanklessVoice(t *testing.T) {
+	t.Parallel()
+	s, _ := openBanklessDisk(t)
+
+	fzf, cerr := s.ExtractFile(disk.FullDumpName)
+	if cerr != nil {
+		t.Fatalf("ExtractFile: %v", cerr)
+	}
+	snap, cerr := s.LoadFZF(fzf)
+	if cerr != nil {
+		t.Fatalf("LoadFZF: %v", cerr)
+	}
+	if got := len(snap.Disk.Instrument.Voices); got != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("voices after extract and reload = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+	out, cerr := s.ExportImage()
+	if cerr != nil {
+		t.Fatalf("ExportImage: %v", cerr)
+	}
+	dis := fullDumpDISTail(t, out)
+	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("DIS vn after reload = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+}
+
+// A marker-stamped dump loaded onto a fresh disk keeps its count: the
+// add path of the write-back, not just the replace path.
+func TestLoadMarkedDumpOnFreshDisk(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(dump, fzfbuilder.BanklessDumpVoices)
+
+	s := NewSession()
+	snap, cerr := s.LoadFZF(dump)
+	if cerr != nil {
+		t.Fatalf("LoadFZF: %v", cerr)
+	}
+	if got := len(snap.Disk.Instrument.Voices); got != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("voices = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+	out, cerr := s.ExportImage()
+	if cerr != nil {
+		t.Fatalf("ExportImage: %v", cerr)
+	}
+	dis := fullDumpDISTail(t, out)
+	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("DIS vn = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
 	}
 }

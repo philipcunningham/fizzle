@@ -265,11 +265,12 @@ func detectFullDumpWithVoiceCount(fileData []byte, vn int) (fileInfo, error) {
 	if vn < 1 || vn > disk.MaxVoices {
 		return fileInfo{}, fmt.Errorf("voice count %d outside 1..%d", vn, disk.MaxVoices)
 	}
-	fi.nvoice = vn
-	fi.nwave = disk.SectorsNeeded(len(fileData)) - fi.nbank - disk.VoiceAreaSectors(vn)
-	if fi.nwave < 0 {
-		fi.nwave = 0
+	totalSectors := disk.SectorsNeeded(len(fileData))
+	if fi.nbank+disk.VoiceAreaSectors(vn) > totalSectors {
+		return fileInfo{}, fmt.Errorf("voice count %d needs a voice area running past the file", vn)
 	}
+	fi.nvoice = vn
+	fi.nwave = totalSectors - fi.nbank - disk.VoiceAreaSectors(vn)
 	applyMultiDiskMarker(fileData, &fi)
 	return fi, nil
 }
@@ -439,6 +440,7 @@ func detectFile(fileData []byte) (fileInfo, error) {
 				fi.nwave = 0
 			}
 
+			applyVoiceCountMarker(fileData, &fi)
 			applyMultiDiskMarker(fileData, &fi)
 			return fi, nil
 		}
@@ -455,6 +457,21 @@ func detectFile(fileData []byte) (fileInfo, error) {
 	// sectors, breaking the sampler's "Next disk?" prompt.
 	applyMultiDiskMarker(fileData, &fi)
 	return fi, nil
+}
+
+// applyVoiceCountMarker honours the fizzle voice-count marker (see
+// disk.BankVoiceMarkerOffset): an exported dump whose count the walk
+// cannot re-derive carries it, and the DIS tail must get that count.
+func applyVoiceCountMarker(fileData []byte, fi *fileInfo) {
+	vn := fzutil.MarkerVoiceCount(fileData)
+	if vn == 0 {
+		return
+	}
+	fi.nvoice = vn
+	fi.nwave = disk.SectorsNeeded(len(fileData)) - fi.nbank - disk.VoiceAreaSectors(vn)
+	if fi.nwave < 0 {
+		fi.nwave = 0
+	}
 }
 
 // applyMultiDiskMarker honours the multi-disk total-wave marker at

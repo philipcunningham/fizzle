@@ -397,14 +397,16 @@ func (img *Image) SetLabel(name string) {
 
 // Directory reads all non-empty directory entries from sector 1. A
 // NULL first name byte marks that one entry blank (spec section 1-3),
-// not the end: firmware deletion leaves the gap in place.
+// not the end: firmware deletion leaves the gap in place. A slot whose
+// name is not printable ASCII is no entry either, so old media's
+// trailing rubbish neither lists nor refuses the disk.
 func (img *Image) Directory() ([]DirEntry, error) {
 	var entries []DirEntry
 	base := DirSector * SectorSize
 	for i := range MaxDirEntries {
 		off := base + i*DirEntrySize
 		b := img.data[off : off+DirEntrySize]
-		if b[0] == 0 {
+		if b[0] == 0 || !IsPrintableName(b[:LabelSize]) {
 			continue
 		}
 		e, err := DecodeDirEntry(b)
@@ -473,7 +475,7 @@ func (img *Image) RemoveFile(name string) error {
 	var targetEntry DirEntry
 	for i := range MaxDirEntries {
 		off := base + i*DirEntrySize
-		if img.data[off] == 0 {
+		if img.data[off] == 0 || !IsPrintableName(img.data[off:off+LabelSize]) {
 			continue
 		}
 		e, err := DecodeDirEntry(img.data[off : off+DirEntrySize])
@@ -510,14 +512,29 @@ func (img *Image) RemoveFile(name string) error {
 		return fmt.Errorf("disk: decoding DIS: %w", err)
 	}
 
-	if err := img.CATClearAllocated(int(targetEntry.DisSector)); err != nil {
-		return err
+	// A stale entry can alias a live file's DIS sector; freeing the
+	// sectors then pulls them out from under the live file. The alias
+	// entry goes, its sectors stay.
+	aliased := false
+	for i := range MaxDirEntries {
+		off := base + i*DirEntrySize
+		if i == target || img.data[off] == 0 || !IsPrintableName(img.data[off:off+LabelSize]) {
+			continue
+		}
+		if binary.LittleEndian.Uint16(img.data[off+LabelSize+2:off+LabelSize+4]) == targetEntry.DisSector {
+			aliased = true
+			break
+		}
 	}
-
-	for _, ext := range dis.Extents {
-		for s := int(ext[0]); s <= int(ext[1]); s++ {
-			if err := img.CATClearAllocated(s); err != nil {
-				return err
+	if !aliased {
+		if err := img.CATClearAllocated(int(targetEntry.DisSector)); err != nil {
+			return err
+		}
+		for _, ext := range dis.Extents {
+			for s := int(ext[0]); s <= int(ext[1]); s++ {
+				if err := img.CATClearAllocated(s); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -530,7 +547,7 @@ func (img *Image) RemoveFile(name string) error {
 			continue
 		}
 		srcOff := base + src*DirEntrySize
-		if img.data[srcOff] == 0 {
+		if img.data[srcOff] == 0 || !IsPrintableName(img.data[srcOff:srcOff+LabelSize]) {
 			continue
 		}
 		dstOff := base + dst*DirEntrySize

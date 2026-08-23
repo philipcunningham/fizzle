@@ -7,6 +7,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskget"
+	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/voiceextract"
 	"github.com/philipcunningham/fizzle/pkg/wav"
@@ -56,6 +57,7 @@ func (s *Session) DeleteFile(name string) (Snapshot, *Error) {
 		return s.Snapshot(), errf(codeNotFound, "%v", err)
 	}
 	if name == disk.FullDumpName {
+		s.disMode = false
 		return s.adoptPair(img, nil)
 	}
 	return s.adopt(img)
@@ -69,12 +71,24 @@ func (s *Session) ExtractFile(name string) ([]byte, *Error) {
 	if cerr != nil {
 		return nil, cerr
 	}
+	var data []byte
 	if name == disk.FullDumpName && s.image2 != nil {
-		return s.stitchedDump(img)
+		stitched, cerr := s.stitchedDump(img)
+		if cerr != nil {
+			return nil, cerr
+		}
+		data = stitched
+	} else {
+		got, gerr := diskget.FromImage(img, name)
+		if gerr != nil {
+			return nil, errf(codeNotFound, "%v", gerr)
+		}
+		data = got
 	}
-	data, gerr := diskget.FromImage(img, name)
-	if gerr != nil {
-		return nil, errf(codeNotFound, "%v", gerr)
+	// A standalone dump loses the DIS, so a count the walk cannot
+	// re-derive rides out in the fizzle marker.
+	if name == disk.FullDumpName && s.disMode {
+		fzutil.StampVoiceCountMarker(data, disVoiceCount(img))
 	}
 	return data, nil
 }
@@ -146,6 +160,7 @@ func (s *Session) NewInstrument(name string) (Snapshot, *Error) {
 	if err := diskadd.AddToImage(img, emptyInstrumentDump(name), 0); err != nil {
 		return s.Snapshot(), addError(err)
 	}
+	s.disMode = false
 	return s.adopt(img)
 }
 

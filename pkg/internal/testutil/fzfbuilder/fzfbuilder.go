@@ -20,7 +20,9 @@ const (
 
 // MakeBanklessVoiceDump builds a dump shaped like the PREY.img
 // fixture's: bsteps sum to 4, five live voices (VOICE0..VOICE4, the
-// fifth in no bank), three stale slots, 2 audio sectors. Only a DIS
+// fifth in no bank) with monotonic wave pointers tiling the 2 audio
+// sectors, and three stale slots repeating the pointers of
+// VOICE1..VOICE3, the way a smaller re-save leaves them. Only a DIS
 // vn of 5 identifies the live voices.
 func MakeBanklessVoiceDump(t *testing.T) []byte {
 	t.Helper()
@@ -38,17 +40,20 @@ func MakeBanklessVoiceDump(t *testing.T) []byte {
 			data[disk.SectorSize+disk.BankVoiceNumOffset+i*disk.VPEntrySize:], uint16(i+1)) //nolint:gosec // G115: 1..3
 	}
 	voiceArea := BanklessDumpBanks * disk.SectorSize
-	writeSlot := func(slot int, name string) {
+	writeSlot := func(slot int, name string, wavst, waved uint32) {
 		off := disk.VoiceSlotOffset(voiceArea, slot)
 		binary.LittleEndian.PutUint16(data[off+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
+		binary.LittleEndian.PutUint32(data[off+disk.VoiceWaveStartOffset:], wavst)
+		binary.LittleEndian.PutUint32(data[off+disk.VoiceWaveEndOffset:], waved)
 		padded := disk.PadLabel(name)
 		copy(data[off+disk.VoiceNameOffset:], padded[:])
 	}
+	const perVoice = 1024 / BanklessDumpVoices // samples per live voice, 2 sectors tiled
 	for i := range BanklessDumpVoices {
-		writeSlot(i, "VOICE"+string(rune('0'+i)))
+		writeSlot(i, "VOICE"+string(rune('0'+i)), uint32(i*perVoice), uint32((i+1)*perVoice)) //nolint:gosec // small test values
 	}
 	for i := 1; i <= 3; i++ {
-		writeSlot(BanklessDumpVoices-1+i, "VOICE"+string(rune('0'+i)))
+		writeSlot(BanklessDumpVoices-1+i, "VOICE"+string(rune('0'+i)), uint32(i*perVoice), uint32((i+1)*perVoice)) //nolint:gosec // small test values
 	}
 	return data
 }

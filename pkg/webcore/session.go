@@ -138,6 +138,11 @@ type Session struct {
 
 	instrument  *InstrumentSnapshot
 	missingDisk int // 1 or 2 when one half of a pair was opened alone
+	// disMode marks a document whose dump parses under its DIS voice
+	// count (see documentDISMode). Decided at document boundaries and
+	// held through edits: deriving it per operation lets an edit that
+	// moves a bstep flip the mode and drop a voice on the next one.
+	disMode bool
 
 	past        []imagePair // undo stack, oldest first
 	future      []imagePair // redo stack
@@ -227,6 +232,31 @@ func dumpAudioBytes(fzf []byte, disVN int) int {
 		return 0
 	}
 	return len(d.fzf) - d.audioStart
+}
+
+// refreshDISMode re-derives the parse mode after a mutation that
+// replaced the instrument wholesale rather than editing it.
+func (s *Session) refreshDISMode() {
+	img, err := disk.ReadImage(bytes.NewReader(s.image))
+	if err != nil {
+		s.disMode = false
+		return
+	}
+	s.disMode = documentDISMode(img)
+}
+
+// documentDISMode reports whether the disk's dump parses under its
+// DIS voice count rather than the walk.
+func documentDISMode(img *disk.Image) bool {
+	vn := disVoiceCount(img)
+	if vn == 0 {
+		return false
+	}
+	fzf, err := diskget.FromImage(img, disk.FullDumpName)
+	if err != nil {
+		return false
+	}
+	return normalisedDISVoiceCount(fzf, vn) > 0
 }
 
 // disVoiceCount reads the voice count from the FULL-DATA-FZ entry's
@@ -524,6 +554,7 @@ func (s *Session) Undo() (Snapshot, *Error) {
 	}
 	s.past = s.past[:len(s.past)-1]
 	s.future = append(s.future, imagePair{img1: s.image, img2: s.image2})
+	s.disMode = documentDISMode(img)
 	return s.adoptState(img, prev.img2)
 }
 
@@ -540,6 +571,7 @@ func (s *Session) Redo() (Snapshot, *Error) {
 	}
 	s.future = s.future[:len(s.future)-1]
 	s.pushHistory(imagePair{img1: s.image, img2: s.image2})
+	s.disMode = documentDISMode(img)
 	return s.adoptState(img, next.img2)
 }
 
@@ -575,10 +607,16 @@ func (s *Session) install(data []byte) (Snapshot, *Error) {
 	if err != nil {
 		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: %v", err)
 	}
-	// ReadImage only checks the container. Validate the directory the
-	// way the sibling readers (pkg/disklist, pkg/diskget) do: every
-	// entry's DIS pointer must land outside the reserved sectors and
-	// inside the disk, or the sampler can't use the disk.
+	// ReadImage only checks the container. The Disk ID tag (spec
+	// section 1-2) separates a formatted FZ disk from arbitrary bytes,
+	// now that garbage directory slots are skipped rather than decoded.
+	if img.Bytes()[disk.DiskNameTagOffset] != disk.DiskNameTag {
+		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: no FZ disk identification tag")
+	}
+	// Validate the directory the way the sibling readers (pkg/disklist,
+	// pkg/diskget) do: every entry's DIS pointer must land outside the
+	// reserved sectors and inside the disk, or the sampler can't use
+	// the disk.
 	entries, err := img.Directory()
 	if err != nil {
 		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: %v", err)
@@ -597,6 +635,7 @@ func (s *Session) install(data []byte) (Snapshot, *Error) {
 // because undoing past an open would resurrect the disk the user just
 // left, and it would arrive under the new document's name.
 func (s *Session) adoptFresh(img *disk.Image, img2 []byte) (Snapshot, *Error) {
+	s.disMode = documentDISMode(img)
 	snap, cerr := s.adoptState(img, img2)
 	if cerr != nil {
 		return snap, cerr
@@ -690,7 +729,10 @@ func (s *Session) adoptState(img *disk.Image, img2 []byte) (Snapshot, *Error) {
 	// edits (spec section 6). A dump that fails to parse simply
 	// carries no instrument; the file row still lists it.
 	var inst *InstrumentSnapshot
-	vn := disVoiceCount(img)
+	vn := 0
+	if s.disMode {
+		vn = disVoiceCount(img)
+	}
 	for _, f := range files {
 		if f.Name == disk.FullDumpName && f.Type == "full" {
 			if data, err := diskget.FromImage(img, f.Name); err == nil {

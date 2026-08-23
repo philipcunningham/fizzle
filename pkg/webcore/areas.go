@@ -74,10 +74,15 @@ type dumpState struct {
 }
 
 // newDumpState parses a full dump into the context the area ops work
-// over. disVN is the voice count from the document's DIS tail, 0 when
-// unknown.
+// over. disVN is the document's DIS-mode voice count, 0 for walk mode
+// (see documentDISMode); a count the bytes stopped backing falls back
+// to the walk.
 func newDumpState(fzf []byte, disVN int) (*dumpState, *Error) {
-	disVN = normalisedDISVoiceCount(fzf, disVN)
+	if disVN > 0 {
+		if _, err := fzutil.ParseFZFHeaderWithVoiceCount(fzf, disVN); err != nil {
+			disVN = 0
+		}
+	}
 	hdr, err := dumpHeaderFor(fzf, disVN)
 	if err != nil {
 		return nil, errf("invalid-image", "%v", err)
@@ -96,21 +101,13 @@ func newDumpState(fzf []byte, disVN int) (*dumpState, *Error) {
 }
 
 // normalisedDISVoiceCount picks the parse mode: disVN (DIS mode) only
-// where the count is usable and the walk yields something else, 0
-// (walk mode) where the walk agrees or the count fails validation.
-// Walk mode keeps fizzle-authored documents under the stricter
-// every-reader-agrees invariant.
+// where the count validates and runs ABOVE the walk, the one direction
+// the walk cannot see (a voice in no bank). A count at or below the
+// walk returns 0 (walk mode): real disks carry a vn below their live
+// voice count (TECHNO.img says 30 of its 32), so a low vn is never
+// allowed to hide or overwrite the voices past it.
 func normalisedDISVoiceCount(fzf []byte, disVN int) int {
-	if disVN <= 0 {
-		return 0
-	}
-	if walk, err := fzutil.ParseFZFHeader(fzf); err == nil && walk.NVoice == disVN {
-		return 0
-	}
-	if _, err := fzutil.ParseFZFHeaderWithVoiceCount(fzf, disVN); err != nil {
-		return 0
-	}
-	return disVN
+	return fzutil.NormalisedVoiceCount(fzf, disVN)
 }
 
 // dumpHeaderFor parses under a normalised DIS count, walking on 0.
@@ -452,7 +449,11 @@ func (s *Session) patchDump(build func(d *dumpState) ([]model.Patch, *Error)) (S
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	out, outVN, cerr := patchDumpBytes(fzf, disVoiceCount(img), build)
+	disVN := 0
+	if s.disMode {
+		disVN = disVoiceCount(img)
+	}
+	out, outVN, cerr := patchDumpBytes(fzf, disVN, build)
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}

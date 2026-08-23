@@ -259,7 +259,13 @@ const (
 	// multi-disk firmware uses this region to stamp the total wave
 	// sector count across both disks of a 2-disk full dump. See
 	// pkg/fzfinfo for the split detection that reads this marker.
-	BankTotalWaveOffset    = 0x290
+	BankTotalWaveOffset = 0x290
+
+	// BankVoiceMarkerOffset is a fizzle-defined field in the same
+	// firmware padding region: the magic "fz" then the dump's voice
+	// count as a 16-bit word, carrying into a standalone export the
+	// count its walk cannot re-derive (see fzutil.MarkerVoiceCount).
+	BankVoiceMarkerOffset  = 0x294
 	BankMIDIRecvChanOffset = 0x142
 	MaxBanks               = 8
 	BankKeyHighOffset      = 0x02

@@ -75,7 +75,11 @@ func (s *Session) slotFZV(slot int) ([]byte, *Error) {
 	var voices [][]byte
 	var slots []int
 	var uerr error
-	if vn := normalisedDISVoiceCount(fzf, disVoiceCount(img)); vn > 0 {
+	vn := 0
+	if s.disMode {
+		vn = disVoiceCount(img)
+	}
+	if vn > 0 {
 		voices, slots, uerr = voiceunpack.UnpackDataFromBytesWithVoiceCount(fzf, vn)
 	} else {
 		voices, slots, uerr = voiceunpack.UnpackDataFromBytes(fzf)

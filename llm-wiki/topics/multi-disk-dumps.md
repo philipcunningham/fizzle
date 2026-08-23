@@ -3,7 +3,7 @@ type: topic
 title: Multi-disk full dumps
 description: Disk 1 carries all metadata for the whole instrument; disk 2 is pure audio continuation. Confirmed on FZ-10M hardware.
 tags: [disk, fzf, multi-disk]
-updated: 2026-08-20
+updated: 2026-08-23
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 1-3
   - FZ-10M hardware (2-disk save inspected byte by byte)
@@ -31,7 +31,8 @@ instrument from a real FZ-10M and inspecting the output shows:
 - DIS tail `wn` is the total wave sectors across both disks. fizzle
   stores that total at bank sector offset 0x290 (a fizzle-defined
   field, zero on single-disk dumps) so `pkg/diskadd` can write the
-  correct `wn`.
+  correct `wn`. A sibling fizzle marker at 0x294 carries a dump's
+  voice count; see [voice-area-sizing](voice-area-sizing.md).
 - Audio for as many voices as fit in 1.25 MB.
 
 **Disk 2** (`disknum = 1`) is pure audio continuation: no bank sector,
