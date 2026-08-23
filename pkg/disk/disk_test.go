@@ -427,7 +427,35 @@ func TestDirectory(t *testing.T) {
 		}
 	})
 
-	t.Run("terminates at zero", func(t *testing.T) {
+	t.Run("skips blank slots", func(t *testing.T) {
+		// Firmware deletion zeroes the first name byte and leaves the
+		// gap, so a live entry can follow a blank slot (PREY.img holds
+		// its dump in slot 1 behind a deleted voice in slot 0).
+		t.Parallel()
+		data := make([]byte, ImageSize)
+		img, err := ReadImage(bytes.NewReader(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		deleted := DirEntry{Name: PadLabel("ADDICTED"), FileType: TypeVoice, DisSector: 2}
+		live := DirEntry{Name: PadLabel(FullDumpName), FileType: TypeFullDump, DisSector: 126}
+		base := DirSector * SectorSize
+		copy(img.Bytes()[base:], EncodeDirEntry(deleted))
+		img.Bytes()[base] = 0 // firmware-style deletion: NULL first name byte
+		copy(img.Bytes()[base+DirEntrySize:], EncodeDirEntry(live))
+		entries, err := img.Directory()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("expected 1 entry, got %d", len(entries))
+		}
+		if entries[0] != live {
+			t.Errorf("got %+v, want %+v", entries[0], live)
+		}
+	})
+
+	t.Run("skips a gap between live entries", func(t *testing.T) {
 		t.Parallel()
 		data := make([]byte, ImageSize)
 		img, err := ReadImage(bytes.NewReader(data))
@@ -435,17 +463,20 @@ func TestDirectory(t *testing.T) {
 			t.Fatal(err)
 		}
 		e1 := DirEntry{Name: PadLabel("FIRST"), FileType: TypeVoice, DisSector: 2}
-		e2 := DirEntry{Name: PadLabel("SECOND"), FileType: TypeBank, DisSector: 3}
+		e3 := DirEntry{Name: PadLabel("THIRD"), FileType: TypeVoice, DisSector: 3}
 		base := DirSector * SectorSize
 		copy(img.Bytes()[base:], EncodeDirEntry(e1))
-		copy(img.Bytes()[base+DirEntrySize:], EncodeDirEntry(e2))
-		// Third slot is zero (default), so iteration should stop here.
+		// Slot 1 stays blank (a deleted file); slot 2 is live.
+		copy(img.Bytes()[base+2*DirEntrySize:], EncodeDirEntry(e3))
 		entries, err := img.Directory()
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(entries) != 2 {
 			t.Fatalf("expected 2 entries, got %d", len(entries))
+		}
+		if entries[0] != e1 || entries[1] != e3 {
+			t.Errorf("got %+v, want [%+v %+v]", entries, e1, e3)
 		}
 	})
 }
@@ -1115,6 +1146,36 @@ func TestRemoveFileCompactsDirectory(t *testing.T) {
 	}
 	if entries[1].NameString() != "VOICEC" {
 		t.Errorf("entry 1: got %q, want VOICEC", entries[1].NameString())
+	}
+}
+
+func TestRemoveFileAfterBlankSlot(t *testing.T) {
+	// Behind a blank slot, a live entry's listing index no longer
+	// equals its slot index; RemoveFile must zero the right slot.
+	t.Parallel()
+	img := buildFormattedImage(t)
+
+	addFakeVoice(t, img, "VOICEA")
+	addFakeVoice(t, img, "VOICEB")
+	addFakeVoice(t, img, "VOICEC")
+
+	// Delete VOICEA the way the firmware does: NULL the first name byte,
+	// leaving the gap.
+	img.Bytes()[DirSector*SectorSize] = 0
+
+	if err := img.RemoveFile("VOICEC"); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := img.Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry after remove, got %d", len(entries))
+	}
+	if entries[0].NameString() != "VOICEB" {
+		t.Errorf("surviving entry: got %q, want VOICEB", entries[0].NameString())
 	}
 }
 

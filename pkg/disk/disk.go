@@ -396,6 +396,11 @@ func (img *Image) SetLabel(name string) {
 }
 
 // Directory reads all non-empty directory entries from sector 1.
+//
+// A NULL first name byte marks that one entry blank (spec section 1-3),
+// not the end of the directory: the firmware deletes a file by zeroing
+// the byte and leaves the gap in place, so live entries can follow a
+// blank slot. The scan steps over blanks rather than stopping.
 func (img *Image) Directory() ([]DirEntry, error) {
 	var entries []DirEntry
 	base := DirSector * SectorSize
@@ -403,7 +408,7 @@ func (img *Image) Directory() ([]DirEntry, error) {
 		off := base + i*DirEntrySize
 		b := img.data[off : off+DirEntrySize]
 		if b[0] == 0 {
-			break
+			continue
 		}
 		e, err := DecodeDirEntry(b)
 		if err != nil {
@@ -464,19 +469,28 @@ func (img *Image) CATClearAllocated(n int) error {
 // sectors in the CAT bitmap and compacts the directory so there are no gaps.
 // The match is case-insensitive.
 func (img *Image) RemoveFile(name string) error {
-	entries, err := img.Directory()
-	if err != nil {
-		return fmt.Errorf("disk: reading directory: %w", err)
-	}
-
-	idx := -1
-	for i, e := range entries {
+	// Work on raw slots rather than the filtered Directory() listing: a
+	// firmware-deleted entry leaves its slot blank in place, so a live
+	// entry's listing index need not equal its slot index.
+	base := DirSector * SectorSize
+	target := -1
+	var targetEntry DirEntry
+	for i := range MaxDirEntries {
+		off := base + i*DirEntrySize
+		if img.data[off] == 0 {
+			continue
+		}
+		e, err := DecodeDirEntry(img.data[off : off+DirEntrySize])
+		if err != nil {
+			return fmt.Errorf("disk: reading directory: %w", err)
+		}
 		if strings.EqualFold(e.NameString(), name) {
-			idx = i
+			target = i
+			targetEntry = e
 			break
 		}
 	}
-	if idx < 0 {
+	if target < 0 {
 		return fmt.Errorf("%w: %s", ErrNotFound, name)
 	}
 
@@ -486,12 +500,12 @@ func (img *Image) RemoveFile(name string) error {
 	// DIS, and its fake extents drive CATClearAllocated over arbitrary
 	// sectors, clearing the reserved bits and corrupting the CAT bitmap.
 	// pkg/disklist and pkg/diskget enforce the same bound.
-	if int(entries[idx].DisSector) < ReservedSectors || int(entries[idx].DisSector) >= SectorCount {
+	if int(targetEntry.DisSector) < ReservedSectors || int(targetEntry.DisSector) >= SectorCount {
 		return fmt.Errorf("%w: directory entry %q DIS sector %d out of range [%d,%d)",
-			ErrCorruptDIS, entries[idx].NameString(), entries[idx].DisSector, ReservedSectors, SectorCount)
+			ErrCorruptDIS, targetEntry.NameString(), targetEntry.DisSector, ReservedSectors, SectorCount)
 	}
 
-	disSec, err := img.SectorRef(int(entries[idx].DisSector))
+	disSec, err := img.SectorRef(int(targetEntry.DisSector))
 	if err != nil {
 		return fmt.Errorf("disk: reading DIS sector: %w", err)
 	}
@@ -500,7 +514,7 @@ func (img *Image) RemoveFile(name string) error {
 		return fmt.Errorf("disk: decoding DIS: %w", err)
 	}
 
-	if err := img.CATClearAllocated(int(entries[idx].DisSector)); err != nil {
+	if err := img.CATClearAllocated(int(targetEntry.DisSector)); err != nil {
 		return err
 	}
 
@@ -512,20 +526,26 @@ func (img *Image) RemoveFile(name string) error {
 		}
 	}
 
-	base := DirSector * SectorSize
-	removeOff := base + idx*DirEntrySize
-	for i := range DirEntrySize {
-		img.data[removeOff+i] = 0
+	// Compact the directory: pack the surviving entries densely from
+	// slot 0 (stepping over any blank slots the firmware left) and zero
+	// the tail.
+	dst := 0
+	for src := range MaxDirEntries {
+		if src == target {
+			continue
+		}
+		srcOff := base + src*DirEntrySize
+		if img.data[srcOff] == 0 {
+			continue
+		}
+		dstOff := base + dst*DirEntrySize
+		if dst != src {
+			copy(img.data[dstOff:dstOff+DirEntrySize], img.data[srcOff:srcOff+DirEntrySize])
+		}
+		dst++
 	}
-
-	for i := idx; i < len(entries)-1; i++ {
-		srcOff := base + (i+1)*DirEntrySize
-		dstOff := base + i*DirEntrySize
-		copy(img.data[dstOff:dstOff+DirEntrySize], img.data[srcOff:srcOff+DirEntrySize])
-	}
-	lastOff := base + (len(entries)-1)*DirEntrySize
-	for i := range DirEntrySize {
-		img.data[lastOff+i] = 0
+	for off := base + dst*DirEntrySize; off < base+MaxDirEntries*DirEntrySize; off++ {
+		img.data[off] = 0
 	}
 
 	return nil
