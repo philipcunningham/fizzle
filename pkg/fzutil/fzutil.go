@@ -309,9 +309,13 @@ func ParseFZFHeaderMarked(data []byte) (*FZFHeader, error) {
 	return ParseFZFHeader(data)
 }
 
-// ClearVoiceCountMarker zeroes the marker field.
+// ClearVoiceCountMarker zeroes the marker field where the magic
+// matches; firmware garbage at the offset stays byte for byte.
 func ClearVoiceCountMarker(data []byte) {
 	if len(data) < disk.BankVoiceMarkerOffset+4 {
+		return
+	}
+	if data[disk.BankVoiceMarkerOffset] != voiceMarkerMagic[0] || data[disk.BankVoiceMarkerOffset+1] != voiceMarkerMagic[1] {
 		return
 	}
 	clear(data[disk.BankVoiceMarkerOffset : disk.BankVoiceMarkerOffset+4])

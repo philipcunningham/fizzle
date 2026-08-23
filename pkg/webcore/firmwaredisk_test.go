@@ -12,6 +12,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/diskget"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
 	"github.com/philipcunningham/fizzle/pkg/model"
@@ -662,4 +663,42 @@ func TestGrownSlotIsCleared(t *testing.T) {
 			t.Fatalf("grown slot holds stale bytes: % x", slot[:16])
 		}
 	}
+}
+
+// A walk-mode extract of a dump with firmware garbage at the marker
+// offset stays byte identical: only a real marker is cleared.
+func TestWalkModeExtractKeepsGarbageBytes(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile("../../testdata/synthetic/TECHNO.img")
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := disk.ReadImage(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := diskget.FromImage(img, disk.FullDumpName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSession()
+	if _, cerr := s.OpenImage(data); cerr != nil {
+		t.Fatalf("OpenImage: %v", cerr)
+	}
+	got, cerr := s.ExtractFile(disk.FullDumpName)
+	if cerr != nil {
+		t.Fatalf("ExtractFile: %v", cerr)
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("extract differs from disk get at byte 0x%x", firstDiff(got, want))
+	}
+}
+
+func firstDiff(a, b []byte) int {
+	for i := range min(len(a), len(b)) {
+		if a[i] != b[i] {
+			return i
+		}
+	}
+	return min(len(a), len(b))
 }
