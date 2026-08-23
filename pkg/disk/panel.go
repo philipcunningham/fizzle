@@ -27,6 +27,11 @@ const (
 	// MaxAreaLevel is the largest AREA LEVEL the panel displays, and the
 	// largest bvol byte. The two run in opposite directions.
 	MaxAreaLevel = 127
+
+	// MinVelocity is the floor of the panel's MAX TOUCH and MIN TOUCH
+	// rows. Casio's owner's manual prints both sliders as 127 over 001,
+	// and a velocity of zero silences the voice.
+	MinVelocity = 1
 )
 
 // TuneDisplayToWord converts a TUNE display value to the stored dcp

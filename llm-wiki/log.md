@@ -161,3 +161,18 @@ The velocity RESONANCE and velocity DCF RATE rows were both recorded
 wrong, from misjudging the bounds table's record phase by one. A
 misaligned record still decodes into plausible bounds. The open
 question calling the velocity fields uncalibrated is gone.
+
+## [2026-08-23] ingest | Casio's manuals confirm the panel ranges
+
+The owner's manual and the FZ-1 and FZ-10M book confirm six emulator
+readings independently, the unsigned velocity resonance row included.
+Neither manual discusses stored bytes, so they settle what a row
+displays and leave every byte mapping where it was.
+
+## [2026-08-23] ingest | MAX TOUCH and MIN TOUCH floor at 001
+
+The owner's manual prints both velocity sliders as 127 over 001, where
+AREA LEVEL beside them floors at 000. A velocity of zero silences the
+voice. fizzle's area setter allowed it and now clamps to the panel's
+floor.
+

@@ -28,6 +28,12 @@ func applyModelPatches(data []byte, patches []model.Patch) error {
 	return nil
 }
 
+// Area field names, shared by the setter and the tests that drive it.
+const (
+	fieldAreaVelLow  = "velLow"
+	fieldAreaVelHigh = "velHigh"
+)
+
 // defaultRootKey is middle C, the root a fresh area falls back to when
 // the voice slot carries no usable one. The empty instrument's
 // placeholder area is seeded with the same note.
@@ -449,7 +455,14 @@ func bytePatch(data []byte, offset int, value byte) model.Patch {
 
 // clampByte clamps to [0, hi]; gosec sees the byte-safe bound.
 func clampByte(v, hi int) byte {
-	return byte(clampInt(v, 0, hi) & 0xff) // #nosec G115 -- clamped to [0,hi] within 0..255
+	return clampByteFrom(v, 0, hi)
+}
+
+// clampByteFrom clamps into an explicit span, for rows whose floor
+// isn't zero. The panel's MAX TOUCH and MIN TOUCH both start at 001,
+// and a velocity of zero silences the voice.
+func clampByteFrom(v, lo, hi int) byte {
+	return byte(clampInt(v, lo, hi) & 0xff) // #nosec G115 -- clamped to [lo,hi] within 0..255
 }
 
 // SetAreaField edits one Area field (R12). Numeric fields clamp to
@@ -468,10 +481,10 @@ func (s *Session) SetAreaField(bank, area int, field string, value int) (Snapsho
 			return []model.Patch{bytePatch(d.fzf, base+disk.BankKeyHighOffset+area, clampByte(value, 127))}, nil
 		case "root":
 			return []model.Patch{bytePatch(d.fzf, base+disk.BankKeyCentOffset+area, clampByte(value, 127))}, nil
-		case "velLow":
-			return []model.Patch{bytePatch(d.fzf, base+disk.BankVelLowOffset+area, clampByte(value, 127))}, nil
-		case "velHigh":
-			return []model.Patch{bytePatch(d.fzf, base+disk.BankVelHighOffset+area, clampByte(value, 127))}, nil
+		case fieldAreaVelLow:
+			return []model.Patch{bytePatch(d.fzf, base+disk.BankVelLowOffset+area, clampByteFrom(value, disk.MinVelocity, 127))}, nil
+		case fieldAreaVelHigh:
+			return []model.Patch{bytePatch(d.fzf, base+disk.BankVelHighOffset+area, clampByteFrom(value, disk.MinVelocity, 127))}, nil
 		case "volume":
 			// The panel's AREA LEVEL counts the opposite way to the
 			// stored byte, so convert rather than clamping the raw value.

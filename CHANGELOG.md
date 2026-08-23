@@ -14,6 +14,8 @@
 
 - Editing one envelope stage in the browser leaves the others alone. Saving used to rewrite all sixteen bytes through the display scale, which is lossy in both directions, so stages nobody touched could come back changed.
 
+- An area's velocity range floors at 1, matching the panel's `MIN TOUCH` and `MAX TOUCH` rows. Zero silences the voice, and the panel never offered it.
+
 - The sample rate is no longer editable on a recorded voice. The panel fixes it when the sample is taken.
 
 - The waveform draws a playhead while a note sounds, so a loop is visible and not only audible. It snaps back at the loop's end under a held key, then travels on to the end loop when the key comes up.

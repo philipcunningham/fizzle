@@ -7,6 +7,7 @@ updated: 2026-08-22
 sources:
   - FZ-10M hardware (calibration disk images; BRASS1 D3 1)
   - FZ-1 system ROM executed under an emulator (panel driven, bytes read back)
+  - Casio FZ-1 owner's manual, and the FZ-1 and FZ-10M book
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
 status: confirmed-hardware
 ---
@@ -53,6 +54,30 @@ value on the panel, save, and read the bytes back. That beats a static
 read of the ROM and falls short of a measurement on a real device.
 Treat each row as provisional until hardware confirms it.
 
+Casio's own manuals confirm the panel ranges independently, which is
+worth more than the emulator for what a row displays. The owner's
+manual prints each page's slider bounds, and the FZ-1 and FZ-10M book
+states several in prose:
+
+- TUNE is cents, one semitone either way. "The values for this
+  parameter are equal to cents. (One hundred divisions per semitone.)"
+- The LFO page carries seven rows: WAVE, LFO SYNC, DELAY, RATE, and
+  depths for OSC, DCA, and DCF. No attack row and no resonance depth
+  row appear in either manual.
+- DELAY is a fade in rather than a pre-delay. The book describes it as
+  the rate the depth climbs from zero, and adds: "Higher delay settings
+  cause longer LFO fade-ins." That fits one row driving an attack
+  value.
+- The velocity page's first four rows print as "+001" to "+127" or
+  "-001" to "-127". Resonance is "positive only ('000' to '127')".
+- AREA LEVEL: "The maximum value, 127, equals the voice's normal
+  loudness."
+- Envelope rates and levels top out at 99: "99 is the fastest" and
+  "99 is the greatest".
+
+The manuals say nothing about stored bytes, so they confirm the panel
+ranges and leave every byte mapping to the emulator.
+
 | Field | Panel range | Mapping |
 |---|---|---|
 | `vel_dca_kf`, `vel_dca_rs`, `vel_dcf_kf`, `vel_dcf_rs` | -127 to +127 | the raw signed byte |
@@ -72,6 +97,15 @@ record's phase by one, which still decodes into plausible bounds.
 the attack, and nothing reaches the resonance depth. `lfo_dcq` is zero
 in all 735 voices unpacked from the Casio factory library, and it can't
 be used on a physical unit.
+
+## What the manuals add
+
+MAX TOUCH and MIN TOUCH both floor at 001, not 000. The owner's manual
+prints both sliders as 127 over 001, and a velocity of zero silences
+the voice. AREA LEVEL beside them floors at 000.
+
+Key follow rows print two digits signed, "+01" to "+15" and "-01" to
+"-15", matching the byte over 8 rule above.
 
 ## Open questions
 

@@ -417,7 +417,7 @@ func TestSetAreaFieldRoundTripsAndClamps(t *testing.T) {
 		t.Fatalf("keyLow = %d, want 40", got)
 	}
 
-	if _, cerr := s.SetAreaField(0, 0, "velHigh", 900); cerr != nil {
+	if _, cerr := s.SetAreaField(0, 0, fieldAreaVelHigh, 900); cerr != nil {
 		t.Fatalf("SetAreaField: %v", cerr)
 	}
 	if got := instrument(t, s).Banks[0].Areas[0].VelHigh; got != 127 {
@@ -619,10 +619,10 @@ func TestDuplicateAreaSharesAudio(t *testing.T) {
 	}
 
 	// The velocity switch: narrow the two layers so they never fight.
-	if _, cerr := s.SetAreaField(0, 0, "velHigh", 64); cerr != nil {
+	if _, cerr := s.SetAreaField(0, 0, fieldAreaVelHigh, 64); cerr != nil {
 		t.Fatalf("SetAreaField: %v", cerr)
 	}
-	if _, cerr := s.SetAreaField(0, 2, "velLow", 65); cerr != nil {
+	if _, cerr := s.SetAreaField(0, 2, fieldAreaVelLow, 65); cerr != nil {
 		t.Fatalf("SetAreaField: %v", cerr)
 	}
 	inst = instrument(t, s)
@@ -728,5 +728,26 @@ func TestUntouchedAreaReadsAsFullLevel(t *testing.T) {
 	s := twoVoiceSession(t)
 	if got := instrument(t, s).Banks[0].Areas[0].Volume; got != disk.MaxAreaLevel {
 		t.Errorf("an untouched area reads %d, want %d", got, disk.MaxAreaLevel)
+	}
+}
+
+// The panel's MAX TOUCH and MIN TOUCH rows both floor at 001, not 000.
+// Casio's owner's manual prints the slider as 127 over 001, and a
+// velocity of zero silences the voice: fizzle's own SFZ importer warns
+// about exactly that.
+func TestVelocityRangeFloorsAtOne(t *testing.T) {
+	s := twoVoiceSession(t)
+	for _, field := range []string{fieldAreaVelLow, fieldAreaVelHigh} {
+		if _, cerr := s.SetAreaField(0, 0, field, 0); cerr != nil {
+			t.Fatalf("SetAreaField(%s, 0): %v", field, cerr)
+		}
+		area := instrument(t, s).Banks[0].Areas[0]
+		got := area.VelLow
+		if field == fieldAreaVelHigh {
+			got = area.VelHigh
+		}
+		if got != 1 {
+			t.Errorf("%s set to 0 reads %d, want 1: the panel's row floors at 001", field, got)
+		}
 	}
 }
