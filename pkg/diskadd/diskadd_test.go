@@ -1556,11 +1556,41 @@ func TestAddScrubsMarkerFromDiskPayload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(payload[disk.BankVoiceMarkerOffset:disk.BankVoiceMarkerOffset+4]) == "fzv1" {
+	if string(payload[disk.BankVoiceMarkerOffset:disk.BankVoiceMarkerOffset+4]) == testVoiceMarkerMagic {
 		t.Error("marker record written onto the disk payload")
 	}
 	// The caller's bytes stay stamped.
-	if string(dump[disk.BankVoiceMarkerOffset:disk.BankVoiceMarkerOffset+4]) != "fzv1" {
+	if string(dump[disk.BankVoiceMarkerOffset:disk.BankVoiceMarkerOffset+4]) != testVoiceMarkerMagic {
+		t.Error("input slice mutated")
+	}
+}
+
+const testVoiceMarkerMagic = "fzv1"
+
+// A stale marker is untrusted for counting but is still standalone
+// metadata, so it must not cross onto the disk either.
+func TestAddScrubsInvalidMarkerFromDiskPayload(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(dump, fzfbuilder.BanklessDumpVoices)
+	voiceOff := disk.VoiceSlotOffset(fzfbuilder.BanklessDumpBanks*disk.SectorSize, 0)
+	dump[voiceOff+disk.VoiceNameOffset] ^= 0x01
+	if got := fzutil.MarkerVoiceCount(dump); got != 0 {
+		t.Fatalf("stale marker count = %d, want 0", got)
+	}
+
+	img := formattedImage(t)
+	if err := AddToImage(img, dump, 0); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := diskget.FromImage(img, disk.FullDumpName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(payload[disk.BankVoiceMarkerOffset:disk.BankVoiceMarkerOffset+4]) == testVoiceMarkerMagic {
+		t.Error("invalid marker record written onto the disk payload")
+	}
+	if string(dump[disk.BankVoiceMarkerOffset:disk.BankVoiceMarkerOffset+4]) != testVoiceMarkerMagic {
 		t.Error("input slice mutated")
 	}
 }

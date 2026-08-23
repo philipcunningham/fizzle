@@ -123,7 +123,7 @@ func writeToImage(imagePath string, fileData []byte, name [disk.LabelSize]byte, 
 // The voice-count marker is strictly standalone: its count lands in the DIS
 // tail, and the record is scrubbed from a copy before touching the media.
 func addToImage(img *disk.Image, fileData []byte, name [disk.LabelSize]byte, fileType disk.FileType, diskNum uint8, nbank, nvoice, nwave int) error {
-	if fileType == disk.TypeFullDump && fzutil.MarkerVoiceCount(fileData) > 0 {
+	if fileType == disk.TypeFullDump {
 		scrubbed := append([]byte(nil), fileData...)
 		fzutil.ClearVoiceCountMarker(scrubbed)
 		fileData = scrubbed

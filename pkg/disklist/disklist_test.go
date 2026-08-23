@@ -451,7 +451,7 @@ func TestParseShowsDamagedPointerAsCorrupt(t *testing.T) {
 	if listing.Entries[0].TypeName != CorruptTypeName || listing.Entries[0].Name != "KICK" {
 		t.Errorf("row = %+v, want KICK marked %q", listing.Entries[0], CorruptTypeName)
 	}
-	if listing.Entries[0].Slot != 1 {
-		t.Errorf("corrupt row slot = %d, want the 1-based physical slot 1", listing.Entries[0].Slot)
+	if listing.Entries[0].SlotIndex == nil || *listing.Entries[0].SlotIndex != 0 {
+		t.Errorf("corrupt row slot index = %v, want the 0-based physical slot 0", listing.Entries[0].SlotIndex)
 	}
 }
