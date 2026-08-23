@@ -1051,3 +1051,33 @@ func TestRenderLeavesTheCentsAloneInsideThePanelSpan(t *testing.T) {
 		t.Errorf("a tune inside the panel's span names semitones:\n%s", out)
 	}
 }
+
+// When both parts are named they have to sum to the file's detune. The
+// panel reads a zero low byte as a magnitude of 256, so taking the
+// whole word's cents beside its semitone count double counts at every
+// exact semitone below zero.
+func TestRenderTunePartsSumToTheStoredWord(t *testing.T) {
+	for _, c := range []struct {
+		word  int16
+		cents string
+		semis string
+	}{
+		{512, "+000", "+2"},
+		{256, "+000", "+1"},
+		{-256, "+000", "-1"},
+		{-512, "+000", "-2"},
+		{-640, "-051", "-2"},
+		{640, "+051", "+2"},
+	} {
+		p := &VoiceParams{Name: "T", DCP: c.word}
+		var buf bytes.Buffer
+		Render(&buf, p)
+		out := buf.String()
+		if !strings.Contains(out, c.cents+" cents") {
+			t.Errorf("word %d: want %s cents, got:\n%s", c.word, c.cents, out)
+		}
+		if !strings.Contains(out, c.semis+" semitones") {
+			t.Errorf("word %d: want %s semitones, got:\n%s", c.word, c.semis, out)
+		}
+	}
+}

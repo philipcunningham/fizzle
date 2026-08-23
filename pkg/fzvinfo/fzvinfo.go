@@ -489,13 +489,18 @@ func Render(w io.Writer, p *VoiceParams) {
 		// rather than mimicking the panel into hiding an audible
 		// detune. Only a foreign file reaches here: the panel and
 		// fizzle's own editors both stop at one semitone.
-		cents := disk.TuneWordToDisplay(p.DCP)
 		semitones := int(p.DCP) / disk.SemitoneDCPScale
 		if semitones != 0 {
+			// The two parts have to sum to the file's detune, so the
+			// cents come from what's left after the semitones. Reading
+			// the whole word here would double count: the panel takes a
+			// zero low byte as a magnitude of 256, so its reading
+			// diverges from the remainder at every exact semitone.
+			rest := p.DCP - int16(semitones*disk.SemitoneDCPScale) //nolint:gosec // bounded by the division above
 			render.Printf(w, "Tune:        %+04d cents and %+d semitones, past the panel's row\n",
-				cents, semitones)
+				disk.TuneWordToDisplay(rest), semitones)
 		} else {
-			render.Printf(w, "Tune:        %+d cents\n", cents)
+			render.Printf(w, "Tune:        %+d cents\n", disk.TuneWordToDisplay(p.DCP))
 		}
 	}
 
