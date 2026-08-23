@@ -7,10 +7,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 )
 
-// TestSplitDumpWithVoiceCount drives a two-disk split of a dump whose
-// voice count only the DIS knows: one bank plays one of two voices, so
-// the walk undercounts and would place the split's audio boundary a
-// sector early.
+// A two-disk split of a dump whose voice count only the DIS knows.
 func TestSplitDumpWithVoiceCount(t *testing.T) {
 	t.Parallel()
 	const vn = 2

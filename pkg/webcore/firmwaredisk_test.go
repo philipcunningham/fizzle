@@ -1,8 +1,7 @@
 package webcore
 
-// Tests for documents the FZ firmware authored rather than fizzle,
-// where only the DIS tail's vn identifies the live voices. They pin
-// that the session reads it, edits under it, and writes it back.
+// The session must read the DIS tail's vn, edit under it, and write
+// it back.
 
 import (
 	"bytes"
@@ -19,8 +18,7 @@ import (
 // banklessVoiceName names the dump's fifth voice, the one in no bank.
 const banklessVoiceName = "VOICE4"
 
-// banklessDiskImage builds a disk holding the bankless-voice dump with
-// a correct DIS tail (vn counts the bank-less fifth voice).
+// banklessDiskImage builds a disk holding the bankless-voice dump.
 func banklessDiskImage(t *testing.T) []byte {
 	t.Helper()
 	data, err := diskformat.BuildImage("PREY")
@@ -133,9 +131,8 @@ func TestExtractBanklessVoiceSlot(t *testing.T) {
 	}
 }
 
-// A shared-voice kit's summed bstep runs above its DIS vn, and the
-// walk agrees with the DIS, so the document parses in walk mode. An
-// edit must stamp the parsed count back, not the bstep sum.
+// A walk-mode edit must stamp the parsed count back, not the bstep
+// sum a shared-voice kit inflates.
 func TestEditKeepsSharedVoiceKitDISCounts(t *testing.T) {
 	t.Parallel()
 	data, err := diskformat.BuildImage("KIT")
@@ -173,8 +170,7 @@ func TestEditKeepsSharedVoiceKitDISCounts(t *testing.T) {
 	}
 }
 
-// An edit that changes the voice count must stamp the new count, not
-// the one the document opened with.
+// A count-changing edit must stamp the new count.
 func TestAddVoiceAdvancesDISCounts(t *testing.T) {
 	t.Parallel()
 	s, _ := openBanklessDisk(t)
@@ -202,8 +198,7 @@ func TestAddVoiceAdvancesDISCounts(t *testing.T) {
 	}
 }
 
-// Deleting an area in DIS mode keeps the freed voice's slot and the
-// DIS counts: the firmware keeps a voice no bank plays.
+// DIS mode keeps a freed voice's slot, the way the firmware does.
 func TestDeleteAreaKeepsDISCounts(t *testing.T) {
 	t.Parallel()
 	s, _ := openBanklessDisk(t)
@@ -225,8 +220,7 @@ func TestDeleteAreaKeepsDISCounts(t *testing.T) {
 	}
 }
 
-// makeBankFZB builds a .fzb (bank sector plus a voice-header area)
-// whose areas play the given voice slots.
+// makeBankFZB builds a .fzb whose areas play the given voice slots.
 func makeBankFZB(t *testing.T, name string, slots ...int) []byte {
 	t.Helper()
 	voiceSectors := disk.VoiceAreaSectors(len(slots))
@@ -242,11 +236,8 @@ func makeBankFZB(t *testing.T, name string, slots ...int) []byte {
 	return fzb
 }
 
-// In DIS mode the voice area neither grows nor shrinks with bsteps, so
-// an incoming bank's areas are bounded by the DIS count itself: a bank
-// playing slots past it must be refused (those bytes are stale
-// headers), and one playing existing slots must land even when it
-// carries fewer areas than the bank it replaces.
+// In DIS mode incoming areas are bounded by the count itself: slots
+// past it are stale headers, and a smaller bank must still land.
 func TestAddBankBoundsAreasByDISCount(t *testing.T) {
 	t.Parallel()
 
