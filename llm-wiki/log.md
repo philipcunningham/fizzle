@@ -176,42 +176,6 @@ AREA LEVEL beside them floors at 000. A velocity of zero silences the
 voice. fizzle's area setter allowed it and now clamps to the panel's
 floor.
 
-## [2026-08-23] ingest | Deleted directory entries leave blank slots
+## [2026-08-23] ingest | Firmware-authored disks, one branch of findings
 
-New finding from a user disk a real FZ-1 saved, now the PREY.img fixture under testdata/synthetic. Deletion zeroes the first name byte and leaves the gap, so live entries follow blank slots. Mapped the directory row to the new page.
-
-## [2026-08-23] ingest | DIS vn is the authority for voice-area sizing
-
-voice-area-sizing.md now carries the PREY evidence. Summed bstep can undercount vn (a voice in no bank), and stale slots past vn defeat the walk's other bound. Recorded the new fizzle plumbing and an open question on wavst monotonicity.
-
-## [2026-08-23] lint | Post-ingest pass
-
-Frontmatter complete on both touched pages. No stale citations: the pages touched today carry today's date, and no older page cites the code paths this branch changed. directory-blank-slots is linked from the map, so no orphan. No duplicate scope.
-
-## [2026-08-23] ingest | The DIS vn is trusted upward only
-
-Adversarial review over the branch: TECHNO.img carries vn 30 with 32 live voices. A vn at or below the walk is an undercount, and the walk wins. voice-area-sizing.md records the direction rule and the new 0x294 voice-count marker for standalone exports.
-
-## [2026-08-23] ingest | The gap read tolerance is inference
-
-directory-blank-slots.md now scopes its claim: the bytes prove the firmware writes gaps, not that it reads past one. An open question asks for the firmware trace. Recorded the printable-name gate and the fixture's unconfirmed audio redistribution terms.
-
-## [2026-08-23] lint | Correction: multi-disk-dumps was stale
-
-The 2026-08-23 post-ingest pass claimed no older page cited the changed code paths. multi-disk-dumps.md cites pkg/disk and pkg/diskadd and was dated 2026-08-20. Its citations re-verified today and the page bumped, with the 0x294 marker cross-reference added.
-
-## [2026-08-23] ingest | The trusted-upward rule's blind spot is named
-
-voice-area-sizing.md records the accepted trade. Stale slots that walk as plausible past a low vn list as voices, and an edit restamps the tail. A test pins the TECHNO restamp. The CLI readers now honour the 0x294 marker through ReadFZF.
-
-## [2026-08-23] lint | Six more pages re-verified and bumped
-
-The staleness sweep after this branch stopped at multi-disk-dumps. Also citing changed code: dis-file-head, voice-authoring-defaults, dcq-full-byte, audio-block-padding, display-scales, and the map. Their claims hold against the new code; dates bumped.
-
-## [2026-08-23] ingest | The blank-slot description stops overclaiming
-
-directory-blank-slots.md's description line now matches its body: the write side is observed, the read side is open. Rubbish directory slots are non-entries by DIS pointer range, not by name printability, which a fizzle-written program name can fail.
-
-## [2026-08-23] ingest | The marker record binds to its dump
-
-The four-byte marker could outlive an edit to the dump it described. It is now a 16-byte record holding the magic fzv1, the count, the dump length, and a structural CRC32. Readers refuse a record whose bindings stop holding. The resolver also split by context, so a disk's DIS count never falls through to a standalone marker.
+A user disk saved on a real FZ-1, now the PREY.img fixture, drove one PR. New finding page directory-blank-slots, with the read-side tolerance scoped as inference. voice-area-sizing rewritten around the DIS vn: trusted only above the walk, with the stale-slot blind spot named as an accepted trade. A bound record at bank offset 0x294 carries the count into standalone exports. The staleness sweep bumped multi-disk-dumps and six more pages citing the changed code.
