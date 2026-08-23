@@ -201,25 +201,8 @@ func ReplaceOnImage(imagePath string, oldName string, fileData []byte, diskNum u
 // pre-call state, so callers can keep using the *Image after an error, say
 // to try a different replacement or write a sibling image, without
 // inheriting a half-modified CAT or directory.
-func ReplaceInMemory(img *disk.Image, oldName string, fileData []byte, diskNum uint8) (retErr error) {
-	// Snapshot the full image to roll back a partial mutation on error. At
-	// 1.25 MiB the allocation is cheap next to the rest of the work, and
-	// copy() restores in place without reallocating the caller's *Image.
-	snapshot := append([]byte(nil), img.Bytes()...)
-	defer func() {
-		if retErr != nil {
-			copy(img.Bytes(), snapshot)
-		}
-	}()
-
-	if err := img.RemoveFile(oldName); err != nil {
-		return fmt.Errorf("diskadd: %w", err)
-	}
-	fi, err := detectFile(fileData)
-	if err != nil {
-		return fmt.Errorf("diskadd: %w", err)
-	}
-	return addToImage(img, fileData, fi.name, fi.fileType, diskNum, fi.nbank, fi.nvoice, fi.nwave)
+func ReplaceInMemory(img *disk.Image, oldName string, fileData []byte, diskNum uint8) error {
+	return replaceInMemory(img, oldName, fileData, diskNum, detectFile)
 }
 
 // AddToImageWithVoiceCount is AddToImage with a known voice count. It
@@ -237,7 +220,19 @@ func AddToImageWithVoiceCount(img *disk.Image, fileData []byte, diskNum uint8, v
 
 // ReplaceInMemoryWithVoiceCount is ReplaceInMemory with
 // AddToImageWithVoiceCount's known voice count semantics.
-func ReplaceInMemoryWithVoiceCount(img *disk.Image, oldName string, fileData []byte, diskNum uint8, vn int) (retErr error) {
+func ReplaceInMemoryWithVoiceCount(img *disk.Image, oldName string, fileData []byte, diskNum uint8, vn int) error {
+	return replaceInMemory(img, oldName, fileData, diskNum, func(data []byte) (fileInfo, error) {
+		return detectFullDumpWithVoiceCount(data, vn)
+	})
+}
+
+// replaceInMemory is the one transactional replace: snapshot, remove,
+// detect through the given resolver, add, and roll the image back byte
+// for byte on any failure.
+func replaceInMemory(img *disk.Image, oldName string, fileData []byte, diskNum uint8, detect func([]byte) (fileInfo, error)) (retErr error) {
+	// Snapshot the full image to roll back a partial mutation on error. At
+	// 1.25 MiB the allocation is cheap next to the rest of the work, and
+	// copy() restores in place without reallocating the caller's *Image.
 	snapshot := append([]byte(nil), img.Bytes()...)
 	defer func() {
 		if retErr != nil {
@@ -248,7 +243,11 @@ func ReplaceInMemoryWithVoiceCount(img *disk.Image, oldName string, fileData []b
 	if err := img.RemoveFile(oldName); err != nil {
 		return fmt.Errorf("diskadd: %w", err)
 	}
-	return AddToImageWithVoiceCount(img, fileData, diskNum, vn)
+	fi, err := detect(fileData)
+	if err != nil {
+		return fmt.Errorf("diskadd: %w", err)
+	}
+	return addToImage(img, fileData, fi.name, fi.fileType, diskNum, fi.nbank, fi.nvoice, fi.nwave)
 }
 
 // detectFullDumpWithVoiceCount overrides detection's voice count with
