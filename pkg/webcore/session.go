@@ -118,6 +118,10 @@ const historyCap = 100
 type imagePair struct {
 	img1 []byte
 	img2 []byte
+	// disMode is the parse mode the state was recorded under, restored
+	// with the bytes: re-deriving it from bytes an edit had already
+	// moved flips the mode.
+	disMode bool
 }
 
 // Session holds one open disk set. Not safe for concurrent use; the
@@ -142,6 +146,10 @@ type Session struct {
 	// at document boundaries and held through edits, so an edit that
 	// moves a bstep cannot flip it.
 	disMode bool
+	// nextDISMode is the mode a pending wholesale replacement adopts
+	// under; adoptPair applies it after recording the outgoing mode in
+	// the history.
+	nextDISMode *bool
 
 	past        []imagePair // undo stack, oldest first
 	future      []imagePair // redo stack
@@ -552,8 +560,8 @@ func (s *Session) Undo() (Snapshot, *Error) {
 		return s.Snapshot(), errf("invalid-image", "history entry unreadable: %v", err)
 	}
 	s.past = s.past[:len(s.past)-1]
-	s.future = append(s.future, imagePair{img1: s.image, img2: s.image2})
-	s.disMode = documentDISMode(img)
+	s.future = append(s.future, imagePair{img1: s.image, img2: s.image2, disMode: s.disMode})
+	s.disMode = prev.disMode
 	return s.adoptState(img, prev.img2)
 }
 
@@ -569,8 +577,8 @@ func (s *Session) Redo() (Snapshot, *Error) {
 		return s.Snapshot(), errf("invalid-image", "history entry unreadable: %v", err)
 	}
 	s.future = s.future[:len(s.future)-1]
-	s.pushHistory(imagePair{img1: s.image, img2: s.image2})
-	s.disMode = documentDISMode(img)
+	s.pushHistory(imagePair{img1: s.image, img2: s.image2, disMode: s.disMode})
+	s.disMode = next.disMode
 	return s.adoptState(img, next.img2)
 }
 
@@ -682,7 +690,11 @@ func (s *Session) adoptPair(img *disk.Image, img2 []byte) (Snapshot, *Error) {
 	if cerr := s.checkWholeDocument(); cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	prev := imagePair{img1: s.image, img2: s.image2}
+	prev := imagePair{img1: s.image, img2: s.image2, disMode: s.disMode}
+	if s.nextDISMode != nil {
+		s.disMode = *s.nextDISMode
+		s.nextDISMode = nil
+	}
 	snap, cerr := s.adoptState(img, img2)
 	if cerr != nil {
 		return snap, cerr

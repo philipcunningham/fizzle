@@ -15,7 +15,7 @@ Conventions: [AGENTS.md](AGENTS.md).
 - [DIS / file head deviates from the spec in three ways](findings/dis-file-head.md):
   extent area to 0x3F9, counts at the sector end in bn vn wn order,
   DIS first in its chain.
-- [Deleted directory entries leave blank slots in place](findings/directory-blank-slots.md): the firmware zeroes the first name byte and leaves the gap; blank means skip, not end.
+- [Deleted directory entries leave blank slots in place](findings/directory-blank-slots.md): the firmware zeroes the first name byte and saves later files behind the gap; whether it reads past one is open.
 - [Full dumps carry up to 8 bank sectors](findings/multiple-bank-sectors.md):
   the spec shows one; the voice area follows the last.
 - [Audio blocks are sector-padded but waved stores the unpadded count](findings/audio-block-padding.md):

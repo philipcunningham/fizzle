@@ -3,7 +3,7 @@ type: finding
 title: DIS / file head deviates from the spec in three ways
 description: Extent area runs to 0x3F9, counts sit at the sector end in bn vn wn order, and the DIS is the first sector of its own chain.
 tags: [disk, dis, parsing]
-updated: 2026-07-11
+updated: 2026-08-23
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 1-4
 status: confirmed-hardware

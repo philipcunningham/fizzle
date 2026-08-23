@@ -395,25 +395,31 @@ func (img *Image) SetLabel(name string) {
 	copy(img.data[LabelOffset:LabelOffset+LabelSize], padded[:])
 }
 
-// Directory reads all non-empty directory entries from sector 1. A
-// NULL first name byte marks that one entry blank (spec section 1-3),
-// not the end: firmware deletion leaves the gap in place. A slot whose
-// name is not printable ASCII is no entry either, so old media's
-// trailing rubbish neither lists nor refuses the disk.
+// dirSlotEntry decodes directory slot i, reporting false for a slot
+// that is no entry: a NULL first name byte (firmware deletion, spec
+// section 1-3) or a DIS pointer outside the data sectors, which is
+// what old media's trailing rubbish carries. The gap or rubbish stays
+// in place; it just never lists.
+func (img *Image) dirSlotEntry(i int) (DirEntry, bool) {
+	off := DirSector*SectorSize + i*DirEntrySize
+	if img.data[off] == 0 {
+		return DirEntry{}, false
+	}
+	e, err := DecodeDirEntry(img.data[off : off+DirEntrySize])
+	if err != nil || int(e.DisSector) < ReservedSectors || int(e.DisSector) >= SectorCount {
+		return DirEntry{}, false
+	}
+	return e, true
+}
+
+// Directory reads all directory entries from sector 1, stepping over
+// blank and rubbish slots (see dirSlotEntry).
 func (img *Image) Directory() ([]DirEntry, error) {
 	var entries []DirEntry
-	base := DirSector * SectorSize
 	for i := range MaxDirEntries {
-		off := base + i*DirEntrySize
-		b := img.data[off : off+DirEntrySize]
-		if b[0] == 0 || !IsPrintableName(b[:LabelSize]) {
-			continue
+		if e, ok := img.dirSlotEntry(i); ok {
+			entries = append(entries, e)
 		}
-		e, err := DecodeDirEntry(b)
-		if err != nil {
-			return nil, err
-		}
-		entries = append(entries, e)
 	}
 	return entries, nil
 }
@@ -474,15 +480,8 @@ func (img *Image) RemoveFile(name string) error {
 	target := -1
 	var targetEntry DirEntry
 	for i := range MaxDirEntries {
-		off := base + i*DirEntrySize
-		if img.data[off] == 0 || !IsPrintableName(img.data[off:off+LabelSize]) {
-			continue
-		}
-		e, err := DecodeDirEntry(img.data[off : off+DirEntrySize])
-		if err != nil {
-			return fmt.Errorf("disk: reading directory: %w", err)
-		}
-		if strings.EqualFold(e.NameString(), name) {
+		e, ok := img.dirSlotEntry(i)
+		if ok && strings.EqualFold(e.NameString(), name) {
 			target = i
 			targetEntry = e
 			break
@@ -490,17 +489,6 @@ func (img *Image) RemoveFile(name string) error {
 	}
 	if target < 0 {
 		return fmt.Errorf("%w: %s", ErrNotFound, name)
-	}
-
-	// Reject DIS pointers in the reserved range (sector 0 = label/CAT,
-	// sector 1 = directory per spec §1-1/§1-2) or past the end of the disk.
-	// Unguarded, DecodeDisSector mis-parses label or directory bytes as a
-	// DIS, and its fake extents drive CATClearAllocated over arbitrary
-	// sectors, clearing the reserved bits and corrupting the CAT bitmap.
-	// pkg/disklist and pkg/diskget enforce the same bound.
-	if int(targetEntry.DisSector) < ReservedSectors || int(targetEntry.DisSector) >= SectorCount {
-		return fmt.Errorf("%w: directory entry %q DIS sector %d out of range [%d,%d)",
-			ErrCorruptDIS, targetEntry.NameString(), targetEntry.DisSector, ReservedSectors, SectorCount)
 	}
 
 	disSec, err := img.SectorRef(int(targetEntry.DisSector))
@@ -513,16 +501,13 @@ func (img *Image) RemoveFile(name string) error {
 	}
 
 	// A stale entry can alias a live file's DIS sector: the alias
-	// entry goes, its sectors stay.
+	// entry goes, its sectors stay. Extent overlaps without a shared
+	// DIS sector are not caught here.
 	aliased := false
 	for i := range MaxDirEntries {
-		off := base + i*DirEntrySize
-		if i == target || img.data[off] == 0 || !IsPrintableName(img.data[off:off+LabelSize]) {
+		e, ok := img.dirSlotEntry(i)
+		if i == target || !ok {
 			continue
-		}
-		e, err := DecodeDirEntry(img.data[off : off+DirEntrySize])
-		if err != nil {
-			return fmt.Errorf("disk: reading directory: %w", err)
 		}
 		if e.DisSector == targetEntry.DisSector {
 			aliased = true
@@ -542,15 +527,16 @@ func (img *Image) RemoveFile(name string) error {
 		}
 	}
 
-	// Pack the survivors densely from slot 0 and zero the tail, so a
-	// reader that stops at the first blank entry still sees them all.
+	// Pack every non-blank slot densely from slot 0 and zero the tail:
+	// a reader that stops at the first blank entry sees every survivor,
+	// and rubbish bytes are preserved rather than judged.
 	dst := 0
 	for src := range MaxDirEntries {
 		if src == target {
 			continue
 		}
 		srcOff := base + src*DirEntrySize
-		if img.data[srcOff] == 0 || !IsPrintableName(img.data[srcOff:srcOff+LabelSize]) {
+		if img.data[srcOff] == 0 {
 			continue
 		}
 		dstOff := base + dst*DirEntrySize

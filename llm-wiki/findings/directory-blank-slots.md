@@ -1,7 +1,7 @@
 ---
 type: finding
 title: Deleted directory entries leave blank slots in place
-description: The firmware deletes a file by zeroing the first name byte and leaves the gap; live entries can follow a blank slot, so blank means skip, not end.
+description: The firmware deletes a file by zeroing the first name byte and saves later files behind the gap; whether it reads past one is open.
 tags: [disk, directory, firmware]
 updated: 2026-08-23
 sources:

@@ -3,7 +3,7 @@ type: topic
 title: Front-panel display scales
 description: How the FZ front panel maps raw header bytes to its 0 to 99 and -15 to +15 displays; calibrated on hardware, absent from the spec.
 tags: [fzv, display, hardware]
-updated: 2026-08-22
+updated: 2026-08-23
 sources:
   - FZ-10M hardware (calibration disk images; BRASS1 D3 1)
   - FZ-1 system ROM executed under an emulator (panel driven, bytes read back)

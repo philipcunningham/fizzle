@@ -57,8 +57,11 @@ func (s *Session) DeleteFile(name string) (Snapshot, *Error) {
 		return s.Snapshot(), errf(codeNotFound, "%v", err)
 	}
 	if name == disk.FullDumpName {
-		s.disMode = false
-		return s.adoptPair(img, nil)
+		walk := false
+		s.nextDISMode = &walk
+		snap, cerr := s.adoptPair(img, nil)
+		s.nextDISMode = nil
+		return snap, cerr
 	}
 	return s.adopt(img)
 }
@@ -86,9 +89,14 @@ func (s *Session) ExtractFile(name string) ([]byte, *Error) {
 		data = got
 	}
 	// A standalone dump loses the DIS, so a count the walk cannot
-	// re-derive rides out in the fizzle marker.
-	if name == disk.FullDumpName && s.disMode {
-		fzutil.StampVoiceCountMarker(data, disVoiceCount(img))
+	// re-derive rides out in the fizzle marker. A walk-mode extract
+	// clears any stale marker instead of shipping it.
+	if name == disk.FullDumpName {
+		if s.disMode {
+			fzutil.StampVoiceCountMarker(data, disVoiceCount(img))
+		} else {
+			fzutil.ClearVoiceCountMarker(data)
+		}
 	}
 	return data, nil
 }
@@ -160,8 +168,11 @@ func (s *Session) NewInstrument(name string) (Snapshot, *Error) {
 	if err := diskadd.AddToImage(img, emptyInstrumentDump(name), 0); err != nil {
 		return s.Snapshot(), addError(err)
 	}
-	s.disMode = false
-	return s.adopt(img)
+	walk := false
+	s.nextDISMode = &walk
+	snap, cerr := s.adopt(img)
+	s.nextDISMode = nil
+	return snap, cerr
 }
 
 // emptyInstrumentDump builds the smallest dump the format accepts:

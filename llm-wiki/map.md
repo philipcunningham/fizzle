@@ -3,7 +3,7 @@ type: map
 title: Truth map
 description: Per topic, where truth lives across the Casio spec, fizzle code, firmware findings, and the corpus.
 tags: [routing]
-updated: 2026-08-21
+updated: 2026-08-23
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md
 ---

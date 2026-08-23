@@ -3,7 +3,7 @@ type: finding
 title: dcq resonance uses the full byte, not the upper nibble
 description: The spec says only the upper 4 bits are effective; the FZ-10M reads the whole 0 to 127 byte.
 tags: [fzv, dcf, resonance]
-updated: 2026-07-11
+updated: 2026-08-23
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
 status: confirmed-hardware

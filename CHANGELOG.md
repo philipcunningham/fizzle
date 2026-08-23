@@ -2,7 +2,7 @@
 
 ## Unreleased (last updated 2026-08-23)
 
-- Disks saved on the FZ itself now open and edit correctly. A deleted file no longer hides the rest of the directory, and a voice in no bank is no longer dropped.
+- Disks saved on the FZ itself now open and edit correctly. A deleted file no longer hides the rest of the directory, and a voice in no bank is no longer dropped. An instrument the browser exports carries its voice count in a fizzle-only marker, so its bytes differ from a bare `disk get` of the same dump.
 
 - The browser editor's preview follows the FZ's loop chain: a held key repeats the loop the chain caps at, and the key coming up moves it to the end loop. The waveform marks both. The cross-fade and the multi-loop time stay out for now.
 

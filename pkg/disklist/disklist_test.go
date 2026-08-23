@@ -2,6 +2,7 @@ package disklist
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -321,18 +322,18 @@ func TestParseSkipsCorruptEntry(t *testing.T) {
 		}
 	}
 
-	// Read the image, point the first directory entry's DIS sector at
-	// sector 0 (the reserved label sector) to simulate corruption, and
-	// write it back.
+	// Corrupt the first entry's DIS contents (an extent into the
+	// reserved sectors) while its directory pointer stays valid: a slot
+	// with a rubbish pointer is no entry at all, but a real entry with
+	// damaged contents must list as corrupt rather than vanish.
 	raw, err := os.ReadFile(imgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Directory entry 0 lives at offset SectorSize; DisSector is the last
-	// 2 bytes of the 16-byte entry.
 	dirOff := disk.SectorSize
-	raw[dirOff+disk.LabelSize+2] = 0
-	raw[dirOff+disk.LabelSize+3] = 0
+	disSector := int(binary.LittleEndian.Uint16(raw[dirOff+disk.LabelSize+2 : dirOff+disk.LabelSize+4]))
+	binary.LittleEndian.PutUint16(raw[disSector*disk.SectorSize:], 0)
+	binary.LittleEndian.PutUint16(raw[disSector*disk.SectorSize+2:], 0xFFFF)
 	if err := os.WriteFile(imgPath, raw, 0644); err != nil { //nolint:gosec // G703: test image path from t.TempDir
 		t.Fatal(err)
 	}

@@ -91,7 +91,14 @@ type InstrumentSnapshot struct {
 // the same per-area reader as fzfinfo and fzbinfo, so the Web UI and
 // the CLI agree on every field. disVN is the DIS-mode count, 0 walks.
 func instrumentFrom(fileName string, fzfData []byte, disVN int) (*InstrumentSnapshot, error) {
-	hdr, err := dumpHeaderFor(fzfData, normalisedDISVoiceCount(fzfData, disVN))
+	// The mode is the session's, already decided; only a count the
+	// bytes cannot back falls to the walk, as in newDumpState.
+	if disVN > 0 {
+		if _, err := fzutil.ParseFZFHeaderWithVoiceCount(fzfData, disVN); err != nil {
+			disVN = 0
+		}
+	}
+	hdr, err := dumpHeaderFor(fzfData, disVN)
 	if err != nil {
 		return nil, fmt.Errorf("webcore: %w", err)
 	}

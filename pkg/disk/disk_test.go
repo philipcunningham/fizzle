@@ -1227,12 +1227,15 @@ func TestRemoveFileRejectsCorruptDIS(t *testing.T) {
 				t.Fatalf("precondition: CAT byte 0 low bits = 0x%02x, want 0x03", catBefore[0]&0x03)
 			}
 
+			// A slot whose DIS pointer lands in the reserved sectors is
+			// no entry, so the name resolves to nothing and no CAT bit
+			// moves.
 			err := img.RemoveFile("TESTVOX")
 			if err == nil {
 				t.Fatal("expected error for directory entry pointing at reserved sector")
 			}
-			if !errors.Is(err, ErrCorruptDIS) {
-				t.Errorf("expected ErrCorruptDIS, got %v", err)
+			if !errors.Is(err, ErrNotFound) {
+				t.Errorf("expected ErrNotFound, got %v", err)
 			}
 
 			// Sectors 0 and 1 must still be marked allocated.
@@ -1531,5 +1534,51 @@ func TestRemoveFileKeepsAliasedSectors(t *testing.T) {
 	}
 	if !img.CATAllocated(int(live.DisSector)) {
 		t.Error("live file's DIS sector was freed by removing the alias")
+	}
+}
+
+// A name fizzle itself can write (a program named from a host file
+// with a non-ASCII byte) must list, and must survive other removals.
+func TestDirectoryKeepsNonASCIINames(t *testing.T) {
+	t.Parallel()
+	img := buildFormattedImage(t)
+	addFakeVoice(t, img, "OTHER")
+	base := DirSector * SectorSize
+	odd := DirEntry{Name: [LabelSize]byte{'C', 'A', 'F', 0xC3, 0x89, ' ', ' ', ' ', ' ', ' ', ' ', ' '}, FileType: TypeProgram, DisSector: 5}
+	copy(img.Bytes()[base+DirEntrySize:], EncodeDirEntry(odd))
+
+	entries, err := img.Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("entries = %d, want 2 (a decodable entry with a valid DIS pointer is a file)", len(entries))
+	}
+	if err := img.RemoveFile("OTHER"); err != nil {
+		t.Fatal(err)
+	}
+	entries, err = img.Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0] != odd {
+		t.Fatalf("entries after removal = %+v, want the non-ASCII entry preserved", entries)
+	}
+}
+
+// Rubbish that is printable is still no entry: its DIS pointer is out
+// of range, so it neither lists nor refuses the disk.
+func TestDirectorySkipsPrintableRubbish(t *testing.T) {
+	t.Parallel()
+	img := buildFormattedImage(t)
+	base := DirSector * SectorSize
+	copy(img.Bytes()[base+40*DirEntrySize:], []byte("readme.txt is he"))
+	copy(img.Bytes()[base+41*DirEntrySize:], []byte("                "))
+	entries, err := img.Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("entries = %+v, want none", entries)
 	}
 }

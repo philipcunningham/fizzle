@@ -70,3 +70,29 @@ func TestParseFZFHeaderWithVoiceCount(t *testing.T) {
 		}
 	})
 }
+
+// The acceptance range's top end is geometry: zeroed audio reads as
+// placeholder slots, so any count fitting the file validates, and the
+// first count needing a voice area past the file is refused.
+func TestParseFZFHeaderWithVoiceCountTopEnd(t *testing.T) {
+	t.Parallel()
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	if _, err := fzutil.ParseFZFHeaderWithVoiceCount(data, 16); err != nil {
+		t.Errorf("vn=16 (fills the file exactly): %v", err)
+	}
+	if _, err := fzutil.ParseFZFHeaderWithVoiceCount(data, 17); err == nil {
+		t.Error("vn=17: expected geometry refusal, got nil")
+	}
+}
+
+// A count at the marker offset means nothing without the magic.
+func TestMarkerVoiceCountRequiresMagic(t *testing.T) {
+	t.Parallel()
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	data[disk.BankVoiceMarkerOffset] = 0
+	data[disk.BankVoiceMarkerOffset+1] = 0
+	binary.LittleEndian.PutUint16(data[disk.BankVoiceMarkerOffset+2:], fzfbuilder.BanklessDumpVoices)
+	if got := fzutil.MarkerVoiceCount(data); got != 0 {
+		t.Errorf("MarkerVoiceCount without magic = %d, want 0", got)
+	}
+}

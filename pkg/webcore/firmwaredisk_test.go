@@ -14,6 +14,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
+	"github.com/philipcunningham/fizzle/pkg/model"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )
 
@@ -448,5 +449,217 @@ func TestEditRestampsLowDISCount(t *testing.T) {
 	dis := fullDumpDISTail(t, out)
 	if got := int(dis.VoiceCount); got != 32 {
 		t.Errorf("DIS vn after edit = %d, want the walked 32", got)
+	}
+}
+
+// Listing, audition, and edits share the session's mode: an edit that
+// raises a bstep to the DIS count must not flip the listing to walk
+// mode while the edit paths stay in DIS mode.
+func TestListingStaysInDISModeAcrossEdits(t *testing.T) {
+	t.Parallel()
+	s, _ := openBanklessDisk(t)
+
+	for range 2 {
+		if _, cerr := s.AddArea(0, 0); cerr != nil {
+			t.Fatalf("AddArea: %v", cerr)
+		}
+	}
+	snap := s.Snapshot()
+	if got := len(snap.Disk.Instrument.Voices); got != fzfbuilder.BanklessDumpVoices {
+		names := make([]string, 0, got)
+		for _, v := range snap.Disk.Instrument.Voices {
+			names = append(names, v.Name)
+		}
+		t.Fatalf("voices after edits = %d (%v), want %d", got, names, fzfbuilder.BanklessDumpVoices)
+	}
+	if _, cerr := s.RenameVoiceSlot(fzfbuilder.BanklessDumpVoices-1, "STILL HERE"); cerr != nil {
+		t.Fatalf("RenameVoiceSlot: %v", cerr)
+	}
+	if _, _, cerr := s.ExtractVoiceSlot(fzfbuilder.BanklessDumpVoices-1, ExtractFZV); cerr != nil {
+		t.Fatalf("ExtractVoiceSlot: %v", cerr)
+	}
+}
+
+// Undo and redo restore the mode the state was recorded under, not a
+// re-derivation from bytes an edit had already moved.
+func TestUndoRedoKeepDISMode(t *testing.T) {
+	t.Parallel()
+	s, _ := openBanklessDisk(t)
+
+	if _, cerr := s.AddArea(0, 0); cerr != nil {
+		t.Fatalf("AddArea: %v", cerr)
+	}
+	if _, cerr := s.Undo(); cerr != nil {
+		t.Fatalf("Undo: %v", cerr)
+	}
+	if _, cerr := s.Redo(); cerr != nil {
+		t.Fatalf("Redo: %v", cerr)
+	}
+	snap, cerr := s.DeleteArea(0, 1)
+	if cerr != nil {
+		t.Fatalf("DeleteArea: %v", cerr)
+	}
+	if got := len(snap.Disk.Instrument.Voices); got != fzfbuilder.BanklessDumpVoices {
+		t.Fatalf("voices after undo redo delete = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+
+	// The other door: deleting the dump and undoing it restores the
+	// document with its mode.
+	if _, cerr := s.DeleteFile(disk.FullDumpName); cerr != nil {
+		t.Fatalf("DeleteFile: %v", cerr)
+	}
+	if _, cerr := s.Undo(); cerr != nil {
+		t.Fatalf("Undo: %v", cerr)
+	}
+	snap, cerr = s.DeleteArea(1, 0)
+	if cerr != nil {
+		t.Fatalf("DeleteArea after undo: %v", cerr)
+	}
+	if got := len(snap.Disk.Instrument.Voices); got != fzfbuilder.BanklessDumpVoices {
+		t.Fatalf("voices after dump-delete undo = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+}
+
+// Undoing a wholesale load restores the replaced document's mode.
+func TestUndoOfLoadRestoresDISMode(t *testing.T) {
+	t.Parallel()
+	s, _ := openBanklessDisk(t)
+
+	fzf := testFZF(t, "PLAIN1", "PLAIN2")
+	if _, cerr := s.LoadFZF(fzf); cerr != nil {
+		t.Fatalf("LoadFZF: %v", cerr)
+	}
+	if _, cerr := s.Undo(); cerr != nil {
+		t.Fatalf("Undo: %v", cerr)
+	}
+	snap, cerr := s.DeleteArea(1, 0)
+	if cerr != nil {
+		t.Fatalf("DeleteArea: %v", cerr)
+	}
+	if got := len(snap.Disk.Instrument.Voices); got != fzfbuilder.BanklessDumpVoices {
+		t.Fatalf("voices after load undo = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+}
+
+// A document that loses its DIS authority is in walk mode: rebuilding
+// the instrument after deleting the dump must write counts a walk
+// reader agrees with.
+func TestRebuiltInstrumentWritesWalkCounts(t *testing.T) {
+	t.Parallel()
+	s, _ := openBanklessDisk(t)
+
+	if _, cerr := s.DeleteFile(disk.FullDumpName); cerr != nil {
+		t.Fatalf("DeleteFile: %v", cerr)
+	}
+	if _, cerr := s.NewInstrument("FRESH"); cerr != nil {
+		t.Fatalf("NewInstrument: %v", cerr)
+	}
+	for range 3 {
+		if _, cerr := s.AddArea(0, 0); cerr != nil {
+			t.Fatalf("AddArea: %v", cerr)
+		}
+	}
+	out, cerr := s.ExportImage()
+	if cerr != nil {
+		t.Fatalf("ExportImage: %v", cerr)
+	}
+	fzf, cerr := s.ExtractFile(disk.FullDumpName)
+	if cerr != nil {
+		t.Fatalf("ExtractFile: %v", cerr)
+	}
+	walk, err := fzutil.ParseFZFHeader(fzf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dis := fullDumpDISTail(t, out)
+	if int(dis.VoiceCount) != walk.NVoice {
+		t.Errorf("DIS vn = %d, walk = %d; a walk-mode document must write the count a reader derives",
+			dis.VoiceCount, walk.NVoice)
+	}
+}
+
+// A corrupt DIS count falls back to the walk inside operations too.
+func TestEditFallsBackOnCorruptDISVoiceCount(t *testing.T) {
+	t.Parallel()
+	fzf := fzfbuilder.MakeBanklessVoiceDump(t)
+	out, outVN, cerr := patchDumpBytes(bytes.Clone(fzf), 63, func(_ *dumpState) ([]model.Patch, *Error) {
+		return nil, nil
+	})
+	if cerr != nil {
+		t.Fatalf("patchDumpBytes: %v", cerr)
+	}
+	walk, err := fzutil.ParseFZFHeader(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outVN != walk.NVoice {
+		t.Errorf("outVN = %d, want the walked %d after corrupt-count fallback", outVN, walk.NVoice)
+	}
+}
+
+// A walk-mode extract carries no marker, stale or otherwise.
+func TestWalkModeExtractClearsStaleMarker(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeSharedVoiceDump(t)
+	fzutil.StampVoiceCountMarker(dump, fzfbuilder.SharedVoiceDumpVoices)
+	data, err := diskformat.BuildImage("KIT")
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := disk.ReadImage(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := diskadd.AddToImageWithVoiceCount(img, dump, 0, fzfbuilder.SharedVoiceDumpVoices); err != nil {
+		t.Fatal(err)
+	}
+	s := NewSession()
+	if _, cerr := s.OpenImage(img.Bytes()); cerr != nil {
+		t.Fatalf("OpenImage: %v", cerr)
+	}
+	fzf, cerr := s.ExtractFile(disk.FullDumpName)
+	if cerr != nil {
+		t.Fatalf("ExtractFile: %v", cerr)
+	}
+	if string(fzf[disk.BankVoiceMarkerOffset:disk.BankVoiceMarkerOffset+2]) == "fz" {
+		t.Error("walk-mode extract still carries a voice-count marker")
+	}
+}
+
+// A slot the voice area grows over must come up empty: adopting a
+// stale header verbatim resurrects a deleted voice.
+func TestGrownSlotIsCleared(t *testing.T) {
+	t.Parallel()
+	// One bank playing two voices, a stale but plausible third slot,
+	// non-zero audio: walk mode with bstep as the bound.
+	fzf := make([]byte, 4*disk.SectorSize)
+	binary.LittleEndian.PutUint16(fzf[disk.BankVoiceCountOffset:], 2)
+	name := disk.PadLabel("GROW BANK")
+	copy(fzf[disk.BankNameOffset:], name[:])
+	for i, slot := range []int{0, 1} {
+		binary.LittleEndian.PutUint16(fzf[disk.BankVoiceNumOffset+i*disk.VPEntrySize:], uint16(slot)) //nolint:gosec // 0..1
+	}
+	for i := range 3 {
+		off := disk.VoiceSlotOffset(disk.SectorSize, i)
+		binary.LittleEndian.PutUint16(fzf[off+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
+		voiceName := disk.PadLabel("GROWN" + string(rune('0'+i)))
+		copy(fzf[off+disk.VoiceNameOffset:], voiceName[:])
+	}
+	for i := 2 * disk.SectorSize; i < len(fzf); i++ {
+		fzf[i] = 0xAB
+	}
+
+	out, _, cerr := patchDumpBytes(fzf, 0, func(d *dumpState) ([]model.Patch, *Error) {
+		return addAreaPatches(d, 0, 0)
+	})
+	if cerr != nil {
+		t.Fatalf("patchDumpBytes: %v", cerr)
+	}
+	off := disk.VoiceSlotOffset(disk.SectorSize, 2)
+	slot := out[off : off+disk.VoicePackSize]
+	for _, b := range slot {
+		if b != 0 {
+			t.Fatalf("grown slot holds stale bytes: % x", slot[:16])
+		}
 	}
 }
