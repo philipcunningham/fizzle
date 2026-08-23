@@ -282,19 +282,16 @@ const (
 	VoiceCountMarker
 )
 
-// ResolveDiskFZF parses a disk-backed dump: the DIS tail's vn wins
-// where it validates above the walk, and the walk decides otherwise.
-// A count at or below the walk is an undercount (TECHNO.img carries
-// vn 30 with 32 live voices) and never hides the voices past it. A
-// marker belongs to a standalone copy, so it never competes with a
-// disk's own DIS.
+// ResolveDiskFZF parses a disk-backed dump under the DIS tail's vn. A
+// count at or below the walk is an undercount (TECHNO.img carries vn
+// 30 with 32 live voices) and never hides the voices past it; a
+// marker belongs to a standalone copy and never competes here.
 func ResolveDiskFZF(data []byte, disVN int) (*FZFHeader, VoiceCountSource, error) {
 	return resolveFZF(data, disVN, VoiceCountDIS)
 }
 
-// ResolveStandaloneFZF parses a standalone dump: a stamped marker
-// record wins where it validates above the walk, and the walk decides
-// otherwise.
+// ResolveStandaloneFZF parses a standalone dump under its marker
+// record, where one binds.
 func ResolveStandaloneFZF(data []byte) (*FZFHeader, VoiceCountSource, error) {
 	return resolveFZF(data, MarkerVoiceCount(data), VoiceCountMarker)
 }
@@ -316,9 +313,9 @@ func resolveFZF(data []byte, candidate int, src VoiceCountSource) (*FZFHeader, V
 // record version.
 var voiceMarkerMagic = [4]byte{'f', 'z', 'v', '1'}
 
-// The record after the magic: the count, the dump length, and a CRC32
-// over the structural bytes with the record zeroed, so a record that
-// outlives an edit to the dump it described dies with it.
+// After the magic: the count, the dump length, and a CRC32 over the
+// structural bytes with the record zeroed, so a record that outlives
+// an edit dies with it.
 const (
 	markerCountOffset = disk.BankVoiceMarkerOffset + 4
 	markerLenOffset   = disk.BankVoiceMarkerOffset + 6
