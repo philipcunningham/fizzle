@@ -460,7 +460,7 @@ func detectFile(fileData []byte) (fileInfo, error) {
 // applyVoiceCountMarker honours the fizzle voice-count marker, so an
 // exported dump's DIS tail gets the count its walk cannot re-derive.
 func applyVoiceCountMarker(fileData []byte, fi *fileInfo) {
-	hdr, src, err := fzutil.ResolveFZFHeader(fileData, 0)
+	hdr, src, err := fzutil.ResolveStandaloneFZF(fileData)
 	if err != nil || src != fzutil.VoiceCountMarker {
 		return
 	}

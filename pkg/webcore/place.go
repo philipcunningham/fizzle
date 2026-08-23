@@ -38,7 +38,7 @@ func (s *Session) LoadFZF(data []byte) (Snapshot, *Error) {
 	// A stamped export reloads under its carried count; the DIS the
 	// write-back produces is what the adopted mode derives from.
 	vn := 0
-	if hdr, src, err := fzutil.ResolveFZFHeader(data, 0); err == nil && src == fzutil.VoiceCountMarker {
+	if hdr, src, err := fzutil.ResolveStandaloneFZF(data); err == nil && src == fzutil.VoiceCountMarker {
 		vn = hdr.NVoice
 	}
 	return s.replaceDump(img, data, vn, modeDerive)

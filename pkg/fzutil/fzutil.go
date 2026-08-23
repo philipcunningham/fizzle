@@ -2,9 +2,11 @@
 package fzutil
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"math"
 	"os"
@@ -280,70 +282,106 @@ const (
 	VoiceCountMarker
 )
 
-// ResolveFZFHeader parses a dump under fizzle's one policy for an
-// explicit voice count: the candidate (a DIS tail's vn, 0 when
-// absent) wins where it validates above the walk, then a stamped
-// marker under the same rule, then the walk. An explicit count at or
-// below the walk is an undercount (TECHNO.img carries vn 30 with 32
-// live voices) and never hides the voices past it.
-func ResolveFZFHeader(data []byte, candidate int) (*FZFHeader, VoiceCountSource, error) {
+// ResolveDiskFZF parses a disk-backed dump: the DIS tail's vn wins
+// where it validates above the walk, and the walk decides otherwise.
+// A count at or below the walk is an undercount (TECHNO.img carries
+// vn 30 with 32 live voices) and never hides the voices past it. A
+// marker belongs to a standalone copy, so it never competes with a
+// disk's own DIS.
+func ResolveDiskFZF(data []byte, disVN int) (*FZFHeader, VoiceCountSource, error) {
+	return resolveFZF(data, disVN, VoiceCountDIS)
+}
+
+// ResolveStandaloneFZF parses a standalone dump: a stamped marker
+// record wins where it validates above the walk, and the walk decides
+// otherwise.
+func ResolveStandaloneFZF(data []byte) (*FZFHeader, VoiceCountSource, error) {
+	return resolveFZF(data, MarkerVoiceCount(data), VoiceCountMarker)
+}
+
+// resolveFZF is the one acceptance policy: an explicit count wins
+// only where it validates above the walk.
+func resolveFZF(data []byte, candidate int, src VoiceCountSource) (*FZFHeader, VoiceCountSource, error) {
 	walk, werr := ParseFZFHeader(data)
-	above := func(vn int) *FZFHeader {
-		if vn <= 0 || (werr == nil && walk.NVoice >= vn) {
-			return nil
+	if candidate > 0 && (werr != nil || walk.NVoice < candidate) {
+		if hdr, err := ParseFZFHeaderWithVoiceCount(data, candidate); err == nil {
+			return hdr, src, nil
 		}
-		hdr, err := ParseFZFHeaderWithVoiceCount(data, vn)
-		if err != nil {
-			return nil
-		}
-		return hdr
-	}
-	if hdr := above(candidate); hdr != nil {
-		return hdr, VoiceCountDIS, nil
-	}
-	if hdr := above(MarkerVoiceCount(data)); hdr != nil {
-		return hdr, VoiceCountMarker, nil
 	}
 	return walk, VoiceCountWalk, werr
 }
 
-// voiceMarkerMagic guards the voice-count marker: the offset holds
-// firmware garbage on real dumps.
-var voiceMarkerMagic = [2]byte{'f', 'z'}
+// voiceMarkerMagic guards the voice-count marker record: the offset
+// holds firmware garbage on real dumps. The trailing digit is the
+// record version.
+var voiceMarkerMagic = [4]byte{'f', 'z', 'v', '1'}
 
-// StampVoiceCountMarker writes the voice-count marker into a
+// The record after the magic: the count, the dump length, and a CRC32
+// over the structural bytes with the record zeroed, so a record that
+// outlives an edit to the dump it described dies with it.
+const (
+	markerCountOffset = disk.BankVoiceMarkerOffset + 4
+	markerLenOffset   = disk.BankVoiceMarkerOffset + 6
+	markerSumOffset   = disk.BankVoiceMarkerOffset + 12
+)
+
+// markerChecksum hashes the dump's structural region (banks and the
+// vn-sized voice area) with the marker record zeroed.
+func markerChecksum(data []byte, vn int) uint32 {
+	end := CountBankSectors(data)*disk.SectorSize + disk.VoiceAreaSectors(vn)*disk.SectorSize
+	if end > len(data) {
+		end = len(data)
+	}
+	region := append([]byte(nil), data[:end]...)
+	clear(region[disk.BankVoiceMarkerOffset : disk.BankVoiceMarkerOffset+disk.BankVoiceMarkerSize])
+	return crc32.ChecksumIEEE(region)
+}
+
+// StampVoiceCountMarker writes the voice-count record into a
 // standalone dump copy.
 func StampVoiceCountMarker(data []byte, vn int) {
-	if len(data) < disk.BankVoiceMarkerOffset+4 || vn < 1 || vn > disk.MaxVoices {
+	if len(data) < disk.BankVoiceMarkerOffset+disk.BankVoiceMarkerSize || vn < 1 || vn > disk.MaxVoices {
 		return
 	}
-	data[disk.BankVoiceMarkerOffset] = voiceMarkerMagic[0]
-	data[disk.BankVoiceMarkerOffset+1] = voiceMarkerMagic[1]
-	binary.LittleEndian.PutUint16(data[disk.BankVoiceMarkerOffset+2:], uint16(vn)) //nolint:gosec // bounded above
+	copy(data[disk.BankVoiceMarkerOffset:], voiceMarkerMagic[:])
+	binary.LittleEndian.PutUint16(data[markerCountOffset:], uint16(vn))      //nolint:gosec // bounded above
+	binary.LittleEndian.PutUint32(data[markerLenOffset:], uint32(len(data))) //nolint:gosec // bounded by MaxReadSize
+	binary.LittleEndian.PutUint32(data[markerSumOffset:], markerChecksum(data, vn))
 }
 
-// ClearVoiceCountMarker zeroes the marker field where the magic
+// ClearVoiceCountMarker zeroes the marker record where the magic
 // matches; firmware garbage at the offset stays byte for byte.
 func ClearVoiceCountMarker(data []byte) {
-	if len(data) < disk.BankVoiceMarkerOffset+4 {
+	if len(data) < disk.BankVoiceMarkerOffset+disk.BankVoiceMarkerSize {
 		return
 	}
-	if data[disk.BankVoiceMarkerOffset] != voiceMarkerMagic[0] || data[disk.BankVoiceMarkerOffset+1] != voiceMarkerMagic[1] {
+	if !bytes.Equal(data[disk.BankVoiceMarkerOffset:disk.BankVoiceMarkerOffset+4], voiceMarkerMagic[:]) {
 		return
 	}
-	clear(data[disk.BankVoiceMarkerOffset : disk.BankVoiceMarkerOffset+4])
+	clear(data[disk.BankVoiceMarkerOffset : disk.BankVoiceMarkerOffset+disk.BankVoiceMarkerSize])
 }
 
-// MarkerVoiceCount decodes the marker's raw count, 0 without the
-// magic. The acceptance policy lives in ResolveFZFHeader alone.
+// MarkerVoiceCount decodes the marker record's count, 0 unless the
+// magic, the recorded length, and the structural checksum all hold.
+// The count acceptance policy lives in the resolver alone.
 func MarkerVoiceCount(data []byte) int {
-	if len(data) < disk.BankVoiceMarkerOffset+4 {
+	if len(data) < disk.BankVoiceMarkerOffset+disk.BankVoiceMarkerSize {
 		return 0
 	}
-	if data[disk.BankVoiceMarkerOffset] != voiceMarkerMagic[0] || data[disk.BankVoiceMarkerOffset+1] != voiceMarkerMagic[1] {
+	if !bytes.Equal(data[disk.BankVoiceMarkerOffset:disk.BankVoiceMarkerOffset+4], voiceMarkerMagic[:]) {
 		return 0
 	}
-	return int(binary.LittleEndian.Uint16(data[disk.BankVoiceMarkerOffset+2:]))
+	vn := int(binary.LittleEndian.Uint16(data[markerCountOffset:]))
+	if vn < 1 || vn > disk.MaxVoices {
+		return 0
+	}
+	if binary.LittleEndian.Uint32(data[markerLenOffset:]) != uint32(len(data)) { //nolint:gosec // bounded by MaxReadSize
+		return 0
+	}
+	if binary.LittleEndian.Uint32(data[markerSumOffset:]) != markerChecksum(data, vn) {
+		return 0
+	}
+	return vn
 }
 
 // InferVoiceCount walks voice slots from voiceAreaStart and counts the
@@ -674,7 +712,7 @@ func ReadFZF(path string) ([]byte, *FZFHeader, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	hdr, _, err := ResolveFZFHeader(data, 0)
+	hdr, _, err := ResolveStandaloneFZF(data)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -211,3 +211,7 @@ The staleness sweep after this branch stopped at multi-disk-dumps. Also citing c
 ## [2026-08-23] ingest | The blank-slot description stops overclaiming
 
 directory-blank-slots.md's description line now matches its body: the write side is observed, the read side is open. Rubbish directory slots are non-entries by DIS pointer range, not by name printability, which a fizzle-written program name can fail.
+
+## [2026-08-23] ingest | The marker record binds to its dump
+
+The four-byte marker could outlive an edit to the dump it described. It is now a 16-byte record: magic fzv1, the count, the dump length, and a structural CRC32. Readers refuse it whenever any of those stops holding. The resolver also split by context, so a disk's DIS count never falls through to a standalone marker.

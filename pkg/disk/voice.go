@@ -261,11 +261,14 @@ const (
 	// pkg/fzfinfo for the split detection that reads this marker.
 	BankTotalWaveOffset = 0x290
 
-	// BankVoiceMarkerOffset is a fizzle-defined field in the same
-	// firmware padding region: the magic "fz" then the dump's voice
-	// count as a 16-bit word, carrying into a standalone export the
-	// count its walk cannot re-derive (see fzutil.MarkerVoiceCount).
-	BankVoiceMarkerOffset  = 0x294
+	// BankVoiceMarkerOffset is a fizzle-defined record in the same
+	// firmware padding region, carrying into a standalone export the
+	// voice count its walk cannot re-derive: the magic "fzv1", the
+	// count, the dump length, and a CRC32 binding the record to the
+	// dump's structural bytes (see fzutil.MarkerVoiceCount).
+	BankVoiceMarkerOffset = 0x294
+	// BankVoiceMarkerSize is that record's total size in bytes.
+	BankVoiceMarkerSize    = 16
 	BankMIDIRecvChanOffset = 0x142
 	MaxBanks               = 8
 	BankKeyHighOffset      = 0x02

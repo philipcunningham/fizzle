@@ -18,7 +18,7 @@ import (
 // wavst/waved/genst/gened become relative to the extracted voice's audio
 // bytes rather than the combined wave area's.
 func UnpackDataFromBytes(data []byte) ([][]byte, []int, error) {
-	hdr, _, err := fzutil.ResolveFZFHeader(data, 0)
+	hdr, _, err := fzutil.ResolveStandaloneFZF(data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("voiceunpack: %w", err)
 	}
