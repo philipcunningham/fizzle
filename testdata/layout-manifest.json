@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "collections": [
+    {
+      "id": "casio-fz-1-factory-library",
+      "root": "corpus/casio-fz-1-factory-library",
+      "source": "https://zine.r-massive.com/casio-fz-sampler-archive/",
+      "license": "Upstream archive terms are not recorded; fixture provenance is documented in testdata/corpus/README.md.",
+      "evidenceTier": "real-hardware",
+      "format": "fzf",
+      "parseContext": "standalone",
+      "expectedAuthority": "walk",
+      "expectedFiles": 63,
+      "layoutDigest": "e97dba4421ddb71cca827cc60cd538c4cd5c14232998a15ab80765dc2a532105"
+    },
+    {
+      "id": "casio-fz-1-shareware-library-fzf-format",
+      "root": "corpus/casio-fz-1-shareware-library-fzf-format",
+      "source": "https://zine.r-massive.com/casio-fz-sampler-archive/",
+      "license": "Upstream archive terms are not recorded; fixture provenance is documented in testdata/corpus/README.md.",
+      "evidenceTier": "real-hardware",
+      "format": "fzf",
+      "parseContext": "standalone",
+      "expectedAuthority": "walk",
+      "expectedFiles": 123,
+      "layoutDigest": "3c3085d5a42a7cc7bee930d78e0fa2c9c391de3b5e9f44d100647286e99af91b"
+    },
+    {
+      "id": "casio-fz1-soundwaves",
+      "root": "corpus/casio-fz1-soundwaves",
+      "source": "https://zine.r-massive.com/casio-fz-sampler-archive/",
+      "license": "Upstream archive terms are not recorded; fixture provenance is documented in testdata/corpus/README.md.",
+      "evidenceTier": "real-hardware",
+      "format": "fzf",
+      "parseContext": "standalone",
+      "expectedAuthority": "walk",
+      "expectedFiles": 49,
+      "layoutDigest": "b861a55897ae3e1aaa5d45dd2558a61c86eb7d650d83d7362d6ece87fa943a94"
+    }
+  ],
+  "diskFixtures": [
+    {
+      "id": "brass",
+      "path": "synthetic/BRASS.img",
+      "sourceSHA256": "d40bb77ada4c2c875e142fa7f1b5dd845bcefa0a1f0e8562faea3413412a02f5",
+      "evidenceTier": "synthetic",
+      "tags": ["full-dump", "multi-bank"],
+      "expectedDISVoiceCount": 13,
+      "layout": {"authority": "walk", "banks": 3, "voices": 13, "voiceStart": 3072, "audioStart": 7168}
+    },
+    {
+      "id": "hoover",
+      "path": "synthetic/HOOVER.img",
+      "sourceSHA256": "cc1e0c187b3949cd4ec0e5bec66e3055ac27feae1abab60d32609a9e5ab9dc6f",
+      "evidenceTier": "synthetic",
+      "tags": ["loose-voice"],
+      "expectedDISVoiceCount": 0
+    },
+    {
+      "id": "loopdemo",
+      "path": "synthetic/LOOPDEMO.img",
+      "sourceSHA256": "a4e11e1b0dc00a1c07d17260355f1f02a199293439bc8e0b7d55be2451721785",
+      "evidenceTier": "synthetic",
+      "tags": ["full-dump", "multi-loop"],
+      "expectedDISVoiceCount": 5,
+      "layout": {"authority": "walk", "banks": 1, "voices": 5, "voiceStart": 1024, "audioStart": 3072}
+    },
+    {
+      "id": "pad-lfo",
+      "path": "synthetic/PAD-LFO.img",
+      "sourceSHA256": "e755265a96f671530a3eb8e4d1972ce934efb325ee195eba8258a272a34642ef",
+      "evidenceTier": "synthetic",
+      "tags": ["full-dump", "lfo"],
+      "expectedDISVoiceCount": 1,
+      "layout": {"authority": "walk", "banks": 1, "voices": 1, "voiceStart": 1024, "audioStart": 2048}
+    },
+    {
+      "id": "prey",
+      "path": "synthetic/PREY.img",
+      "sourceSHA256": "5ea6c6c03cbef5b06b2bd9696237b3dd31b73b73d66c1d454d4e14c75e9857ed",
+      "evidenceTier": "real-hardware-regression",
+      "tags": ["full-dump", "unreferenced-voice", "dis-authority"],
+      "expectedDISVoiceCount": 5,
+      "layout": {"authority": "dis", "banks": 2, "voices": 5, "voiceStart": 2048, "audioStart": 4096}
+    },
+    {
+      "id": "stab",
+      "path": "synthetic/STAB.img",
+      "sourceSHA256": "0a39246198d1cc9db2ef5a91aa8b6127b493155b5c72bc95fd8f8176ef80bb03",
+      "evidenceTier": "synthetic",
+      "tags": ["full-dump", "loose-voice"],
+      "expectedDISVoiceCount": 1,
+      "layout": {"authority": "walk", "banks": 1, "voices": 1, "voiceStart": 1024, "audioStart": 2048}
+    },
+    {
+      "id": "techno",
+      "path": "synthetic/TECHNO.img",
+      "sourceSHA256": "e8d857ff562e984d511272bbe6918e7e399a99014b5d2f755b8092d8b441cea4",
+      "evidenceTier": "real-hardware-regression",
+      "tags": ["full-dump", "dis-undercount", "maximum-banks"],
+      "expectedDISVoiceCount": 30,
+      "layout": {"authority": "walk", "banks": 8, "voices": 32, "voiceStart": 8192, "audioStart": 16384}
+    }
+  ]
+}

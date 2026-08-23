@@ -3,6 +3,11 @@
 Hand-built test fixtures used by `fizzle`'s own test suite, exercising
 specific code paths under deterministic, version-controlled conditions.
 
+`../layout-manifest.json` records each disk image's SHA-256, evidence tier,
+tags, DIS voice count, and resolved full-dump layout. The integration test
+also refuses an unlisted image, so adding a fixture requires documenting its
+purpose and expected parser authority.
+
 ## Disk images
 
 Each `.img` file is a 1.25 MB Casio FZ-1 floppy image built with `fizzle`
