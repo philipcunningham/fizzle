@@ -199,3 +199,7 @@ directory-blank-slots.md now scopes its claim: the bytes prove the firmware writ
 ## [2026-08-23] lint | Correction: multi-disk-dumps was stale
 
 The 2026-08-23 post-ingest pass claimed no older page cited the changed code paths. multi-disk-dumps.md cites pkg/disk and pkg/diskadd and was dated 2026-08-20. Its citations re-verified today and the page bumped, with the 0x294 marker cross-reference added.
+
+## [2026-08-23] ingest | The trusted-upward rule's blind spot is named
+
+voice-area-sizing.md records the accepted trade. Stale slots that walk as plausible past a low vn list as voices, and an edit restamps the tail. A test pins the TECHNO restamp. The CLI readers now honour the 0x294 marker through ReadFZF.

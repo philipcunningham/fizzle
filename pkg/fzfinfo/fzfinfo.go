@@ -58,7 +58,7 @@ func Parse(path string) (*FullDump, error) {
 	if disk.IsPlausibleVoiceHeader(data) {
 		return nil, fmt.Errorf("fzfinfo: %q looks like a voice file, not a full dump. Try 'fzv info' instead", path)
 	}
-	hdr, err := fzutil.ParseFZFHeader(data)
+	hdr, err := fzutil.ParseFZFHeaderMarked(data)
 	if err != nil {
 		return nil, fmt.Errorf("fzfinfo: %w", err)
 	}
