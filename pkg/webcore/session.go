@@ -221,12 +221,40 @@ func (s *Session) SetSampleMemory(bytes int) (Snapshot, *Error) {
 // A per voice sum cannot do this. It drops slots the voice list hides,
 // such as one set to make no sound, whose samples stay in the dump and
 // still load, and it counts frames where the dump pads to a sector.
-func dumpAudioBytes(fzf []byte) int {
-	d, cerr := newDumpState(fzf)
+func dumpAudioBytes(fzf []byte, disVN int) int {
+	d, cerr := newDumpState(fzf, disVN)
 	if cerr != nil {
 		return 0
 	}
 	return len(d.fzf) - d.audioStart
+}
+
+// disVoiceCount reads the voice count from the FULL-DATA-FZ entry's
+// DIS tail, or 0 when the disk has no readable dump. For a split
+// pair, disk 1's tail already carries the pair's total.
+func disVoiceCount(img *disk.Image) int {
+	entries, err := img.Directory()
+	if err != nil {
+		return 0
+	}
+	for _, e := range entries {
+		if e.FileType != disk.TypeFullDump || e.NameString() != disk.FullDumpName {
+			continue
+		}
+		if int(e.DisSector) < disk.ReservedSectors || int(e.DisSector) >= disk.SectorCount {
+			return 0
+		}
+		sec, serr := img.SectorRef(int(e.DisSector))
+		if serr != nil {
+			return 0
+		}
+		dis, derr := disk.DecodeDisSector(sec)
+		if derr != nil {
+			return 0
+		}
+		return int(dis.VoiceCount)
+	}
+	return 0
 }
 
 // NewDisk replaces the session's disk with a blank formatted image.
@@ -662,10 +690,11 @@ func (s *Session) adoptState(img *disk.Image, img2 []byte) (Snapshot, *Error) {
 	// edits (spec section 6). A dump that fails to parse simply
 	// carries no instrument; the file row still lists it.
 	var inst *InstrumentSnapshot
+	vn := disVoiceCount(img)
 	for _, f := range files {
 		if f.Name == disk.FullDumpName && f.Type == "full" {
 			if data, err := diskget.FromImage(img, f.Name); err == nil {
-				if parsed, err := instrumentFrom(f.Name, data); err == nil {
+				if parsed, err := instrumentFrom(f.Name, data, vn); err == nil {
 					inst = parsed
 				}
 			}
@@ -688,7 +717,7 @@ func (s *Session) adoptState(img *disk.Image, img2 []byte) (Snapshot, *Error) {
 	s.audioBytes = 0
 	if inst != nil {
 		if fzf, cerr := s.stitchedDump(img); cerr == nil {
-			s.audioBytes = dumpAudioBytes(fzf)
+			s.audioBytes = dumpAudioBytes(fzf, vn)
 		}
 	}
 	s.revision++

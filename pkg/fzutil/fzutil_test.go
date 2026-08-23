@@ -451,6 +451,92 @@ func TestParseFZFHeader(t *testing.T) {
 	}
 }
 
+// makePreyShapedDump builds a dump shaped like the PREY.img fixture's:
+// bsteps sum to 4, five live voices (the fifth in no bank), and three
+// stale but plausible slots behind them.
+func makePreyShapedDump() []byte {
+	const banks = 2
+	const liveVoices = 5
+	voiceAreaSectors := disk.VoiceAreaSectors(8) // 8 written slot positions
+	data := make([]byte, banks*disk.SectorSize+voiceAreaSectors*disk.SectorSize+2*disk.SectorSize)
+	binary.LittleEndian.PutUint16(data[disk.BankVoiceCountOffset:], 1)
+	copy(data[disk.BankNameOffset:], "BANK ONE    ")
+	binary.LittleEndian.PutUint16(data[disk.SectorSize+disk.BankVoiceCountOffset:], 3)
+	copy(data[disk.SectorSize+disk.BankNameOffset:], "BANK TWO    ")
+	voiceArea := banks * disk.SectorSize
+	// Slots 0..4 are live voices; slots 5..7 are stale but byte-plausible
+	// copies, exactly what a smaller re-save leaves behind.
+	for i := range 8 {
+		off := disk.VoiceSlotOffset(voiceArea, i)
+		binary.LittleEndian.PutUint16(data[off+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
+	}
+	_ = liveVoices
+	return data
+}
+
+func TestParseFZFHeaderWithVoiceCount(t *testing.T) {
+	t.Parallel()
+	data := makePreyShapedDump()
+
+	// Pin the undercount that motivates the vn-aware parse: the walk's
+	// bstep bound stops before the bank-less fifth voice.
+	walked, err := ParseFZFHeader(data)
+	if err != nil {
+		t.Fatalf("ParseFZFHeader: %v", err)
+	}
+	if walked.NVoice != 4 {
+		t.Fatalf("walked NVoice = %d, want 4 (bstep-bounded walk)", walked.NVoice)
+	}
+
+	t.Run("trusts the DIS voice count", func(t *testing.T) {
+		t.Parallel()
+		h, err := ParseFZFHeaderWithVoiceCount(data, 5)
+		if err != nil {
+			t.Fatalf("ParseFZFHeaderWithVoiceCount: %v", err)
+		}
+		if h.NVoice != 5 {
+			t.Errorf("NVoice = %d, want 5", h.NVoice)
+		}
+		if h.NBankSectors != 2 {
+			t.Errorf("NBankSectors = %d, want 2", h.NBankSectors)
+		}
+		if h.VoiceAreaStart != 2*disk.SectorSize {
+			t.Errorf("VoiceAreaStart = %d, want %d", h.VoiceAreaStart, 2*disk.SectorSize)
+		}
+		if h.BStep0 != 1 {
+			t.Errorf("BStep0 = %d, want 1", h.BStep0)
+		}
+	})
+
+	t.Run("rejects a voice count out of range", func(t *testing.T) {
+		t.Parallel()
+		if _, err := ParseFZFHeaderWithVoiceCount(data, 0); err == nil {
+			t.Error("vn=0: expected error, got nil")
+		}
+		if _, err := ParseFZFHeaderWithVoiceCount(data, disk.MaxVoices+1); err == nil {
+			t.Error("vn=65: expected error, got nil")
+		}
+	})
+
+	t.Run("rejects a voice area running past the dump", func(t *testing.T) {
+		t.Parallel()
+		// 64 voices need 16 voice sectors; this dump holds nowhere near that.
+		if _, err := ParseFZFHeaderWithVoiceCount(data, disk.MaxVoices); err == nil {
+			t.Error("expected error for voice area past the dump, got nil")
+		}
+	})
+
+	t.Run("rejects a count claiming implausible slots", func(t *testing.T) {
+		t.Parallel()
+		garbled := append([]byte(nil), data...)
+		off := disk.VoiceSlotOffset(2*disk.SectorSize, 4)
+		binary.LittleEndian.PutUint16(garbled[off+disk.VoiceLoopModeOffset:], 0xFFFF)
+		if _, err := ParseFZFHeaderWithVoiceCount(garbled, 5); err == nil {
+			t.Error("expected error for implausible slot inside vn, got nil")
+		}
+	})
+}
+
 // TestIsMultiDiskFirstHalf pins the shared helper that gates
 // destructive operations against multi-disk dumps. A standalone
 // single-disk FZF must return false; a synthesised disk-1-like

@@ -193,7 +193,21 @@ func SplitDump(fzf []byte) (MultiDiskResult, error) {
 	if err != nil {
 		return MultiDiskResult{}, fmt.Errorf("voicebuild: %w", err)
 	}
+	return splitDump(fzf, hdr)
+}
 
+// SplitDumpWithVoiceCount is SplitDump for a dump whose voice count is
+// known from its disk's DIS tail, so the audio boundary lands where
+// the firmware puts it.
+func SplitDumpWithVoiceCount(fzf []byte, vn int) (MultiDiskResult, error) {
+	hdr, err := fzutil.ParseFZFHeaderWithVoiceCount(fzf, vn)
+	if err != nil {
+		return MultiDiskResult{}, fmt.Errorf("voicebuild: %w", err)
+	}
+	return splitDump(fzf, hdr)
+}
+
+func splitDump(fzf []byte, hdr *fzutil.FZFHeader) (MultiDiskResult, error) {
 	maxDisk1 := MaxDiskFileBytes
 	if len(fzf) <= maxDisk1 {
 		return MultiDiskResult{}, fmt.Errorf("voicebuild: all voices fit on one disk; use AssembleWithKeygroups instead")

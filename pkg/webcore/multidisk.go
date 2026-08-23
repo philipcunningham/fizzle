@@ -197,16 +197,23 @@ func (s *Session) stitchedDump(img *disk.Image) ([]byte, *Error) {
 // replaceDump writes a full dump back into the document, splitting
 // across two images when it outgrows one disk and collapsing back to
 // one when it no longer does. img is the parsed disk 1 scratch image;
-// on error the session state is untouched.
-func (s *Session) replaceDump(img *disk.Image, fzf []byte) (Snapshot, *Error) {
+// on error the session state is untouched. vn is the voice count the
+// DIS tail must carry, 0 to let content detection derive it.
+func (s *Session) replaceDump(img *disk.Image, fzf []byte, vn int) (Snapshot, *Error) {
 	if len(fzf) <= voicebuild.MaxDiskFileBytes {
-		if cerr := putDump(img, fzf, 0, nil); cerr != nil {
+		if cerr := putDump(img, fzf, 0, nil, vn); cerr != nil {
 			return s.Snapshot(), cerr
 		}
 		return s.adoptPair(img, nil)
 	}
 
-	result, serr := voicebuild.SplitDump(fzf)
+	var result voicebuild.MultiDiskResult
+	var serr error
+	if vn > 0 {
+		result, serr = voicebuild.SplitDumpWithVoiceCount(fzf, vn)
+	} else {
+		result, serr = voicebuild.SplitDump(fzf)
+	}
 	if serr != nil {
 		return s.Snapshot(), splitError(serr)
 	}
@@ -247,11 +254,18 @@ func freshImage(label string) (*disk.Image, *Error) {
 
 // putDump replaces an image's FULL-DATA-FZ payload. With a split
 // result the DIS tail counts are the split's (disk 1's wave count
-// spans both disks); otherwise content detection supplies them.
-func putDump(img *disk.Image, data []byte, diskNum uint8, split *voicebuild.MultiDiskResult) *Error {
+// spans both disks); otherwise vn (when non-zero) or content
+// detection supplies the voice count.
+func putDump(img *disk.Image, data []byte, diskNum uint8, split *voicebuild.MultiDiskResult, vn int) *Error {
 	if hasFile(img, disk.FullDumpName) {
 		if split == nil {
-			if err := diskadd.ReplaceInMemory(img, disk.FullDumpName, data, diskNum); err != nil {
+			var err error
+			if vn > 0 {
+				err = diskadd.ReplaceInMemoryWithVoiceCount(img, disk.FullDumpName, data, diskNum, vn)
+			} else {
+				err = diskadd.ReplaceInMemory(img, disk.FullDumpName, data, diskNum)
+			}
+			if err != nil {
 				return addError(err)
 			}
 			return nil
@@ -261,7 +275,13 @@ func putDump(img *disk.Image, data []byte, diskNum uint8, split *voicebuild.Mult
 		}
 	}
 	if split == nil {
-		if err := diskadd.AddToImage(img, data, diskNum); err != nil {
+		var err error
+		if vn > 0 {
+			err = diskadd.AddToImageWithVoiceCount(img, data, diskNum, vn)
+		} else {
+			err = diskadd.AddToImage(img, data, diskNum)
+		}
+		if err != nil {
 			return addError(err)
 		}
 		return nil
