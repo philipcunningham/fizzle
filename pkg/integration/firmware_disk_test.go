@@ -1,10 +1,8 @@
 package integration_test
 
-// Regression tests over PREY.img, a full dump a real FZ-1 saved: a
-// deleted entry blanks directory slot 0 ahead of the live FULL-DATA-FZ,
-// the fifth voice (CHEMICAL) belongs to no bank, and three stale voice
-// slots sit past the DIS tail's vn=5. See
-// llm-wiki/findings/directory-blank-slots.md.
+// Regressions over PREY.img, a dump a real FZ-1 saved: a deleted entry
+// ahead of the live one, a voice in no bank, stale slots past vn=5.
+// See llm-wiki/findings/directory-blank-slots.md.
 
 import (
 	"bytes"
@@ -19,6 +17,7 @@ import (
 const preyImg = "../../testdata/synthetic/PREY.img"
 
 func TestFirmwareDiskListsPastDeletedEntry(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
 	listing, err := disklist.Parse(preyImg)
 	if err != nil {
@@ -34,6 +33,7 @@ func TestFirmwareDiskListsPastDeletedEntry(t *testing.T) {
 }
 
 func TestFirmwareDiskOpensWithAllVoices(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
 	data, err := os.ReadFile(preyImg)
 	if err != nil {
@@ -82,6 +82,7 @@ func TestFirmwareDiskOpensWithAllVoices(t *testing.T) {
 }
 
 func TestFirmwareDiskEditPreservesDISCounts(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
 	data, err := os.ReadFile(preyImg)
 	if err != nil {

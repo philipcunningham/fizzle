@@ -234,12 +234,10 @@ func ParseFZFHeader(data []byte) (*FZFHeader, error) {
 	}, nil
 }
 
-// ParseFZFHeaderWithVoiceCount parses the header of an FZF full dump
-// whose voice count is known from the disk's DIS tail. The firmware
-// sizes the voice area by that vn, never by a walk, and vn reaches
-// voices ParseFZFHeader's bstep-bounded walk misses (a voice in no
-// bank). The slots vn claims are still validated, so a corrupt DIS
-// errors instead of walking the parser into the audio. See
+// ParseFZFHeaderWithVoiceCount parses an FZF header under the DIS
+// tail's voice count, which reaches voices the bstep-bounded walk
+// misses. The slots vn claims are still validated, so a corrupt DIS
+// errors rather than parsing audio as headers. See
 // llm-wiki/topics/voice-area-sizing.md.
 func ParseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
 	if len(data) < disk.SectorSize {

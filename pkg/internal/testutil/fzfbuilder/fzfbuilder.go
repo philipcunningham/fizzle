@@ -18,12 +18,10 @@ const (
 	BanklessDumpBanks  = 2
 )
 
-// MakeBanklessVoiceDump builds a full dump shaped like the PREY.img
-// fixture's: two banks whose bsteps sum to 4, five live voices
-// (VOICE0..VOICE4, the fifth in no bank), and three stale but
-// byte-plausible slots repeating VOICE1..VOICE3, then 2 audio
-// sectors. The bstep-bounded walk reads it as 4 voices and a full
-// slot walk as 8; only a DIS vn of 5 identifies the live ones.
+// MakeBanklessVoiceDump builds a dump shaped like the PREY.img
+// fixture's: bsteps sum to 4, five live voices (VOICE0..VOICE4, the
+// fifth in no bank), three stale slots, 2 audio sectors. Only a DIS
+// vn of 5 identifies the live voices.
 func MakeBanklessVoiceDump(t *testing.T) []byte {
 	t.Helper()
 	voiceAreaSectors := disk.VoiceAreaSectors(8)
@@ -83,4 +81,59 @@ func MakeTestFZF(t *testing.T, names []string) ([]byte, string) {
 		t.Fatal(err)
 	}
 	return out, fzfPath
+}
+
+// SharedVoiceDumpVoices is the voice count of the dump
+// MakeSharedVoiceDump builds; its single bank's bstep is 5.
+const SharedVoiceDumpVoices = 4
+
+// MakeSharedVoiceDump builds a dump shaped like a shared-voice kit
+// (CASIO097): one bank, five areas playing four voices through vp, so
+// the summed bstep runs above vn while the walk agrees with vn.
+func MakeSharedVoiceDump(t *testing.T) []byte {
+	t.Helper()
+	data := make([]byte, 4*disk.SectorSize)
+	binary.LittleEndian.PutUint16(data[disk.BankVoiceCountOffset:], 5)
+	bankName := disk.PadLabel("SHARED KIT")
+	copy(data[disk.BankNameOffset:], bankName[:])
+	for i, slot := range []int{0, 1, 2, 3, 0} {
+		binary.LittleEndian.PutUint16(data[disk.BankVoiceNumOffset+i*disk.VPEntrySize:], uint16(slot)) //nolint:gosec // small test values
+	}
+	for i := range SharedVoiceDumpVoices {
+		off := disk.VoiceSlotOffset(disk.SectorSize, i)
+		binary.LittleEndian.PutUint16(data[off+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
+		padded := disk.PadLabel("SHARED" + string(rune('0'+i)))
+		copy(data[off+disk.VoiceNameOffset:], padded[:])
+	}
+	// Non-zero audio, so the walk stops at the voice area's end instead
+	// of reading zeroed bytes as placeholder slots.
+	for i := 2 * disk.SectorSize; i < len(data); i++ {
+		data[i] = 0xAB
+	}
+	return data
+}
+
+// FullDumpDISTail decodes the DIS sector of the image's FULL-DATA-FZ.
+func FullDumpDISTail(t *testing.T, img *disk.Image) disk.DisSector {
+	t.Helper()
+	entries, err := img.Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.NameString() != disk.FullDumpName {
+			continue
+		}
+		sec, err := img.SectorRef(int(e.DisSector))
+		if err != nil {
+			t.Fatal(err)
+		}
+		dis, err := disk.DecodeDisSector(sec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return dis
+	}
+	t.Fatal("no FULL-DATA-FZ entry on image")
+	return disk.DisSector{}
 }
