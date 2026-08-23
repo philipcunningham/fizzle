@@ -178,7 +178,7 @@ floor.
 
 ## [2026-08-23] ingest | Deleted directory entries leave blank slots
 
-New finding from a customer disk a real FZ-1 saved, now the PREY.img fixture under testdata/synthetic. Deletion zeroes the first name byte and leaves the gap, so live entries follow blank slots. Mapped the directory row to the new page.
+New finding from a user disk a real FZ-1 saved, now the PREY.img fixture under testdata/synthetic. Deletion zeroes the first name byte and leaves the gap, so live entries follow blank slots. Mapped the directory row to the new page.
 
 ## [2026-08-23] ingest | DIS vn is the authority for voice-area sizing
 
