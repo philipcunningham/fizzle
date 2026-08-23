@@ -24,7 +24,7 @@ export function StartScreen({
   return (
     <div className="start">
       <h1>fizzle</h1>
-      <p className="hint">FZ instruments in the browser, byte exact.</p>
+      <p className="hint">FZ instruments in the browser.</p>
       <div className="actions">
         <button className="btn solid" onClick={onNewDisk}>
           New disk
@@ -69,7 +69,9 @@ export function StartScreen({
         </select>{" "}
         sampler. An FZ-1 has 1 MB unless the expansion card is fitted; the rack units have 2 MB.
       </p>
-      <p className="hint">Nothing leaves this machine. Export writes the disk image.</p>
+      <p className="hint">
+        Nothing leaves this machine: your samples and disks never touch a server.
+      </p>
     </div>
   );
 }
