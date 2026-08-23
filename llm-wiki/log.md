@@ -155,8 +155,9 @@ and attack pair the DELAY row writes together, the unsigned velocity
 resonance row, and the inverted area level. Each came from driving the
 FZ-1 firmware under an emulator and reading the bytes back.
 
-Two earlier readings were reversed: the velocity resonance row, and the
-velocity DCF rate row. Both came from misjudging the bounds table's
-record phase by one, which still decodes into plausible bounds. The
-open question claiming the velocity fields were uncalibrated is gone.
+## [2026-08-22] ingest | Two static bounds readings reversed
 
+The velocity RESONANCE and velocity DCF RATE rows were both recorded
+wrong, from misjudging the bounds table's record phase by one. A
+misaligned record still decodes into plausible bounds. The open
+question calling the velocity fields uncalibrated is gone.
