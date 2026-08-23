@@ -520,7 +520,11 @@ func (img *Image) RemoveFile(name string) error {
 		if i == target || img.data[off] == 0 || !IsPrintableName(img.data[off:off+LabelSize]) {
 			continue
 		}
-		if binary.LittleEndian.Uint16(img.data[off+LabelSize+2:off+LabelSize+4]) == targetEntry.DisSector {
+		e, err := DecodeDirEntry(img.data[off : off+DirEntrySize])
+		if err != nil {
+			return fmt.Errorf("disk: reading directory: %w", err)
+		}
+		if e.DisSector == targetEntry.DisSector {
 			aliased = true
 			break
 		}

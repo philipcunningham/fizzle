@@ -298,6 +298,15 @@ func StampVoiceCountMarker(data []byte, vn int) {
 	binary.LittleEndian.PutUint16(data[disk.BankVoiceMarkerOffset+2:], uint16(vn)) //nolint:gosec // bounded above
 }
 
+// ParseFZFHeaderMarked parses under the voice-count marker when the
+// dump carries one, walking otherwise.
+func ParseFZFHeaderMarked(data []byte) (*FZFHeader, error) {
+	if vn := MarkerVoiceCount(data); vn > 0 {
+		return ParseFZFHeaderWithVoiceCount(data, vn)
+	}
+	return ParseFZFHeader(data)
+}
+
 // MarkerVoiceCount reads the voice-count marker, 0 unless the magic
 // matches and the count normalises.
 func MarkerVoiceCount(data []byte) int {
@@ -639,7 +648,7 @@ func ReadFZF(path string) ([]byte, *FZFHeader, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	hdr, err := ParseFZFHeader(data)
+	hdr, err := ParseFZFHeaderMarked(data)
 	if err != nil {
 		return nil, nil, err
 	}

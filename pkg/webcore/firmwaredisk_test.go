@@ -424,3 +424,29 @@ func TestLoadMarkedDumpOnFreshDisk(t *testing.T) {
 		t.Errorf("DIS vn = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
 	}
 }
+
+// The trusted-upward rule hands a low-tail disk to the walk, so an
+// edit deliberately stamps the walked count over the firmware's tail:
+// TECHNO's vn 30 becomes 32. Hiding live voices would be worse.
+func TestEditRestampsLowDISCount(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile("../../testdata/synthetic/TECHNO.img")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSession()
+	if _, cerr := s.OpenImage(data); cerr != nil {
+		t.Fatalf("OpenImage: %v", cerr)
+	}
+	if _, cerr := s.RenameBank(0, "EDITED"); cerr != nil {
+		t.Fatalf("RenameBank: %v", cerr)
+	}
+	out, cerr := s.ExportImage()
+	if cerr != nil {
+		t.Fatalf("ExportImage: %v", cerr)
+	}
+	dis := fullDumpDISTail(t, out)
+	if got := int(dis.VoiceCount); got != 32 {
+		t.Errorf("DIS vn after edit = %d, want the walked 32", got)
+	}
+}
