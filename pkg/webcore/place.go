@@ -35,13 +35,13 @@ func (s *Session) LoadFZF(data []byte) (Snapshot, *Error) {
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	// The mode is set before adoption so the snapshot parses the way
-	// the write-back stamps, and re-derived after in case the load
-	// replaced a DIS-mode document with a plain one.
+	// The mode rides through adoptPair, so the history records the
+	// outgoing mode and the snapshot parses under the new one.
 	vn := fzutil.MarkerVoiceCount(data)
-	s.disMode = vn > 0
+	mode := vn > 0
+	s.nextDISMode = &mode
 	snap, cerr := s.replaceDump(img, data, vn)
-	s.refreshDISMode()
+	s.nextDISMode = nil
 	return snap, cerr
 }
 

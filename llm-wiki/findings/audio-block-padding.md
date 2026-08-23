@@ -3,7 +3,7 @@ type: finding
 title: Audio blocks are sector-padded but waved stores the unpadded count
 description: Read each voice's audio start from its own wavst; reconstructing from waved deltas misses the padding.
 tags: [fzf, audio, parsing]
-updated: 2026-07-11
+updated: 2026-08-23
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md sections 1-5, 2-1
 status: confirmed-hardware

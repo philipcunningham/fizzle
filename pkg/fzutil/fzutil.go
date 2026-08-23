@@ -235,7 +235,9 @@ func ParseFZFHeader(data []byte) (*FZFHeader, error) {
 }
 
 // ParseFZFHeaderWithVoiceCount parses under the DIS tail's voice
-// count, validating the slots it claims so a corrupt count errors.
+// count, validating the slots it claims. Zeroed bytes read as
+// placeholder slots, so the effective ceiling is geometry: a count
+// whose voice area runs past the data errors.
 // See llm-wiki/topics/voice-area-sizing.md.
 func ParseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
 	if len(data) < disk.SectorSize {
@@ -305,6 +307,14 @@ func ParseFZFHeaderMarked(data []byte) (*FZFHeader, error) {
 		return ParseFZFHeaderWithVoiceCount(data, vn)
 	}
 	return ParseFZFHeader(data)
+}
+
+// ClearVoiceCountMarker zeroes the marker field.
+func ClearVoiceCountMarker(data []byte) {
+	if len(data) < disk.BankVoiceMarkerOffset+4 {
+		return
+	}
+	clear(data[disk.BankVoiceMarkerOffset : disk.BankVoiceMarkerOffset+4])
 }
 
 // MarkerVoiceCount reads the voice-count marker, 0 unless the magic

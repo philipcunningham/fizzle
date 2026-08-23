@@ -49,8 +49,10 @@ func MakeBanklessVoiceDump(t *testing.T) []byte {
 	for i := range BanklessDumpVoices {
 		writeSlot(i, "VOICE"+string(rune('0'+i)), uint32(i*perVoice), uint32((i+1)*perVoice)) //nolint:gosec // small test values
 	}
+	// Stale slots carry the earlier, larger save's layout: old names
+	// and old pointers, distinct from every live slot's bytes.
 	for i := 1; i <= 3; i++ {
-		writeSlot(BanklessDumpVoices-1+i, "VOICE"+string(rune('0'+i)), uint32(i*perVoice), uint32((i+1)*perVoice)) //nolint:gosec // small test values
+		writeSlot(BanklessDumpVoices-1+i, "OLDTAKE"+string(rune('0'+i)), uint32(i*300), uint32(i*300+250)) //nolint:gosec // small test values
 	}
 	return data
 }

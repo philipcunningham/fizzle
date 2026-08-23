@@ -3,7 +3,7 @@ type: topic
 title: Voice authoring defaults
 description: The loop, envelope, and effect values fizzle writes so a generated voice behaves like a hardware-native one.
 tags: [fzv, authoring, loops, envelope, effects]
-updated: 2026-07-11
+updated: 2026-08-23
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md sections 2-1, 2-3
   - FZ-10M hardware (defaults verified by loading generated disks)

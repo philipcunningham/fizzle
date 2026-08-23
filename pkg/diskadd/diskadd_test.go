@@ -1536,3 +1536,16 @@ func TestAddHonoursVoiceCountMarker(t *testing.T) {
 		t.Errorf("DIS vn = %d, want %d (marker ignored)", got, fzfbuilder.BanklessDumpVoices)
 	}
 }
+
+// A host filename with non-ASCII bytes must not write a name the FZ
+// cannot display; offending bytes become underscores.
+func TestProgramNameSanitisesNonASCII(t *testing.T) {
+	t.Parallel()
+	name := programNameFromPath("caf\xc3\xa9.bin")
+	if !disk.IsPrintableName(name[:]) {
+		t.Fatalf("name % x is not printable ASCII", name)
+	}
+	if got := disk.TrimPadded(name[:]); got != "CAF__" {
+		t.Errorf("name = %q, want CAF__", got)
+	}
+}

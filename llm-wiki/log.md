@@ -203,3 +203,11 @@ The 2026-08-23 post-ingest pass claimed no older page cited the changed code pat
 ## [2026-08-23] ingest | The trusted-upward rule's blind spot is named
 
 voice-area-sizing.md records the accepted trade. Stale slots that walk as plausible past a low vn list as voices, and an edit restamps the tail. A test pins the TECHNO restamp. The CLI readers now honour the 0x294 marker through ReadFZF.
+
+## [2026-08-23] lint | Six more pages re-verified and bumped
+
+The staleness sweep after this branch stopped at multi-disk-dumps. Also citing changed code: dis-file-head, voice-authoring-defaults, dcq-full-byte, audio-block-padding, display-scales, and the map. Their claims hold against the new code; dates bumped.
+
+## [2026-08-23] ingest | The blank-slot description stops overclaiming
+
+directory-blank-slots.md's description line now matches its body: the write side is observed, the read side is open. Rubbish directory slots are non-entries by DIS pointer range, not by name printability, which a fizzle-written program name can fail.
