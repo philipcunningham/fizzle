@@ -512,8 +512,7 @@ func (img *Image) RemoveFile(name string) error {
 		return fmt.Errorf("disk: decoding DIS: %w", err)
 	}
 
-	// A stale entry can alias a live file's DIS sector; freeing the
-	// sectors then pulls them out from under the live file. The alias
+	// A stale entry can alias a live file's DIS sector: the alias
 	// entry goes, its sectors stay.
 	aliased := false
 	for i := range MaxDirEntries {

@@ -251,9 +251,8 @@ func ReplaceInMemoryWithVoiceCount(img *disk.Image, oldName string, fileData []b
 	return AddToImageWithVoiceCount(img, fileData, diskNum, vn)
 }
 
-// detectFullDumpWithVoiceCount runs content detection, then overrides
-// the full dump's voice count with the caller's known vn and rebuilds
-// the counts that derive from it.
+// detectFullDumpWithVoiceCount overrides detection's voice count with
+// the caller's vn and rebuilds the counts deriving from it.
 func detectFullDumpWithVoiceCount(fileData []byte, vn int) (fileInfo, error) {
 	fi, err := detectFile(fileData)
 	if err != nil {
@@ -459,9 +458,8 @@ func detectFile(fileData []byte) (fileInfo, error) {
 	return fi, nil
 }
 
-// applyVoiceCountMarker honours the fizzle voice-count marker (see
-// disk.BankVoiceMarkerOffset): an exported dump whose count the walk
-// cannot re-derive carries it, and the DIS tail must get that count.
+// applyVoiceCountMarker honours the fizzle voice-count marker, so an
+// exported dump's DIS tail gets the count its walk cannot re-derive.
 func applyVoiceCountMarker(fileData []byte, fi *fileInfo) {
 	vn := fzutil.MarkerVoiceCount(fileData)
 	if vn == 0 {

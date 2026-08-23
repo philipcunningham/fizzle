@@ -18,12 +18,9 @@ const (
 	BanklessDumpBanks  = 2
 )
 
-// MakeBanklessVoiceDump builds a dump shaped like the PREY.img
-// fixture's: bsteps sum to 4, five live voices (VOICE0..VOICE4, the
-// fifth in no bank) with monotonic wave pointers tiling the 2 audio
-// sectors, and three stale slots repeating the pointers of
-// VOICE1..VOICE3, the way a smaller re-save leaves them. Only a DIS
-// vn of 5 identifies the live voices.
+// MakeBanklessVoiceDump builds a dump shaped like PREY.img's: bsteps
+// sum to 4, five live voices (the fifth in no bank), three stale
+// slots. Only a DIS vn of 5 counts the live ones.
 func MakeBanklessVoiceDump(t *testing.T) []byte {
 	t.Helper()
 	voiceAreaSectors := disk.VoiceAreaSectors(8)
@@ -110,8 +107,7 @@ func MakeSharedVoiceDump(t *testing.T) []byte {
 		padded := disk.PadLabel("SHARED" + string(rune('0'+i)))
 		copy(data[off+disk.VoiceNameOffset:], padded[:])
 	}
-	// Non-zero audio, so the walk stops at the voice area's end instead
-	// of reading zeroed bytes as placeholder slots.
+	// Non-zero audio, so the walk stops at the voice area's end.
 	for i := 2 * disk.SectorSize; i < len(data); i++ {
 		data[i] = 0xAB
 	}

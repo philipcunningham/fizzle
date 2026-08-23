@@ -296,8 +296,7 @@ func TestAreaOpSequencesHoldTheAudioInDISMode(t *testing.T) {
 			origin := dumpGeometryUnder(t, fzf, vn)
 			rng := rand.New(rand.NewPCG(seed, 99)) //nolint:gosec // G404: a reproducible walk, not cryptography
 			// The count tracks what the write-back stamps, the way the
-			// session's sticky mode does; re-normalising per step is the
-			// mid-sequence mode flip this sweep exists to forbid.
+			// session's sticky mode does.
 			for step := range steps {
 				hdr, err := dumpHeaderFor(fzf, vn)
 				if err != nil {

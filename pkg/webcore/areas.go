@@ -74,9 +74,7 @@ type dumpState struct {
 }
 
 // newDumpState parses a full dump into the context the area ops work
-// over. disVN is the document's DIS-mode voice count, 0 for walk mode
-// (see documentDISMode); a count the bytes stopped backing falls back
-// to the walk.
+// over. disVN is the document's DIS-mode count, 0 for walk mode.
 func newDumpState(fzf []byte, disVN int) (*dumpState, *Error) {
 	if disVN > 0 {
 		if _, err := fzutil.ParseFZFHeaderWithVoiceCount(fzf, disVN); err != nil {
@@ -100,12 +98,8 @@ func newDumpState(fzf []byte, disVN int) (*dumpState, *Error) {
 	}, nil
 }
 
-// normalisedDISVoiceCount picks the parse mode: disVN (DIS mode) only
-// where the count validates and runs ABOVE the walk, the one direction
-// the walk cannot see (a voice in no bank). A count at or below the
-// walk returns 0 (walk mode): real disks carry a vn below their live
-// voice count (TECHNO.img says 30 of its 32), so a low vn is never
-// allowed to hide or overwrite the voices past it.
+// normalisedDISVoiceCount picks the parse mode: disVN for DIS mode,
+// 0 for walk mode (see fzutil.NormalisedVoiceCount).
 func normalisedDISVoiceCount(fzf []byte, disVN int) int {
 	return fzutil.NormalisedVoiceCount(fzf, disVN)
 }
@@ -124,13 +118,10 @@ func (d *dumpState) voiceAreaSectors() int {
 	return (d.audioStart - d.header.VoiceAreaStart) / disk.SectorSize
 }
 
-// checkGeometry holds an operation to the one thing every reader
-// agrees on: the audio starts at the byte after the voice area the
-// voice count sizes. Walk mode re-derives that count the way every
-// standalone reader does (see bstepSum); DIS mode validates under the
-// count the write-back stamps into the DIS tail. When the byte is not
-// where this operation left the audio, every voice plays from the
-// wrong offset, so the operation is refused rather than written.
+// checkGeometry refuses an operation that leaves the audio at a byte
+// a reader would not derive: walk mode re-derives the count (see
+// bstepSum), DIS mode validates under the count the write-back
+// stamps. A moved audio start plays every voice from the wrong bytes.
 func (d *dumpState) checkGeometry() *Error {
 	vn := 0
 	if d.disVN > 0 {
@@ -463,10 +454,8 @@ func (s *Session) patchDump(build func(d *dumpState) ([]model.Patch, *Error)) (S
 // patchDumpBytes runs one operation over a full dump's bytes: build
 // mutates the state in place or through the patches it returns, each
 // patch verifies its pre-image, and the result has to read back as the
-// dump the operation meant to write. It returns the new dump plus the
-// voice count the write-back must stamp into the DIS tail: always the
-// parsed count, because content detection would re-derive it from the
-// bstep sum, which a shared-voice kit's vp sharing inflates.
+// dump the operation meant to write. It also returns the count the
+// write-back stamps: the parsed count, never the bstep sum.
 func patchDumpBytes(fzf []byte, disVN int, build func(d *dumpState) ([]model.Patch, *Error)) ([]byte, int, *Error) {
 	d, cerr := newDumpState(fzf, disVN)
 	if cerr != nil {
