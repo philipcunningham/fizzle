@@ -70,7 +70,7 @@ export function StartScreen({
         sampler. An FZ-1 has 1 MB unless the expansion card is fitted; the rack units have 2 MB.
       </p>
       <p className="hint">
-        Nothing leaves this machine: your samples and disks never touch a server.
+        Nothing leaves this machine: your samples and disks never touch a remote server.
       </p>
     </div>
   );
