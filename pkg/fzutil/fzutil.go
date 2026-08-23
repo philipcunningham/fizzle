@@ -269,20 +269,42 @@ func ParseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
 	}, nil
 }
 
-// NormalisedVoiceCount returns vn only where it validates above the
-// walk; real disks carry undercounting tails (TECHNO.img), so a vn at
-// or below the walk never hides the voices past it.
-func NormalisedVoiceCount(data []byte, vn int) int {
-	if vn <= 0 {
-		return 0
+// VoiceCountSource names where a resolved dump's voice count came
+// from.
+type VoiceCountSource uint8
+
+// The three ways a dump's voice count resolves.
+const (
+	VoiceCountWalk VoiceCountSource = iota
+	VoiceCountDIS
+	VoiceCountMarker
+)
+
+// ResolveFZFHeader parses a dump under fizzle's one policy for an
+// explicit voice count: the candidate (a DIS tail's vn, 0 when
+// absent) wins where it validates above the walk, then a stamped
+// marker under the same rule, then the walk. An explicit count at or
+// below the walk is an undercount (TECHNO.img carries vn 30 with 32
+// live voices) and never hides the voices past it.
+func ResolveFZFHeader(data []byte, candidate int) (*FZFHeader, VoiceCountSource, error) {
+	walk, werr := ParseFZFHeader(data)
+	above := func(vn int) *FZFHeader {
+		if vn <= 0 || (werr == nil && walk.NVoice >= vn) {
+			return nil
+		}
+		hdr, err := ParseFZFHeaderWithVoiceCount(data, vn)
+		if err != nil {
+			return nil
+		}
+		return hdr
 	}
-	if walk, err := ParseFZFHeader(data); err == nil && walk.NVoice >= vn {
-		return 0
+	if hdr := above(candidate); hdr != nil {
+		return hdr, VoiceCountDIS, nil
 	}
-	if _, err := ParseFZFHeaderWithVoiceCount(data, vn); err != nil {
-		return 0
+	if hdr := above(MarkerVoiceCount(data)); hdr != nil {
+		return hdr, VoiceCountMarker, nil
 	}
-	return vn
+	return walk, VoiceCountWalk, werr
 }
 
 // voiceMarkerMagic guards the voice-count marker: the offset holds
@@ -300,15 +322,6 @@ func StampVoiceCountMarker(data []byte, vn int) {
 	binary.LittleEndian.PutUint16(data[disk.BankVoiceMarkerOffset+2:], uint16(vn)) //nolint:gosec // bounded above
 }
 
-// ParseFZFHeaderMarked parses under the voice-count marker when the
-// dump carries one, walking otherwise.
-func ParseFZFHeaderMarked(data []byte) (*FZFHeader, error) {
-	if vn := MarkerVoiceCount(data); vn > 0 {
-		return ParseFZFHeaderWithVoiceCount(data, vn)
-	}
-	return ParseFZFHeader(data)
-}
-
 // ClearVoiceCountMarker zeroes the marker field where the magic
 // matches; firmware garbage at the offset stays byte for byte.
 func ClearVoiceCountMarker(data []byte) {
@@ -321,8 +334,8 @@ func ClearVoiceCountMarker(data []byte) {
 	clear(data[disk.BankVoiceMarkerOffset : disk.BankVoiceMarkerOffset+4])
 }
 
-// MarkerVoiceCount reads the voice-count marker, 0 unless the magic
-// matches and the count normalises.
+// MarkerVoiceCount decodes the marker's raw count, 0 without the
+// magic. The acceptance policy lives in ResolveFZFHeader alone.
 func MarkerVoiceCount(data []byte) int {
 	if len(data) < disk.BankVoiceMarkerOffset+4 {
 		return 0
@@ -330,8 +343,7 @@ func MarkerVoiceCount(data []byte) int {
 	if data[disk.BankVoiceMarkerOffset] != voiceMarkerMagic[0] || data[disk.BankVoiceMarkerOffset+1] != voiceMarkerMagic[1] {
 		return 0
 	}
-	vn := int(binary.LittleEndian.Uint16(data[disk.BankVoiceMarkerOffset+2:]))
-	return NormalisedVoiceCount(data, vn)
+	return int(binary.LittleEndian.Uint16(data[disk.BankVoiceMarkerOffset+2:]))
 }
 
 // InferVoiceCount walks voice slots from voiceAreaStart and counts the
@@ -662,7 +674,7 @@ func ReadFZF(path string) ([]byte, *FZFHeader, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	hdr, err := ParseFZFHeaderMarked(data)
+	hdr, _, err := ResolveFZFHeader(data, 0)
 	if err != nil {
 		return nil, nil, err
 	}
