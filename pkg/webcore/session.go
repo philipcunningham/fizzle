@@ -613,25 +613,11 @@ func (s *Session) install(data []byte) (Snapshot, *Error) {
 		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: %v", err)
 	}
 	// ReadImage only checks the container. The Disk ID tag (spec
-	// section 1-2) separates a formatted FZ disk from arbitrary bytes,
-	// now that garbage directory slots are skipped rather than decoded.
+	// section 1-2) separates a formatted FZ disk from arbitrary bytes;
+	// Directory() is a forgiving view that never returns an entry with
+	// an out-of-range DIS pointer, so no per-entry check remains.
 	if img.Bytes()[disk.DiskNameTagOffset] != disk.DiskNameTag {
 		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: no FZ disk identification tag")
-	}
-	// Validate the directory the way the sibling readers (pkg/disklist,
-	// pkg/diskget) do: every entry's DIS pointer must land outside the
-	// reserved sectors and inside the disk, or the sampler can't use
-	// the disk.
-	entries, err := img.Directory()
-	if err != nil {
-		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: %v", err)
-	}
-	for _, e := range entries {
-		if int(e.DisSector) < disk.ReservedSectors || int(e.DisSector) >= disk.SectorCount {
-			return s.Snapshot(), errf("invalid-image",
-				"not a readable FZ image: directory entry %q DIS sector %d out of range",
-				e.NameString(), e.DisSector)
-		}
 	}
 	return s.adoptFresh(img, nil)
 }

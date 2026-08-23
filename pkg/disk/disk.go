@@ -413,7 +413,10 @@ func (img *Image) dirSlotEntry(i int) (DirEntry, bool) {
 }
 
 // Directory reads all directory entries from sector 1, stepping over
-// blank and rubbish slots (see dirSlotEntry).
+// blank and rubbish slots (see dirSlotEntry). It is a forgiving view,
+// not a validator: every entry it returns already carries an in-range
+// DIS pointer, and damage never surfaces as an error here. Strict
+// per-entry reporting lives in pkg/disklist's corrupt rows.
 func (img *Image) Directory() ([]DirEntry, error) {
 	var entries []DirEntry
 	for i := range MaxDirEntries {
