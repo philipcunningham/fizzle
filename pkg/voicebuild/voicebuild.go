@@ -196,9 +196,7 @@ func SplitDump(fzf []byte) (MultiDiskResult, error) {
 	return splitDump(fzf, hdr)
 }
 
-// SplitDumpWithVoiceCount is SplitDump for a dump whose voice count is
-// known from its disk's DIS tail, so the audio boundary lands where
-// the firmware puts it.
+// SplitDumpWithVoiceCount is SplitDump with a known voice count.
 func SplitDumpWithVoiceCount(fzf []byte, vn int) (MultiDiskResult, error) {
 	hdr, err := fzutil.ParseFZFHeaderWithVoiceCount(fzf, vn)
 	if err != nil {
