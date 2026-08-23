@@ -120,7 +120,15 @@ func writeToImage(imagePath string, fileData []byte, name [disk.LabelSize]byte, 
 }
 
 // addToImage adds a file to the in-memory disk image without writing to disk.
+// The voice-count marker is strictly standalone: a full dump carrying one has
+// its count consumed into the DIS tail by the caller, and the record itself
+// stays off the media (scrubbed in a copy; the caller's bytes are untouched).
 func addToImage(img *disk.Image, fileData []byte, name [disk.LabelSize]byte, fileType disk.FileType, diskNum uint8, nbank, nvoice, nwave int) error {
+	if fileType == disk.TypeFullDump && fzutil.MarkerVoiceCount(fileData) > 0 {
+		scrubbed := append([]byte(nil), fileData...)
+		fzutil.ClearVoiceCountMarker(scrubbed)
+		fileData = scrubbed
+	}
 	entries, err := img.Directory()
 	if err != nil {
 		return fmt.Errorf("diskadd: reading directory: %w", err)

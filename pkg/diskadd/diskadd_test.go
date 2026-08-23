@@ -13,6 +13,7 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/diskget"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
@@ -1534,5 +1535,32 @@ func TestAddHonoursVoiceCountMarker(t *testing.T) {
 	dis := fzfbuilder.FullDumpDISTail(t, img)
 	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
 		t.Errorf("DIS vn = %d, want %d (marker ignored)", got, fzfbuilder.BanklessDumpVoices)
+	}
+}
+
+// The marker is strictly standalone: importing a stamped dump moves
+// the count into the DIS and keeps the record off the media.
+func TestAddScrubsMarkerFromDiskPayload(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(dump, fzfbuilder.BanklessDumpVoices)
+	img := formattedImage(t)
+	if err := AddToImage(img, dump, 0); err != nil {
+		t.Fatal(err)
+	}
+	dis := fzfbuilder.FullDumpDISTail(t, img)
+	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
+		t.Fatalf("DIS vn = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
+	}
+	payload, err := diskget.FromImage(img, disk.FullDumpName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(payload[disk.BankVoiceMarkerOffset:disk.BankVoiceMarkerOffset+4]) == "fzv1" {
+		t.Error("marker record written onto the disk payload")
+	}
+	// The caller's bytes stay stamped.
+	if string(dump[disk.BankVoiceMarkerOffset:disk.BankVoiceMarkerOffset+4]) != "fzv1" {
+		t.Error("input slice mutated")
 	}
 }
