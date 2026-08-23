@@ -138,10 +138,9 @@ type Session struct {
 
 	instrument  *InstrumentSnapshot
 	missingDisk int // 1 or 2 when one half of a pair was opened alone
-	// disMode marks a document whose dump parses under its DIS voice
-	// count (see documentDISMode). Decided at document boundaries and
-	// held through edits: deriving it per operation lets an edit that
-	// moves a bstep flip the mode and drop a voice on the next one.
+	// disMode marks a dump parsing under its DIS voice count. Decided
+	// at document boundaries and held through edits, so an edit that
+	// moves a bstep cannot flip it.
 	disMode bool
 
 	past        []imagePair // undo stack, oldest first

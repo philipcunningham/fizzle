@@ -234,11 +234,9 @@ func ParseFZFHeader(data []byte) (*FZFHeader, error) {
 	}, nil
 }
 
-// ParseFZFHeaderWithVoiceCount parses an FZF header under the DIS
-// tail's voice count, which reaches voices the bstep-bounded walk
-// misses. The slots vn claims are still validated, so a corrupt DIS
-// errors rather than parsing audio as headers. See
-// llm-wiki/topics/voice-area-sizing.md.
+// ParseFZFHeaderWithVoiceCount parses under the DIS tail's voice
+// count, validating the slots it claims so a corrupt count errors.
+// See llm-wiki/topics/voice-area-sizing.md.
 func ParseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
 	if len(data) < disk.SectorSize {
 		return nil, fmt.Errorf("fzutil: FZF too small (%d bytes, need at least %d)", len(data), disk.SectorSize)
@@ -269,10 +267,9 @@ func ParseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
 	}, nil
 }
 
-// NormalisedVoiceCount returns vn where it is usable and runs above
-// the walk, the one direction the walk cannot see (a voice in no
-// bank), and 0 otherwise. Real disks carry a vn below their live
-// voice count, so a low vn never hides the voices past it.
+// NormalisedVoiceCount returns vn only where it validates above the
+// walk; real disks carry undercounting tails (TECHNO.img), so a vn at
+// or below the walk never hides the voices past it.
 func NormalisedVoiceCount(data []byte, vn int) int {
 	if vn <= 0 {
 		return 0
@@ -286,14 +283,12 @@ func NormalisedVoiceCount(data []byte, vn int) int {
 	return vn
 }
 
-// voiceMarkerMagic guards the fizzle-defined voice-count marker at
-// disk.BankVoiceMarkerOffset; the offset holds firmware garbage on
-// real dumps, so a bare count there means nothing.
+// voiceMarkerMagic guards the voice-count marker: the offset holds
+// firmware garbage on real dumps.
 var voiceMarkerMagic = [2]byte{'f', 'z'}
 
 // StampVoiceCountMarker writes the voice-count marker into a
-// standalone dump copy, so a reader can recover a count the walk
-// cannot. It leaves a short buffer untouched.
+// standalone dump copy.
 func StampVoiceCountMarker(data []byte, vn int) {
 	if len(data) < disk.BankVoiceMarkerOffset+4 || vn < 1 || vn > disk.MaxVoices {
 		return
@@ -303,9 +298,8 @@ func StampVoiceCountMarker(data []byte, vn int) {
 	binary.LittleEndian.PutUint16(data[disk.BankVoiceMarkerOffset+2:], uint16(vn)) //nolint:gosec // bounded above
 }
 
-// MarkerVoiceCount reads the voice-count marker, returning 0 unless
-// the magic matches and the count normalises (validates above the
-// walk).
+// MarkerVoiceCount reads the voice-count marker, 0 unless the magic
+// matches and the count normalises.
 func MarkerVoiceCount(data []byte) int {
 	if len(data) < disk.BankVoiceMarkerOffset+4 {
 		return 0

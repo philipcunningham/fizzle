@@ -89,8 +89,7 @@ type InstrumentSnapshot struct {
 
 // instrumentFrom parses a full dump's banks and voice list. It uses
 // the same per-area reader as fzfinfo and fzbinfo, so the Web UI and
-// the CLI agree on every field. disVN is the DIS tail's voice count, 0
-// when unknown; it reaches voices the bstep walk misses.
+// the CLI agree on every field. disVN is the DIS-mode count, 0 walks.
 func instrumentFrom(fileName string, fzfData []byte, disVN int) (*InstrumentSnapshot, error) {
 	hdr, err := dumpHeaderFor(fzfData, normalisedDISVoiceCount(fzfData, disVN))
 	if err != nil {

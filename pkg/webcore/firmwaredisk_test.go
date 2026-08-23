@@ -133,8 +133,7 @@ func TestExtractBanklessVoiceSlot(t *testing.T) {
 	}
 }
 
-// A walk-mode edit must stamp the parsed count back, not the bstep
-// sum a shared-voice kit inflates.
+// A walk-mode edit stamps the parsed count, not the bstep sum.
 func TestEditKeepsSharedVoiceKitDISCounts(t *testing.T) {
 	t.Parallel()
 	data, err := diskformat.BuildImage("KIT")
@@ -298,8 +297,8 @@ func TestOpenFallsBackOnCorruptDISVoiceCount(t *testing.T) {
 	}
 }
 
-// A DIS count below the walk is not trusted: the walk found live
-// voices past it (TECHNO.img carries vn=30 with 32 live voices).
+// A DIS count below the walk is an undercount: TECHNO.img says 30 of
+// its 32 live voices.
 func TestOpenKeepsVoicesPastLowDISCount(t *testing.T) {
 	t.Parallel()
 	data, err := os.ReadFile("../../testdata/synthetic/TECHNO.img")
@@ -333,9 +332,8 @@ func TestOpenKeepsVoicesPastLowDISCount(t *testing.T) {
 	}
 }
 
-// The parse mode is a property of the document, not of the bytes an
-// operation just moved: adding an area and deleting it again must not
-// flip to walk mode and drop the bank-less voice.
+// Adding an area and deleting it again must not flip the mode and
+// drop the bank-less voice.
 func TestAddThenDeleteAreaKeepsBanklessVoice(t *testing.T) {
 	t.Parallel()
 	s, _ := openBanklessDisk(t)
@@ -361,8 +359,7 @@ func TestAddThenDeleteAreaKeepsBanklessVoice(t *testing.T) {
 	}
 }
 
-// The bank-less voice must be editable, not only listed: the slot
-// write path has to honour the DIS count too.
+// The bank-less voice must be editable, not only listed.
 func TestRenameBanklessVoiceSlot(t *testing.T) {
 	t.Parallel()
 	s, _ := openBanklessDisk(t)
@@ -377,9 +374,7 @@ func TestRenameBanklessVoiceSlot(t *testing.T) {
 	}
 }
 
-// Exporting the instrument and loading it back must not lose the
-// bank-less voice: the extract stamps the count where detection finds
-// it again.
+// Extract then reload must keep the bank-less voice.
 func TestExtractThenLoadKeepsBanklessVoice(t *testing.T) {
 	t.Parallel()
 	s, _ := openBanklessDisk(t)
@@ -405,8 +400,8 @@ func TestExtractThenLoadKeepsBanklessVoice(t *testing.T) {
 	}
 }
 
-// A marker-stamped dump loaded onto a fresh disk keeps its count: the
-// add path of the write-back, not just the replace path.
+// A marker-stamped dump on a fresh disk exercises the add arm of the
+// write-back.
 func TestLoadMarkedDumpOnFreshDisk(t *testing.T) {
 	t.Parallel()
 	dump := fzfbuilder.MakeBanklessVoiceDump(t)

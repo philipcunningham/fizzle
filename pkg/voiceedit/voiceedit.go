@@ -128,8 +128,7 @@ func ApplyToFZFSlotBytes(data []byte, slot int, patches []Patch) error {
 }
 
 // ApplyToFZFSlotBytesWithHeader is ApplyToFZFSlotBytes under a header
-// the caller already parsed, which can carry the DIS voice count the
-// walk misses.
+// the caller already parsed.
 func ApplyToFZFSlotBytesWithHeader(data []byte, hdr *fzutil.FZFHeader, slot int, patches []Patch) error {
 	if slot < 0 || slot >= hdr.NVoice {
 		return fmt.Errorf("voiceedit: voice slot must be 0 to %d, got %d", hdr.NVoice-1, slot)
