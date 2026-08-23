@@ -39,7 +39,7 @@ func (s *Session) patchSlotVoice(slot int, build func(hdr []byte) ([]voiceedit.P
 			}
 			return nil, errf(codeInvalidValue, "%v", err)
 		}
-		if err := voiceedit.ApplyToFZFSlotBytes(d.fzf, slot, patches); err != nil {
+		if err := voiceedit.ApplyToFZFSlotBytesWithHeader(d.fzf, d.header, slot, patches); err != nil {
 			return nil, errf(codeInvalidValue, "%v", err)
 		}
 		return nil, nil

@@ -155,6 +155,11 @@ func TestSyntheticDiskListSnapshots(t *testing.T) {
 // catalog, extracts every entry, and snapshots the appropriate per-entry
 // info output (fzf info for full dumps, fzv info for voices). Catches
 // drift in the extract-then-parse pipeline across the synthetic fixtures.
+//
+// The extraction is a bare disk get, so the fzf info snapshots record
+// the standalone walk's reading. PREY.img's golden says 4 voices where
+// the disk's DIS tail says 5: known short by design, the documented
+// standalone limitation, not the disk-aware answer the browser gives.
 func TestSyntheticDiskContentSnapshots(t *testing.T) {
 	skipShort(t)
 	t.Parallel()

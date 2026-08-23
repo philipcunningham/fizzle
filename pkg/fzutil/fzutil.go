@@ -269,6 +269,54 @@ func ParseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
 	}, nil
 }
 
+// NormalisedVoiceCount returns vn where it is usable and runs above
+// the walk, the one direction the walk cannot see (a voice in no
+// bank), and 0 otherwise. Real disks carry a vn below their live
+// voice count, so a low vn never hides the voices past it.
+func NormalisedVoiceCount(data []byte, vn int) int {
+	if vn <= 0 {
+		return 0
+	}
+	if walk, err := ParseFZFHeader(data); err == nil && walk.NVoice >= vn {
+		return 0
+	}
+	if _, err := ParseFZFHeaderWithVoiceCount(data, vn); err != nil {
+		return 0
+	}
+	return vn
+}
+
+// voiceMarkerMagic guards the fizzle-defined voice-count marker at
+// disk.BankVoiceMarkerOffset; the offset holds firmware garbage on
+// real dumps, so a bare count there means nothing.
+var voiceMarkerMagic = [2]byte{'f', 'z'}
+
+// StampVoiceCountMarker writes the voice-count marker into a
+// standalone dump copy, so a reader can recover a count the walk
+// cannot. It leaves a short buffer untouched.
+func StampVoiceCountMarker(data []byte, vn int) {
+	if len(data) < disk.BankVoiceMarkerOffset+4 || vn < 1 || vn > disk.MaxVoices {
+		return
+	}
+	data[disk.BankVoiceMarkerOffset] = voiceMarkerMagic[0]
+	data[disk.BankVoiceMarkerOffset+1] = voiceMarkerMagic[1]
+	binary.LittleEndian.PutUint16(data[disk.BankVoiceMarkerOffset+2:], uint16(vn)) //nolint:gosec // bounded above
+}
+
+// MarkerVoiceCount reads the voice-count marker, returning 0 unless
+// the magic matches and the count normalises (validates above the
+// walk).
+func MarkerVoiceCount(data []byte) int {
+	if len(data) < disk.BankVoiceMarkerOffset+4 {
+		return 0
+	}
+	if data[disk.BankVoiceMarkerOffset] != voiceMarkerMagic[0] || data[disk.BankVoiceMarkerOffset+1] != voiceMarkerMagic[1] {
+		return 0
+	}
+	vn := int(binary.LittleEndian.Uint16(data[disk.BankVoiceMarkerOffset+2:]))
+	return NormalisedVoiceCount(data, vn)
+}
+
 // InferVoiceCount walks voice slots from voiceAreaStart and counts the
 // contiguous ones that are plausible active voices or explicit
 // PlaybackModeNoSound placeholders. It stops at the first slot that doesn't

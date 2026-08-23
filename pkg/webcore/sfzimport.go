@@ -86,6 +86,7 @@ func (s *Session) ImportSFZ(files map[string][]byte, sfzPath string, rate int, f
 	if cerr != nil {
 		return fail(cerr)
 	}
+	s.refreshDISMode()
 	return SFZResult{Snapshot: snap, Rate: int(res.Rate)}, nil
 }
 
@@ -117,6 +118,7 @@ func (s *Session) ImportWAVFolder(files map[string][]byte, rate int, fitToDisk b
 	if cerr != nil {
 		return fail(cerr)
 	}
+	s.refreshDISMode()
 	return SFZResult{Snapshot: snap, Rate: int(res.Rate)}, nil
 }
 

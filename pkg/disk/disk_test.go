@@ -1452,3 +1452,84 @@ func addFakeVoice(t *testing.T, img *Image, name string) {
 	}
 	copy(img.Bytes()[dirOff:dirOff+DirEntrySize], EncodeDirEntry(entry))
 }
+
+func TestDirectorySkipsGarbageSlots(t *testing.T) {
+	// A slot whose name is not printable ASCII is no entry: old
+	// media's trailing rubbish must not refuse or pollute the listing.
+	t.Parallel()
+	data := make([]byte, ImageSize)
+	img, err := ReadImage(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := DirEntry{Name: PadLabel("LIVE"), FileType: TypeVoice, DisSector: 2}
+	base := DirSector * SectorSize
+	copy(img.Bytes()[base:], EncodeDirEntry(live))
+	for i := range DirEntrySize {
+		img.Bytes()[base+40*DirEntrySize+i] = 0xE5
+	}
+	entries, err := img.Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0] != live {
+		t.Fatalf("entries = %+v, want just the live entry", entries)
+	}
+}
+
+// Compaction must pack survivors at the raw slot level: a reader that
+// stops at the first blank must still see every survivor.
+func TestRemoveFileCompactsRawSlots(t *testing.T) {
+	t.Parallel()
+	img := buildFormattedImage(t)
+	addFakeVoice(t, img, "VOICEA")
+	addFakeVoice(t, img, "VOICEB")
+	addFakeVoice(t, img, "VOICEC")
+	img.Bytes()[DirSector*SectorSize] = 0 // delete VOICEA firmware-style
+
+	if err := img.RemoveFile("VOICEC"); err != nil {
+		t.Fatal(err)
+	}
+	base := DirSector * SectorSize
+	e, err := DecodeDirEntry(img.Bytes()[base : base+DirEntrySize])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.NameString() != "VOICEB" {
+		t.Errorf("slot 0 = %q, want VOICEB packed to the front", e.NameString())
+	}
+	for off := base + DirEntrySize; off < base+MaxDirEntries*DirEntrySize; off++ {
+		if img.Bytes()[off] != 0 {
+			t.Fatalf("directory byte at %#x = %#x, want a zeroed tail", off, img.Bytes()[off])
+		}
+	}
+}
+
+// A stale entry aliasing a live file's DIS sector must not free the
+// live file's sectors when removed.
+func TestRemoveFileKeepsAliasedSectors(t *testing.T) {
+	t.Parallel()
+	img := buildFormattedImage(t)
+	addFakeVoice(t, img, "LIVE")
+	base := DirSector * SectorSize
+	live, err := DecodeDirEntry(img.Bytes()[base : base+DirEntrySize])
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := DirEntry{Name: PadLabel("STALE"), FileType: TypeVoice, DisSector: live.DisSector}
+	copy(img.Bytes()[base+2*DirEntrySize:], EncodeDirEntry(stale))
+
+	if err := img.RemoveFile("STALE"); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := img.Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].NameString() != "LIVE" {
+		t.Fatalf("entries = %+v, want just LIVE", entries)
+	}
+	if !img.CATAllocated(int(live.DisSector)) {
+		t.Error("live file's DIS sector was freed by removing the alias")
+	}
+}

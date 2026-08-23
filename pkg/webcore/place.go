@@ -35,7 +35,14 @@ func (s *Session) LoadFZF(data []byte) (Snapshot, *Error) {
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	return s.replaceDump(img, data, 0)
+	// The mode is set before adoption so the snapshot parses the way
+	// the write-back stamps, and re-derived after in case the load
+	// replaced a DIS-mode document with a plain one.
+	vn := fzutil.MarkerVoiceCount(data)
+	s.disMode = vn > 0
+	snap, cerr := s.replaceDump(img, data, vn)
+	s.refreshDISMode()
+	return snap, cerr
 }
 
 // AddVoice places an .fzv per the placement matrix (R7): with no disk
@@ -88,7 +95,11 @@ func (s *Session) AddVoice(fzvData []byte) (Snapshot, *Error) {
 	// Through replaceDump rather than diskadd directly: a first voice
 	// too large for one disk then splits across a pair, the same way
 	// a join or an SFZ conversion does.
-	return s.replaceDump(img, fzf, 0)
+	snap, cerr := s.replaceDump(img, fzf, 0)
+	if cerr == nil {
+		s.refreshDISMode()
+	}
+	return snap, cerr
 }
 
 // ImportWAVToInstrument converts a WAV through the CLI's importer and
@@ -127,7 +138,11 @@ func (s *Session) AddBank(data []byte, slot int) (Snapshot, *Error) {
 	if err := diskadd.AddToImage(img, data, 0); err != nil {
 		return s.Snapshot(), addError(err)
 	}
-	return s.adopt(img)
+	snap, cerr := s.adopt(img)
+	if cerr == nil {
+		s.refreshDISMode()
+	}
+	return snap, cerr
 }
 
 // noSkipArea marks a key-range choice with no area of its own to

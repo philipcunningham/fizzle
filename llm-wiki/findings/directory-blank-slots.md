@@ -16,8 +16,14 @@ The spec (section 1-3) says a directory entry whose first name byte is NULL "is 
 
 ## Evidence
 
-`testdata/synthetic/PREY.img`, saved by an FZ-1 (serial 001969) through a Gotek drive. Slot 0 holds a deleted voice: the first name byte is 0x00 and the rest still reads `DDICTED` plus a voice type and a DIS pointer. The CAT no longer allocates that DIS's sectors. Slot 1 holds the live `FULL-DATA-FZ` entry the machine itself loads. A reader that stops at the first blank slot sees an empty disk.
+`testdata/synthetic/PREY.img`, saved by an FZ-1 (serial 001969) through a Gotek drive. Slot 0 holds a deleted voice: the first name byte is 0x00 and the rest still reads `DDICTED` plus a voice type and a DIS pointer. The CAT no longer allocates that DIS's sectors. Slot 1 holds the live `FULL-DATA-FZ` entry. A reader that stops at the first blank slot sees an empty disk. The image came from a user's machine; the sampled audio it carries is third-party material whose redistribution terms are unconfirmed.
+
+The write side is what these bytes prove: the firmware deletes in place and saves around the gap. Whether its own directory scan also reads past a gap is inferred, not observed.
 
 ## What fizzle implements
 
-`pkg/disk/disk.go` (`Directory`) steps over blank slots, and `RemoveFile` resolves a name to its raw slot rather than its position in the filtered listing, then compacts the directory. fizzle's own writes keep the directory dense; the firmware's tolerance of gaps means both layouts load.
+`pkg/disk/disk.go` (`Directory`) steps over blank slots. It also skips slots whose name isn't printable ASCII, the FZ's own name test. Trailing rubbish in sector 1 therefore neither lists nor refuses a disk. `RemoveFile` resolves a name to its raw slot rather than its position in the filtered listing, then compacts the directory. fizzle's own writes keep the directory dense.
+
+## Open questions
+
+- Trace the firmware's directory scan (or load a gapped disk on hardware) to confirm it reads past a blank slot. `NextFreeDirSlot` fills the lowest gap, so fizzle can hand a still-gapped directory back to the sampler.

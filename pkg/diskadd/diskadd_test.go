@@ -13,6 +13,7 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )
@@ -1484,4 +1485,54 @@ func formattedImage(t *testing.T) *disk.Image {
 		t.Fatal(err)
 	}
 	return img
+}
+
+func TestAddToImageWithVoiceCountRejectsBadCounts(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeBanklessVoiceDump(t)
+	for _, vn := range []int{-1, 0, disk.MaxVoices + 1, 70000} {
+		img := formattedImage(t)
+		if err := AddToImageWithVoiceCount(img, dump, 0, vn); err == nil {
+			t.Errorf("vn=%d: expected error, got nil", vn)
+		}
+	}
+	// A count whose voice area cannot fit the file is refused, not
+	// clamped into a tail the sampler reads past the file's end.
+	img := formattedImage(t)
+	if err := AddToImageWithVoiceCount(img, dump[:3*disk.SectorSize], 0, disk.MaxVoices); err == nil {
+		t.Error("oversized voice area: expected error, got nil")
+	}
+}
+
+func TestReplaceInMemoryWithVoiceCountRollsBack(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeBanklessVoiceDump(t)
+	img := formattedImage(t)
+	if err := AddToImage(img, dump, 0); err != nil {
+		t.Fatal(err)
+	}
+	before := append([]byte(nil), img.Bytes()...)
+	oversized := make([]byte, disk.ImageSize+disk.SectorSize)
+	copy(oversized, dump)
+	if err := ReplaceInMemoryWithVoiceCount(img, disk.FullDumpName, oversized, 0, fzfbuilder.BanklessDumpVoices); err == nil {
+		t.Fatal("expected error for oversized replacement")
+	}
+	if !bytes.Equal(before, img.Bytes()) {
+		t.Error("image mutated after failed replace")
+	}
+}
+
+// A dump carrying the fizzle voice-count marker adds with that count.
+func TestAddHonoursVoiceCountMarker(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(dump, fzfbuilder.BanklessDumpVoices)
+	img := formattedImage(t)
+	if err := AddToImage(img, dump, 0); err != nil {
+		t.Fatal(err)
+	}
+	dis := fzfbuilder.FullDumpDISTail(t, img)
+	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("DIS vn = %d, want %d (marker ignored)", got, fzfbuilder.BanklessDumpVoices)
+	}
 }

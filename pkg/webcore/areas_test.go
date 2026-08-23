@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )
@@ -47,10 +46,16 @@ func readDumpGeometry(t *testing.T, s *Session) dumpGeometry {
 // bytes, for the sweeps that drive the operations without a disk
 // around them.
 func dumpGeometryOf(t *testing.T, fzf []byte) dumpGeometry {
+	return dumpGeometryUnder(t, fzf, 0)
+}
+
+// dumpGeometryUnder reads the geometry under a DIS voice count, or the
+// walk when vn is 0.
+func dumpGeometryUnder(t *testing.T, fzf []byte, vn int) dumpGeometry {
 	t.Helper()
-	hdr, err := fzutil.ParseFZFHeader(fzf)
+	hdr, err := dumpHeaderFor(fzf, vn)
 	if err != nil {
-		t.Fatalf("ParseFZFHeader: %v", err)
+		t.Fatalf("dumpHeaderFor: %v", err)
 	}
 	g := dumpGeometry{walked: hdr.NVoice, voices: map[string][]byte{}, extents: map[[2]int]bool{}}
 	for b := 0; b < hdr.NBankSectors; b++ {

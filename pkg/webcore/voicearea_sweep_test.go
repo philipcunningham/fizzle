@@ -13,6 +13,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskget"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
+	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
 	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
@@ -48,9 +49,16 @@ func areaOpsFor(t *testing.T, fzf []byte, hdr *fzutil.FZFHeader) []areaOp {
 	}
 }
 
+// sweptDump is one corpus dump plus its DIS-mode voice count, 0 for
+// walk mode.
+type sweptDump struct {
+	data []byte
+	vn   int
+}
+
 // corpusDumps collects every full dump under testdata: the standalone
 // .FZF files and the FULL-DATA-FZ payload of every .img.
-func corpusDumps(t *testing.T) map[string][]byte {
+func corpusDumps(t *testing.T) map[string]sweptDump {
 	t.Helper()
 	root := filepath.Join("..", "..", "testdata")
 	var paths []string
@@ -67,12 +75,13 @@ func corpusDumps(t *testing.T) map[string][]byte {
 	if err != nil {
 		t.Fatalf("walk testdata: %v", err)
 	}
-	out := map[string][]byte{}
+	out := map[string]sweptDump{}
 	for _, p := range paths {
 		data, rerr := os.ReadFile(p) // #nosec G304 -- test fixtures under testdata
 		if rerr != nil {
 			t.Fatalf("read %s: %v", p, rerr)
 		}
+		vn := 0
 		if strings.ToLower(filepath.Ext(p)) == ".img" {
 			// A fixture that is not a readable image, or that holds no
 			// full dump, is simply not a dump to sweep.
@@ -85,9 +94,10 @@ func corpusDumps(t *testing.T) map[string][]byte {
 				continue
 			}
 			data = fzf
+			vn = fzutil.NormalisedVoiceCount(data, disVoiceCount(img))
 		}
 		if _, perr := fzutil.ParseFZFHeader(data); perr == nil {
-			out[p] = data
+			out[p] = sweptDump{data: data, vn: vn}
 		}
 	}
 	if len(out) < 100 {
@@ -135,25 +145,27 @@ func TestAreaOpsOverTheCorpus(t *testing.T) {
 	dumps := corpusDumps(t)
 	shared, tried, refused := 0, 0, 0
 	refusedBy := map[string]int{}
-	for path, fzf := range dumps {
-		hdr, err := fzutil.ParseFZFHeader(fzf)
+	for path, d := range dumps {
+		fzf := d.data
+		hdr, err := dumpHeaderFor(fzf, d.vn)
 		if err != nil {
 			t.Fatalf("%s: %v", path, err)
 		}
-		before := dumpGeometryOf(t, fzf)
+		before := dumpGeometryUnder(t, fzf, d.vn)
 		if before.bstepSum > before.walked {
 			shared++
 		}
 		for _, op := range areaOpsFor(t, fzf, hdr) {
 			tried++
-			out, _, cerr := patchDumpBytes(bytes.Clone(fzf), 0, op.build)
+			out, outVN, cerr := patchDumpBytes(bytes.Clone(fzf), d.vn, op.build)
 			if cerr != nil {
 				refused++
 				refusedBy[op.name+": "+cerr.Code]++
 				continue
 			}
+			after := dumpGeometryUnder(t, out, fzutil.NormalisedVoiceCount(out, outVN))
 			assertAudioHeld(t, fmt.Sprintf("%s on %s", op.name, filepath.Base(path)),
-				before, dumpGeometryOf(t, out))
+				before, after)
 		}
 	}
 	t.Logf("%d dumps (%d sharing voices through vp[]), %d operations, %d refused",
@@ -171,9 +183,10 @@ func TestAddVoiceOverTheCorpus(t *testing.T) {
 	voice := testFZV(t, "JOINED", 1500)
 	dumps := corpusDumps(t)
 	refusedBy := map[string]int{}
-	for path, fzf := range dumps {
-		before := dumpGeometryOf(t, fzf)
-		out, _, cerr := patchDumpBytes(bytes.Clone(fzf), 0, func(d *dumpState) ([]model.Patch, *Error) {
+	for path, dump := range dumps {
+		fzf := dump.data
+		before := dumpGeometryUnder(t, fzf, dump.vn)
+		out, outVN, cerr := patchDumpBytes(bytes.Clone(fzf), dump.vn, func(d *dumpState) ([]model.Patch, *Error) {
 			newSlot, jerr := appendVoiceToDump(d, voice)
 			if jerr != nil {
 				return nil, jerr
@@ -187,7 +200,7 @@ func TestAddVoiceOverTheCorpus(t *testing.T) {
 			refusedBy[cerr.Code]++
 			continue
 		}
-		after := dumpGeometryOf(t, out)
+		after := dumpGeometryUnder(t, out, fzutil.NormalisedVoiceCount(out, outVN))
 		what := "AddVoice on " + filepath.Base(path)
 		if len(after.audio) < len(before.audio) || !bytes.Equal(before.audio, after.audio[:len(before.audio)]) {
 			t.Errorf("%s: the audio already on the disk moved: it started at %d holding %d bytes, now starts at %d holding %d",
@@ -268,4 +281,43 @@ func randomAreaOp(t *testing.T, fzf []byte, hdr *fzutil.FZFHeader, rng *rand.Ran
 		return areaOp{fmt.Sprintf("AddBank(%d)", at),
 			func(d *dumpState) ([]model.Patch, *Error) { return addBankPatches(d, fzb, at) }}
 	}
+}
+
+// The random walk again in DIS mode, over the bankless dump, tracking
+// the count each step stamps. This is the harness for the class of
+// defect where a mode decision drifts mid-sequence.
+func TestAreaOpSequencesHoldTheAudioInDISMode(t *testing.T) {
+	const steps = 250
+	applied, refusedBy := 0, map[string]int{}
+	for seed := uint64(1); seed <= 15; seed++ {
+		t.Run(fmt.Sprintf("seed %d", seed), func(t *testing.T) {
+			fzf := fzfbuilder.MakeBanklessVoiceDump(t)
+			vn := fzfbuilder.BanklessDumpVoices
+			origin := dumpGeometryUnder(t, fzf, vn)
+			rng := rand.New(rand.NewPCG(seed, 99)) //nolint:gosec // G404: a reproducible walk, not cryptography
+			// The count tracks what the write-back stamps, the way the
+			// session's sticky mode does; re-normalising per step is the
+			// mid-sequence mode flip this sweep exists to forbid.
+			for step := range steps {
+				hdr, err := dumpHeaderFor(fzf, vn)
+				if err != nil {
+					t.Fatalf("step %d: %v", step, err)
+				}
+				op := randomAreaOp(t, fzf, hdr, rng)
+				out, outVN, cerr := patchDumpBytes(bytes.Clone(fzf), vn, op.build)
+				if cerr != nil {
+					refusedBy[cerr.Code]++
+					continue
+				}
+				applied++
+				fzf, vn = out, outVN
+				assertAudioHeld(t, fmt.Sprintf("step %d, %s", step, op.name),
+					origin, dumpGeometryUnder(t, fzf, vn))
+				if t.Failed() {
+					return
+				}
+			}
+		})
+	}
+	t.Logf("%d operations applied, refusals by code: %v", applied, refusedBy)
 }
