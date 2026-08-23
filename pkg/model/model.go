@@ -20,8 +20,10 @@ type Patch struct {
 	New    []byte
 }
 
-// Apply validates and atomically applies fixed-size patches to data.
-// Empty patches are allowed at offsets from zero through len(data).
+// Apply validates and atomically applies fixed-size patches to data. Every
+// pre-image is checked before writing, so a stale caller fails loudly rather
+// than corrupting the container. Empty patches are allowed at offsets from
+// zero through len(data).
 func Apply(data []byte, patches []Patch) error {
 	type patchRange struct {
 		start int
