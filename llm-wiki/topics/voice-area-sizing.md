@@ -28,7 +28,7 @@ A standalone `.fzf` export can carry the count in a fizzle-defined marker: the m
 
 The standalone inference walks voice slots from 0 upward and stops at the first failure. It accepts each slot whose 192-byte header passes a plausibility check. The check wants a valid rate index, monotonic wave pointers, and a known playback mode. The name must be printable or padded. The walk was informed by the name-scan heuristic in [vosmaer-fz1](../sources/vosmaer-fz1.md). The summed `bstep` of every bank bounds the walk. The validation trim handles the overshoot on shared-voice kits, since the sum equals `vn` for only 80 of 235 dumps in the [corpus](../sources/corpus.md). The undercount has no standalone remedy; an extracted dump with a bank-less voice reads short.
 
-fizzle implements both paths in `pkg/fzutil`: `ParseFZFHeaderWithVoiceCount` takes the DIS vn and validates the slots it claims, and `ParseFZFHeader` walks (`CountAllVoices`, `InferVoiceCount`). `pkg/webcore` reads the DIS vn for disk documents, edits under it, and `pkg/diskadd` (`AddToImageWithVoiceCount`) writes it back, keeping `wn` in step. `ParseFZFHeaderMarked` backs `ReadFZF`, so the CLI readers honour a stamped export's marker too.
+fizzle implements the policy once, in `fzutil.ResolveFZFHeader`: an explicit count (DIS tail, then marker) wins only where it validates above the walk. `ResolveFZFHeader` backs `ReadFZF`, so the CLI readers honour a stamped export's marker. `pkg/webcore` resolves the mode at document boundaries, edits under it, and `pkg/diskadd` writes the count back, keeping `wn` in step.
 
 Related heuristic: a printable 12-byte name at header offset 0xB2 marks a voice file; its absence marks a full dump. fizzle uses this for file-type detection.
 
