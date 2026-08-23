@@ -68,8 +68,8 @@ type dumpState struct {
 	// the count; where the count fell short, the walk ended on a byte
 	// pattern that is not a voice slot and the bound stops nothing.
 	walkBound int
-	// disVN is the DIS tail's voice count where it is the authority
-	// (see normalisedDISVoiceCount), 0 when header.NVoice was walked.
+	// disVN is the DIS tail's voice count where it is the authority,
+	// 0 when header.NVoice was walked.
 	disVN int
 }
 
@@ -96,12 +96,6 @@ func newDumpState(fzf []byte, disVN int) (*dumpState, *Error) {
 		walkBound:  min(bstepSum(fzf, hdr.NBankSectors), disk.MaxVoices),
 		disVN:      disVN,
 	}, nil
-}
-
-// normalisedDISVoiceCount picks the parse mode: disVN for DIS mode,
-// 0 for walk mode (see fzutil.NormalisedVoiceCount).
-func normalisedDISVoiceCount(fzf []byte, disVN int) int {
-	return fzutil.NormalisedVoiceCount(fzf, disVN)
 }
 
 // dumpHeaderFor parses under a normalised DIS count, walking on 0.

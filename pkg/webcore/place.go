@@ -37,7 +37,10 @@ func (s *Session) LoadFZF(data []byte) (Snapshot, *Error) {
 	}
 	// The mode rides through adoptPair, so the history records the
 	// outgoing mode and the snapshot parses under the new one.
-	vn := fzutil.MarkerVoiceCount(data)
+	vn := 0
+	if hdr, src, err := fzutil.ResolveFZFHeader(data, 0); err == nil && src == fzutil.VoiceCountMarker {
+		vn = hdr.NVoice
+	}
 	mode := vn > 0
 	s.nextDISMode = &mode
 	snap, cerr := s.replaceDump(img, data, vn)

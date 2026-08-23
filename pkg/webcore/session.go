@@ -18,6 +18,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/diskget"
 	"github.com/philipcunningham/fizzle/pkg/disklist"
+	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/voiceedit"
 )
@@ -263,7 +264,8 @@ func documentDISMode(img *disk.Image) bool {
 	if err != nil {
 		return false
 	}
-	return normalisedDISVoiceCount(fzf, vn) > 0
+	_, src, rerr := fzutil.ResolveFZFHeader(fzf, vn)
+	return rerr == nil && src == fzutil.VoiceCountDIS
 }
 
 // disVoiceCount reads the voice count from the FULL-DATA-FZ entry's

@@ -49,6 +49,16 @@ func areaOpsFor(t *testing.T, fzf []byte, hdr *fzutil.FZFHeader) []areaOp {
 	}
 }
 
+// resolvedVN is the count a dump's geometry reads under: the resolved
+// explicit count, or 0 where the walk decides.
+func resolvedVN(data []byte, candidate int) int {
+	hdr, src, err := fzutil.ResolveFZFHeader(data, candidate)
+	if err != nil || src == fzutil.VoiceCountWalk {
+		return 0
+	}
+	return hdr.NVoice
+}
+
 // sweptDump is one corpus dump plus its DIS-mode voice count, 0 for
 // walk mode.
 type sweptDump struct {
@@ -94,7 +104,7 @@ func corpusDumps(t *testing.T) map[string]sweptDump {
 				continue
 			}
 			data = fzf
-			vn = fzutil.NormalisedVoiceCount(data, disVoiceCount(img))
+			vn = resolvedVN(data, disVoiceCount(img))
 		}
 		if _, perr := fzutil.ParseFZFHeader(data); perr == nil {
 			out[p] = sweptDump{data: data, vn: vn}
@@ -163,7 +173,7 @@ func TestAreaOpsOverTheCorpus(t *testing.T) {
 				refusedBy[op.name+": "+cerr.Code]++
 				continue
 			}
-			after := dumpGeometryUnder(t, out, fzutil.NormalisedVoiceCount(out, outVN))
+			after := dumpGeometryUnder(t, out, resolvedVN(out, outVN))
 			assertAudioHeld(t, fmt.Sprintf("%s on %s", op.name, filepath.Base(path)),
 				before, after)
 		}
@@ -200,7 +210,7 @@ func TestAddVoiceOverTheCorpus(t *testing.T) {
 			refusedBy[cerr.Code]++
 			continue
 		}
-		after := dumpGeometryUnder(t, out, fzutil.NormalisedVoiceCount(out, outVN))
+		after := dumpGeometryUnder(t, out, resolvedVN(out, outVN))
 		what := "AddVoice on " + filepath.Base(path)
 		if len(after.audio) < len(before.audio) || !bytes.Equal(before.audio, after.audio[:len(before.audio)]) {
 			t.Errorf("%s: the audio already on the disk moved: it started at %d holding %d bytes, now starts at %d holding %d",
