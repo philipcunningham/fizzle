@@ -1,0 +1,73 @@
+{
+ "filename": "FULL-DATA-FZ.fzf",
+ "is_split": false,
+ "local_voices": 4,
+ "memory_bytes": 56988,
+ "voice_count": 4,
+ "voices": [
+  {
+   "bank_volume": 0,
+   "duration": 0.933,
+   "has_loop": false,
+   "index": 1,
+   "key_high": 96,
+   "key_low": 36,
+   "midi_channel": 1,
+   "name": "NOT LISTENG",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 2,
+   "root_note": 72,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 0.6055555555555555,
+   "has_loop": false,
+   "index": 2,
+   "key_high": 73,
+   "key_low": 73,
+   "midi_channel": 1,
+   "name": "ADDICTED",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 2,
+   "root_note": 75,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 1.4354444444444445,
+   "has_loop": false,
+   "index": 3,
+   "key_high": 74,
+   "key_low": 74,
+   "midi_channel": 1,
+   "name": "REGRET",
+   "output": "all",
+   "playback_mode": "normal",
+   "rate_index": 2,
+   "root_note": 77,
+   "vel_high": 127,
+   "vel_low": 1
+  },
+  {
+   "bank_volume": 0,
+   "duration": 0.192,
+   "has_loop": false,
+   "index": 4,
+   "key_high": 0,
+   "key_low": 0,
+   "midi_channel": 1,
+   "name": "NOISE 1",
+   "output": "none",
+   "playback_mode": "normal",
+   "rate_index": 2,
+   "root_note": 0,
+   "vel_high": 0,
+   "vel_low": 0
+  }
+ ]
+}
