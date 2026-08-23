@@ -398,18 +398,16 @@ func (img *Image) SetLabel(name string) {
 // DirSlotKind classifies one raw directory slot.
 type DirSlotKind uint8
 
-// The three kinds: a blank slot (NULL first name byte, firmware
-// deletion per spec section 1-3), an entry (decodable, DIS pointer in
-// the data sectors), and rubbish (nonzero bytes that are no entry).
+// Blank (NULL first name byte, firmware deletion per spec section
+// 1-3), entry (DIS pointer in the data sectors), rubbish (neither).
 const (
 	DirSlotBlank DirSlotKind = iota
 	DirSlotEntry
 	DirSlotRubbish
 )
 
-// DirSlot classifies directory slot i and decodes what it holds. The
-// returned entry is meaningful for DirSlotEntry and best effort for
-// DirSlotRubbish, where a caller may want the bytes for reporting.
+// DirSlot classifies directory slot i; the entry is meaningful for
+// DirSlotEntry and best effort for DirSlotRubbish reporting.
 func (img *Image) DirSlot(i int) (DirEntry, DirSlotKind) {
 	off := DirSector*SectorSize + i*DirEntrySize
 	if img.data[off] == 0 {
@@ -428,12 +426,9 @@ func (img *Image) dirSlotEntry(i int) (DirEntry, bool) {
 	return e, kind == DirSlotEntry
 }
 
-// Directory reads all directory entries from sector 1, stepping over
-// blank and rubbish slots (see DirSlot). It is a forgiving view, not
-// a validator: every entry it returns already carries an in-range DIS
-// pointer, and damage never surfaces as an error here. Slot-level
-// reporting, including pkg/disklist's corrupt rows, goes through
-// DirSlot instead.
+// Directory is the forgiving view of sector 1: entries only, blank
+// and rubbish slots stepped over. Slot-level reporting (disklist's
+// corrupt rows) goes through DirSlot instead.
 func (img *Image) Directory() ([]DirEntry, error) {
 	var entries []DirEntry
 	for i := range MaxDirEntries {
@@ -547,9 +542,8 @@ func (img *Image) RemoveFile(name string) error {
 		}
 	}
 
-	// Pack every non-blank slot densely from slot 0 and zero the tail:
-	// a reader that stops at the first blank entry sees every survivor,
-	// and rubbish bytes are preserved rather than judged.
+	// Pack every non-blank slot densely and zero the tail: a reader
+	// that stops at the first blank sees every survivor.
 	dst := 0
 	for src := range MaxDirEntries {
 		if src == target {

@@ -120,9 +120,8 @@ func writeToImage(imagePath string, fileData []byte, name [disk.LabelSize]byte, 
 }
 
 // addToImage adds a file to the in-memory disk image without writing to disk.
-// The voice-count marker is strictly standalone: a full dump carrying one has
-// its count consumed into the DIS tail by the caller, and the record itself
-// stays off the media (scrubbed in a copy; the caller's bytes are untouched).
+// The voice-count marker is strictly standalone: its count lands in the DIS
+// tail, and the record is scrubbed from a copy before touching the media.
 func addToImage(img *disk.Image, fileData []byte, name [disk.LabelSize]byte, fileType disk.FileType, diskNum uint8, nbank, nvoice, nwave int) error {
 	if fileType == disk.TypeFullDump && fzutil.MarkerVoiceCount(fileData) > 0 {
 		scrubbed := append([]byte(nil), fileData...)
@@ -234,9 +233,8 @@ func ReplaceInMemoryWithVoiceCount(img *disk.Image, oldName string, fileData []b
 	})
 }
 
-// replaceInMemory is the one transactional replace: snapshot, remove,
-// detect through the given resolver, add, and roll the image back byte
-// for byte on any failure.
+// replaceInMemory is the one transactional replace, rolling the image
+// back byte for byte on any failure.
 func replaceInMemory(img *disk.Image, oldName string, fileData []byte, diskNum uint8, detect func([]byte) (fileInfo, error)) (retErr error) {
 	// Snapshot the full image to roll back a partial mutation on error. At
 	// 1.25 MiB the allocation is cheap next to the rest of the work, and
