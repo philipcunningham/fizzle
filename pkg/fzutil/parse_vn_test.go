@@ -2,6 +2,8 @@ package fzutil_test
 
 import (
 	"encoding/binary"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
@@ -147,5 +149,24 @@ func TestResolveDiskFZFIgnoresMarker(t *testing.T) {
 	}
 	if src != fzutil.VoiceCountWalk {
 		t.Errorf("source = %v, want the walk (an unusable DIS count must not fall to the marker)", src)
+	}
+}
+
+// ReadFZF resolves the marker, so every CLI reader built on it sees a
+// stamped export's count.
+func TestReadFZFHonoursMarker(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(dump, fzfbuilder.BanklessDumpVoices)
+	path := filepath.Join(t.TempDir(), "stamped.fzf")
+	if err := os.WriteFile(path, dump, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, hdr, err := fzutil.ReadFZF(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hdr.NVoice != fzfbuilder.BanklessDumpVoices {
+		t.Errorf("NVoice = %d, want %d", hdr.NVoice, fzfbuilder.BanklessDumpVoices)
 	}
 }

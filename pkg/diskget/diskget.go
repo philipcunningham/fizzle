@@ -61,9 +61,8 @@ func FromImage(img *disk.Image, name string) ([]byte, error) {
 		return nil, fmt.Errorf("diskget: %q: %w", name, disk.ErrNotFound)
 	}
 
-	if int(match.DisSector) < disk.ReservedSectors || int(match.DisSector) >= disk.SectorCount {
-		return nil, fmt.Errorf("diskget: %q: directory entry DIS sector %d is out of range [%d,%d)", name, match.DisSector, disk.ReservedSectors, disk.SectorCount)
-	}
+	// Directory() never returns an out-of-range DIS pointer, so no
+	// range check remains here.
 	disSec, err := img.SectorRef(int(match.DisSector))
 	if err != nil {
 		return nil, fmt.Errorf("diskget: reading DIS sector: %w", err)

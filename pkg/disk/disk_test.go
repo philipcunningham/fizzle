@@ -1591,13 +1591,48 @@ func TestDirSlotClassification(t *testing.T) {
 	for i := range DirEntrySize {
 		img.Bytes()[base+2*DirEntrySize+i] = 0xE5
 	}
-	if _, kind := img.DirSlot(0); kind != DirSlotEntry {
-		t.Errorf("slot 0 = %v, want DirSlotEntry", kind)
+	slots := img.DirectorySlots()
+	if len(slots) != MaxDirEntries {
+		t.Fatalf("slots = %d, want %d", len(slots), MaxDirEntries)
 	}
-	if _, kind := img.DirSlot(1); kind != DirSlotBlank {
-		t.Errorf("slot 1 = %v, want DirSlotBlank", kind)
+	if slots[0].Kind != DirSlotEntry {
+		t.Errorf("slot 0 = %v, want DirSlotEntry", slots[0].Kind)
 	}
-	if e, kind := img.DirSlot(2); kind != DirSlotRubbish || e.DisSector != 0xE5E5 {
-		t.Errorf("slot 2 = %v (%+v), want DirSlotRubbish with the raw bytes", kind, e)
+	if slots[1].Kind != DirSlotBlank {
+		t.Errorf("slot 1 = %v, want DirSlotBlank", slots[1].Kind)
+	}
+	if slots[2].Kind != DirSlotRubbish || slots[2].Entry.DisSector != 0xE5E5 {
+		t.Errorf("slot 2 = %+v, want DirSlotRubbish with the raw bytes", slots[2])
+	}
+}
+
+func TestClearDirectorySlot(t *testing.T) {
+	t.Parallel()
+	img := buildFormattedImage(t)
+	addFakeVoice(t, img, "KEEP")
+	base := DirSector * SectorSize
+	for i := range DirEntrySize {
+		img.Bytes()[base+DirEntrySize+i] = 0xE5
+	}
+	if err := img.ClearDirectorySlot(1); err != nil {
+		t.Fatal(err)
+	}
+	for i := range DirEntrySize {
+		if img.Bytes()[base+DirEntrySize+i] != 0 {
+			t.Fatal("slot 1 not zeroed")
+		}
+	}
+	entries, err := img.Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].NameString() != "KEEP" {
+		t.Fatalf("entries = %+v, want just KEEP", entries)
+	}
+	if err := img.ClearDirectorySlot(-1); err == nil {
+		t.Error("slot -1: expected error")
+	}
+	if err := img.ClearDirectorySlot(MaxDirEntries); err == nil {
+		t.Error("slot 64: expected error")
 	}
 }

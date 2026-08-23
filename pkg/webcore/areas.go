@@ -465,6 +465,18 @@ func patchDumpBytes(fzf []byte, disVN int, build func(d *dumpState) ([]model.Pat
 	if cerr := d.checkGeometry(); cerr != nil {
 		return nil, 0, cerr
 	}
+	// DIS mode: retire the stale slots between the count and the voice
+	// area's end, or a reopen whose bstep walk now reaches them would
+	// resurrect the firmware's leftovers as voices.
+	if d.disVN > 0 {
+		for slot := d.header.NVoice; ; slot++ {
+			off := disk.VoiceSlotOffset(d.header.VoiceAreaStart, slot)
+			if off+disk.VoicePackSize > d.audioStart {
+				break
+			}
+			clear(d.fzf[off : off+disk.VoicePackSize])
+		}
+	}
 	return d.fzf, d.header.NVoice, nil
 }
 
