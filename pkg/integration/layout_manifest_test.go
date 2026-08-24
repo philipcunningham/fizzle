@@ -96,14 +96,14 @@ func voiceCountSourceName(source fzutil.VoiceCountSource) string {
 	}
 }
 
-func recordLayout(path string, header *fzutil.FZFHeader, source fzutil.VoiceCountSource) layoutRecord {
+func recordLayout(path string, layout fzutil.FZFLayout) layoutRecord {
 	return layoutRecord{
 		Path:       filepath.ToSlash(path),
-		Source:     voiceCountSourceName(source),
-		Banks:      header.NBankSectors,
-		Voices:     header.NVoice,
-		VoiceStart: header.VoiceAreaStart,
-		AudioStart: header.VoiceAreaStart + disk.VoiceAreaSectors(header.NVoice)*disk.SectorSize,
+		Source:     voiceCountSourceName(layout.VoiceCountSource()),
+		Banks:      layout.BankCount(),
+		Voices:     layout.VoiceCount(),
+		VoiceStart: layout.VoiceStart(),
+		AudioStart: layout.AudioStart(),
 	}
 }
 
@@ -130,7 +130,7 @@ func TestStandaloneCorpusLayoutManifest(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				header, source, err := fzutil.ResolveStandaloneFZF(data)
+				layout, err := fzutil.ResolveStandaloneFZFLayout(data)
 				if err != nil {
 					t.Fatalf("resolve %s: %v", path, err)
 				}
@@ -138,7 +138,7 @@ func TestStandaloneCorpusLayoutManifest(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				record := recordLayout(rel, header, source)
+				record := recordLayout(rel, layout)
 				if record.Source != collection.ExpectedAuthority {
 					t.Fatalf("%s authority = %s, want %s", rel, record.Source, collection.ExpectedAuthority)
 				}
@@ -219,11 +219,11 @@ func TestDiskFixtureLayoutManifest(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			header, source, err := fzutil.ResolveDiskFZF(fzf, int(dis.VoiceCount))
+			layout, err := fzutil.ResolveDiskFZFLayout(fzf, int(dis.VoiceCount))
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := recordLayout(fixture.Path, header, source)
+			got := recordLayout(fixture.Path, layout)
 			want := fixture.Layout
 			if got.Source != want.Authority || got.Banks != want.Banks || got.Voices != want.Voices ||
 				got.VoiceStart != want.VoiceStart || got.AudioStart != want.AudioStart {
@@ -302,22 +302,20 @@ func TestGeneratedLayoutAuthorityMatrix(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var (
-				header *fzutil.FZFHeader
-				source fzutil.VoiceCountSource
-				err    error
-			)
+			var layout fzutil.FZFLayout
+			var err error
 			if tt.disk {
-				header, source, err = fzutil.ResolveDiskFZF(tt.data(), tt.disVN)
+				layout, err = fzutil.ResolveDiskFZFLayout(tt.data(), tt.disVN)
 			} else {
-				header, source, err = fzutil.ResolveStandaloneFZF(tt.data())
+				layout, err = fzutil.ResolveStandaloneFZFLayout(tt.data())
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
-			if source != tt.authority || header.NVoice != tt.voices {
+			if layout.VoiceCountSource() != tt.authority || layout.VoiceCount() != tt.voices {
 				t.Fatalf("authority/voices = %s/%d, want %s/%d",
-					voiceCountSourceName(source), header.NVoice, voiceCountSourceName(tt.authority), tt.voices)
+					voiceCountSourceName(layout.VoiceCountSource()), layout.VoiceCount(),
+					voiceCountSourceName(tt.authority), tt.voices)
 			}
 		})
 	}
@@ -338,15 +336,15 @@ func TestSplitDumpLayoutCharacterization(t *testing.T) {
 		t.Fatalf("disks = %d, want 2", len(result.Disks))
 	}
 	stitched := append(bytes.Clone(result.Disks[0]), result.Disks[1]...)
-	header, source, err := fzutil.ResolveDiskFZF(stitched, result.VoiceCount)
+	layout, err := fzutil.ResolveDiskFZFLayout(stitched, result.VoiceCount)
 	if err != nil {
 		t.Fatal(err)
 	}
-	audioStart := header.VoiceAreaStart + disk.VoiceAreaSectors(header.NVoice)*disk.SectorSize
 	boundary := len(result.Disks[0])
-	if source != fzutil.VoiceCountWalk || header.NVoice != result.VoiceCount ||
-		boundary <= audioStart || boundary >= len(stitched) {
+	if layout.VoiceCountSource() != fzutil.VoiceCountWalk || layout.VoiceCount() != result.VoiceCount ||
+		boundary <= layout.AudioStart() || boundary >= len(stitched) {
 		t.Fatalf("split layout = source %s, voices %d, audio start %d, boundary %d, total %d",
-			voiceCountSourceName(source), header.NVoice, audioStart, boundary, len(stitched))
+			voiceCountSourceName(layout.VoiceCountSource()), layout.VoiceCount(), layout.AudioStart(),
+			boundary, len(stitched))
 	}
 }
