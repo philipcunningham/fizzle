@@ -3,11 +3,21 @@ package fzf
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/model"
+)
+
+// Voice rename errors let application boundaries provide stable user-facing
+// messages without matching domain error text.
+var (
+	ErrVoiceIndexOutOfRange = errors.New("fzf: voice index out of range")
+	ErrVoiceNameEmpty       = errors.New("fzf: voice name is empty")
+	ErrVoiceNameTooLong     = errors.New("fzf: voice name is too long")
+	ErrVoiceNameNotASCII    = errors.New("fzf: voice name is not printable ASCII")
 )
 
 // Document owns an FZF dump and the layout resolved for its source context.
@@ -58,12 +68,23 @@ func (d *Document) Layout() fzutil.FZFLayout {
 	return d.layout
 }
 
-// RenameVoice returns a new document with the voice slot's name changed. The
-// receiver remains unchanged. Standalone marker authority is re-stamped after
-// the edit because the marker covers bytes in the bank and voice headers.
-func (d *Document) RenameVoice(index int, name string) (*Document, error) {
+// RenameVoice returns the stale-safe patches for changing a voice slot's name.
+// Standalone marker authority is included in the same patch batch because the
+// marker covers bytes in the bank and voice headers.
+func (d *Document) RenameVoice(index int, name string) ([]model.Patch, error) {
 	if name == "" {
-		return nil, fmt.Errorf("fzf: voice name must not be empty")
+		return nil, ErrVoiceNameEmpty
+	}
+	if len(name) > disk.LabelSize {
+		return nil, fmt.Errorf("%w: got %d bytes", ErrVoiceNameTooLong, len(name))
+	}
+	for _, r := range name {
+		if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
+			return nil, fmt.Errorf("%w: %q", ErrVoiceNameNotASCII, r)
+		}
+	}
+	if index < 0 || index >= d.layout.VoiceCount() {
+		return nil, fmt.Errorf("%w: %d", ErrVoiceIndexOutOfRange, index)
 	}
 	voice, err := d.Voice(index)
 	if err != nil {
@@ -73,12 +94,19 @@ func (d *Document) RenameVoice(index int, name string) (*Document, error) {
 	if err != nil {
 		return nil, err
 	}
-	updated := bytes.Clone(d.data)
-	if err := model.Apply(updated, []model.Patch{patch}); err != nil {
-		return nil, fmt.Errorf("fzf: renaming voice %d: %w", index, err)
-	}
+	patches := []model.Patch{patch}
 	if d.layout.VoiceCountSource() == fzutil.VoiceCountMarker {
+		updated := bytes.Clone(d.data)
+		if err := model.Apply(updated, patches); err != nil {
+			return nil, fmt.Errorf("fzf: preparing voice %d rename: %w", index, err)
+		}
 		fzutil.StampVoiceCountMarker(updated, d.layout.VoiceCount())
+		markerOffset := disk.BankVoiceMarkerOffset
+		patches = append(patches, model.Patch{
+			Offset: markerOffset,
+			Old:    bytes.Clone(d.data[markerOffset : markerOffset+disk.BankVoiceMarkerSize]),
+			New:    bytes.Clone(updated[markerOffset : markerOffset+disk.BankVoiceMarkerSize]),
+		})
 	}
-	return newDocument(updated, d.layout), nil
+	return patches, nil
 }

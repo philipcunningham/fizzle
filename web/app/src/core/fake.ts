@@ -1147,8 +1147,24 @@ export function createFakeCore(): Core {
     },
 
     renameVoiceSlot(slot: number, name: string) {
-      if (name.length === 0 || name.length > 12) {
+      if (name.length === 0 || new TextEncoder().encode(name).length > 12) {
         return Promise.resolve(err("invalid-value", "voice name must be 1 to 12 characters"));
+      }
+      let invalid: string | undefined;
+      for (const char of name) {
+        const code = char.codePointAt(0) ?? 0;
+        if (code < 0x20 || code > 0x7e) {
+          invalid = char;
+          break;
+        }
+      }
+      if (invalid !== undefined) {
+        return Promise.resolve(
+          err(
+            "invalid-value",
+            `voice name contains non-ASCII character ${JSON.stringify(invalid)}`,
+          ),
+        );
       }
       const next = clone(state);
       const voice = next.instrument?.voices.find((v) => v.slot === slot);

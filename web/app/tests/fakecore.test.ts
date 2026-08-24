@@ -389,6 +389,15 @@ describe("fake core slot editing", () => {
     expect(inst?.voices[0]?.name).toBe("THUMP");
     expect(inst?.banks[0]?.areas[0]?.voiceName).toBe("THUMP");
 
+    const nonASCIIName = await core.renameVoiceSlot(0, "BAD☃");
+    expect(nonASCIIName).toEqual({
+      ok: false,
+      error: {
+        code: "invalid-value",
+        message: 'voice name contains non-ASCII character "☃"',
+      },
+    });
+
     const badSlot = await core.setSlotParamNumber(9, "cutoff", 1);
     expect(badSlot.ok).toBe(false);
   });

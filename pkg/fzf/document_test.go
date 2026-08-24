@@ -7,6 +7,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
+	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 func TestStandaloneDocumentOwnsBytesAndLayout(t *testing.T) {
@@ -80,7 +81,7 @@ func TestDiskFileDocumentRejectsInvalidDISCount(t *testing.T) {
 	}
 }
 
-func TestRenameVoiceReturnsNewDocumentAndRetainsLayout(t *testing.T) {
+func TestRenameVoiceReturnsAtomicPatchesAndRetainsMarkerAuthority(t *testing.T) {
 	data := fzfbuilder.MakeBanklessVoiceDump(t)
 	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
 	doc, err := fzf.NewStandalone(data)
@@ -89,11 +90,31 @@ func TestRenameVoiceReturnsNewDocumentAndRetainsLayout(t *testing.T) {
 	}
 	before := doc.Bytes()
 
-	updated, err := doc.RenameVoice(0, "NEW NAME")
+	patches, err := doc.RenameVoice(0, "NEW NAME")
 	if err != nil {
 		t.Fatal(err)
 	}
-	voice, err := updated.Voice(0)
+	if len(patches) != 2 {
+		t.Fatalf("patch count = %d, want name and marker patches", len(patches))
+	}
+	stale := doc.Bytes()
+	stale[patches[0].Offset] ^= 0xff
+	staleBefore := bytes.Clone(stale)
+	if err := model.Apply(stale, patches); err == nil {
+		t.Fatal("expected stale voice pre-image to reject the name and marker batch")
+	}
+	if !bytes.Equal(stale, staleBefore) {
+		t.Fatal("rejected rename mutated the stale document")
+	}
+	updated := doc.Bytes()
+	if err := model.Apply(updated, patches); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := fzf.NewStandalone(updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	voice, err := reopened.Voice(0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,13 +123,6 @@ func TestRenameVoiceReturnsNewDocumentAndRetainsLayout(t *testing.T) {
 	}
 	if !bytes.Equal(doc.Bytes(), before) {
 		t.Fatal("rename mutated the original document")
-	}
-	if updated.Layout() != doc.Layout() {
-		t.Fatal("rename changed the resolved layout")
-	}
-	reopened, err := fzf.NewStandalone(updated.Bytes())
-	if err != nil {
-		t.Fatal(err)
 	}
 	if reopened.Layout().VoiceCountSource() != fzutil.VoiceCountMarker ||
 		reopened.Layout().VoiceCount() != doc.Layout().VoiceCount() {

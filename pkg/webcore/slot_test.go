@@ -252,11 +252,17 @@ func TestRenameVoiceSlot(t *testing.T) {
 		t.Errorf("voice 1 name = %q, want NEW NAME", inst.Voices[1].Name)
 	}
 
-	if _, cerr := s.RenameVoiceSlot(1, ""); cerr == nil || cerr.Code != codeInvalidValue {
+	if _, cerr := s.RenameVoiceSlot(1, ""); cerr == nil || cerr.Code != codeInvalidValue || cerr.Message != "voice name must be 1 to 12 characters" {
 		t.Fatalf("expected invalid-value for an empty name, got %v", cerr)
 	}
-	if _, cerr := s.RenameVoiceSlot(1, "WAY TOO LONG NAME"); cerr == nil {
-		t.Fatal("expected an error for a long name")
+	if _, cerr := s.RenameVoiceSlot(1, "WAY TOO LONG NAME"); cerr == nil || cerr.Message != "voice name must be 1 to 12 characters" {
+		t.Fatalf("expected stable length error for a long name, got %v", cerr)
+	}
+	if _, cerr := s.RenameVoiceSlot(1, "BAD☃"); cerr == nil || cerr.Message != "voice name contains non-ASCII character \"☃\"" {
+		t.Fatalf("expected character-specific ASCII error, got %v", cerr)
+	}
+	if _, cerr := s.RenameVoiceSlot(99, "NAME"); cerr == nil || cerr.Message != "voice slot 99 out of range" {
+		t.Fatalf("expected boundary slot error, got %v", cerr)
 	}
 }
 
