@@ -265,8 +265,13 @@ func TestSwapAreasRejectsInvalidIndicesWithoutMutation(t *testing.T) {
 	if _, err := doc.SwapAreas(1, 0, 1); !errors.Is(err, fzf.ErrBankIndexOutOfRange) {
 		t.Fatalf("bank error = %v", err)
 	}
-	if _, err := doc.SwapAreas(0, 0, 2); !errors.Is(err, fzf.ErrAreaIndexOutOfRange) {
+	_, err = doc.SwapAreas(0, 0, 2)
+	var indexErr *fzf.IndexError
+	if !errors.Is(err, fzf.ErrAreaIndexOutOfRange) || !errors.As(err, &indexErr) {
 		t.Fatalf("area error = %v", err)
+	}
+	if indexErr.Index != 2 || indexErr.Limit != 2 {
+		t.Fatalf("area bounds = %d/%d, want index 2 limit 2", indexErr.Index, indexErr.Limit)
 	}
 	if !bytes.Equal(doc.Bytes(), before) {
 		t.Fatal("invalid swap mutated the document")

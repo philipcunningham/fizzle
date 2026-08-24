@@ -27,11 +27,27 @@ func TestFixedOperationRejectsStaleDocumentWithoutMutation(t *testing.T) {
 	current := []byte{1, 8, 3}
 	result := fixedOperation([]model.Patch{{Offset: 1, Old: []byte{2}, New: []byte{9}}})
 
-	if _, err := result.Apply(current); err == nil {
+	if _, err := result.ApplyOwned(current); err == nil {
 		t.Fatal("stale operation succeeded")
 	}
 	if !bytes.Equal(current, []byte{1, 8, 3}) {
 		t.Fatalf("failed operation changed its input: %v", current)
+	}
+}
+
+func TestFixedOperationReusesTransferredBuffer(t *testing.T) {
+	owned := []byte{1, 2, 3}
+	result := fixedOperation([]model.Patch{{Offset: 1, Old: []byte{2}, New: []byte{9}}})
+
+	updated, err := result.ApplyOwned(owned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if &updated[0] != &owned[0] {
+		t.Fatal("fixed operation copied the transferred buffer")
+	}
+	if !bytes.Equal(owned, []byte{1, 9, 3}) {
+		t.Fatalf("owned = %v", owned)
 	}
 }
 

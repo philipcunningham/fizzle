@@ -486,6 +486,16 @@ func TestSwapAreasReorders(t *testing.T) {
 	}
 }
 
+func TestSwapAreasReportsAggregateBounds(t *testing.T) {
+	s := twoVoiceSession(t)
+	if _, cerr := s.SwapAreas(1, 0, 1); cerr == nil || cerr.Message != "bank must be 0 to 0, got 1" {
+		t.Fatalf("bank error = %v", cerr)
+	}
+	if _, cerr := s.SwapAreas(0, 0, 2); cerr == nil || cerr.Message != "area 2 out of range" {
+		t.Fatalf("area error = %v", cerr)
+	}
+}
+
 func TestSwapAreaWithItselfIsAccepted(t *testing.T) {
 	s := twoVoiceSession(t)
 	beforeImage := mustExport(t, s)

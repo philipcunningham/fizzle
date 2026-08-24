@@ -482,7 +482,7 @@ func patchDumpBytes(fzf []byte, disVN int, build func(d *dumpState) ([]model.Pat
 }
 
 func applyDocumentOperation(d *dumpState, result fzfmodel.OperationResult) *Error {
-	updated, err := result.Apply(d.fzf)
+	updated, err := result.ApplyOwned(d.fzf)
 	if err != nil {
 		return errf("patch-failed", "%v", err)
 	}
@@ -581,14 +581,17 @@ func (s *Session) RenameBank(bank int, name string) (Snapshot, *Error) {
 // SwapAreas reorders two areas within a bank (R11).
 func (s *Session) SwapAreas(bank, a, b int) (Snapshot, *Error) {
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
-		if cerr := d.checkArea(bank, a); cerr != nil {
-			return nil, cerr
-		}
-		if cerr := d.checkArea(bank, b); cerr != nil {
-			return nil, cerr
-		}
 		result, err := d.doc.SwapAreas(bank, a, b)
 		if err != nil {
+			var indexErr *fzfmodel.IndexError
+			if errors.As(err, &indexErr) {
+				switch {
+				case errors.Is(err, fzfmodel.ErrBankIndexOutOfRange):
+					return nil, errf(codeInvalidValue, "bank must be 0 to %d, got %d", indexErr.Limit-1, indexErr.Index)
+				case errors.Is(err, fzfmodel.ErrAreaIndexOutOfRange):
+					return nil, errf(codeInvalidValue, "area %d out of range", indexErr.Index)
+				}
+			}
 			return nil, errf(codeInvalidValue, "areas could not be swapped")
 		}
 		return nil, applyDocumentOperation(d, result)
