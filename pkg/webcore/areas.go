@@ -2,10 +2,12 @@ package webcore
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/philipcunningham/fizzle/pkg/container"
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/model"
 )
@@ -39,6 +41,7 @@ const codeSpareVoice = "spare-voice"
 type dumpState struct {
 	fzf    []byte
 	header *fzutil.FZFHeader
+	doc    *fzfmodel.Document
 	// audioStart is the byte the audio area physically begins at. Every
 	// reader derives that same byte from the voice count it walks, so
 	// the two have to agree once an operation finishes; checkGeometry
@@ -71,9 +74,19 @@ func newDumpState(fzf []byte, disVN int) (*dumpState, *Error) {
 	if start > len(fzf) {
 		return nil, errf("invalid-image", "the voice area runs past the dump")
 	}
+	var doc *fzfmodel.Document
+	if disVN > 0 {
+		doc, err = fzfmodel.NewDiskFile(fzf, disVN)
+	} else {
+		doc, err = fzfmodel.NewStandalone(fzf)
+	}
+	if err != nil {
+		return nil, errf("invalid-image", "%v", err)
+	}
 	return &dumpState{
 		fzf:        fzf,
 		header:     hdr,
+		doc:        doc,
 		audioStart: start,
 		walkBound:  min(bstepSum(fzf, hdr.NBankSectors), disk.MaxVoices),
 		disVN:      disVN,
@@ -535,23 +548,24 @@ func (s *Session) SetAreaField(bank, area int, field string, value int) (Snapsho
 
 // RenameBank sets a bank's 12-character printable ASCII name (R11).
 func (s *Session) RenameBank(bank int, name string) (Snapshot, *Error) {
-	if len(name) == 0 || len(name) > disk.LabelSize {
-		return s.Snapshot(), errf(codeInvalidValue, "bank name must be 1 to %d characters", disk.LabelSize)
-	}
-	for _, r := range name {
-		if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
-			return s.Snapshot(), errf(codeInvalidValue, "bank name contains non-ASCII character %q", string(r))
-		}
-	}
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
-		if bank < 0 || bank >= d.header.NBankSectors {
+		patches, err := d.doc.RenameBank(bank, name)
+		if err == nil {
+			return patches, nil
+		}
+		switch {
+		case errors.Is(err, fzfmodel.ErrBankNameEmpty), errors.Is(err, fzfmodel.ErrBankNameTooLong):
+			return nil, errf(codeInvalidValue, "bank name must be 1 to %d characters", disk.LabelSize)
+		case errors.Is(err, fzfmodel.ErrBankNameNotASCII):
+			for _, r := range name {
+				if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
+					return nil, errf(codeInvalidValue, "bank name contains non-ASCII character %q", string(r))
+				}
+			}
+		case errors.Is(err, fzfmodel.ErrBankIndexOutOfRange):
 			return nil, errf(codeInvalidValue, "bank %d out of range", bank)
 		}
-		off := bank*disk.SectorSize + disk.BankNameOffset
-		padded := disk.PadLabel(name)
-		old := make([]byte, disk.LabelSize)
-		copy(old, d.fzf[off:off+disk.LabelSize])
-		return []model.Patch{{Offset: off, Old: old, New: padded[:]}}, nil
+		return nil, errf(codeInvalidValue, "could not rename bank: %v", err)
 	})
 }
 

@@ -2,6 +2,7 @@ package fzf_test
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/fzf"
@@ -154,6 +155,65 @@ func TestRenameVoiceRejectsInvalidInputWithoutMutation(t *testing.T) {
 			}
 			if !bytes.Equal(doc.Bytes(), before) {
 				t.Fatal("failed rename mutated the document")
+			}
+		})
+	}
+}
+
+func TestRenameBankReturnsNameAndMarkerPatches(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
+	doc, err := fzf.NewStandalone(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	patches, err := doc.RenameBank(0, "NEW BANK")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(patches) != 2 {
+		t.Fatalf("patch count = %d, want name and marker patches", len(patches))
+	}
+	updated := doc.Bytes()
+	if err := model.Apply(updated, patches); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := fzf.NewStandalone(updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bank, err := reopened.Bank(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bank.Name() != "NEW BANK" {
+		t.Fatalf("renamed bank = %q, want NEW BANK", bank.Name())
+	}
+	if reopened.Layout().VoiceCountSource() != fzutil.VoiceCountMarker {
+		t.Fatalf("reopened source = %v, want marker", reopened.Layout().VoiceCountSource())
+	}
+}
+
+func TestRenameBankReturnsTypedValidationErrors(t *testing.T) {
+	doc, err := fzf.NewDiskFile(fzfbuilder.MakeBanklessVoiceDump(t), fzfbuilder.BanklessDumpVoices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name  string
+		bank  int
+		value string
+		want  error
+	}{
+		{name: "empty", bank: 0, value: "", want: fzf.ErrBankNameEmpty},
+		{name: "too long", bank: 0, value: "THIS NAME IS TOO LONG", want: fzf.ErrBankNameTooLong},
+		{name: "not ASCII", bank: 0, value: "BAD☃", want: fzf.ErrBankNameNotASCII},
+		{name: "bank index", bank: 99, value: "NAME", want: fzf.ErrBankIndexOutOfRange},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := doc.RenameBank(test.bank, test.value); !errors.Is(err, test.want) {
+				t.Fatalf("error = %v, want %v", err, test.want)
 			}
 		})
 	}

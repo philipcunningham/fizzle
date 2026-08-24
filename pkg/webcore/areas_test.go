@@ -464,11 +464,14 @@ func TestRenameBank(t *testing.T) {
 	if got := instrument(t, s).Banks[0].Name; got != "DRUMS" {
 		t.Fatalf("name = %q, want DRUMS", got)
 	}
-	if _, cerr := s.RenameBank(0, "THIRTEEN CHRS"); cerr == nil || cerr.Code != codeInvalidValue {
+	if _, cerr := s.RenameBank(0, "THIRTEEN CHRS"); cerr == nil || cerr.Code != codeInvalidValue || cerr.Message != "bank name must be 1 to 12 characters" {
 		t.Fatalf("over-long name: %v", cerr)
 	}
-	if _, cerr := s.RenameBank(0, "café"); cerr == nil || cerr.Code != codeInvalidValue {
+	if _, cerr := s.RenameBank(0, "café"); cerr == nil || cerr.Code != codeInvalidValue || cerr.Message != "bank name contains non-ASCII character \"é\"" {
 		t.Fatalf("non-ASCII name: %v", cerr)
+	}
+	if _, cerr := s.RenameBank(99, "NAME"); cerr == nil || cerr.Code != codeInvalidValue || cerr.Message != "bank 99 out of range" {
+		t.Fatalf("bad bank: %v", cerr)
 	}
 }
 
