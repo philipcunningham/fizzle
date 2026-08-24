@@ -164,19 +164,13 @@ func (s *Session) RenameVoiceSlot(slot int, name string) (Snapshot, *Error) {
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
 		patches, err := d.doc.RenameVoice(slot, name)
 		if err != nil {
-			switch {
-			case errors.Is(err, fzfmodel.ErrVoiceNameEmpty), errors.Is(err, fzfmodel.ErrVoiceNameTooLong):
-				return nil, errf(codeInvalidValue, "voice name must be 1 to %d characters", disk.LabelSize)
-			case errors.Is(err, fzfmodel.ErrVoiceNameNotASCII):
-				for _, r := range name {
-					if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
-						return nil, errf(codeInvalidValue, "voice name contains non-ASCII character %q", string(r))
-					}
-				}
-			case errors.Is(err, fzfmodel.ErrVoiceIndexOutOfRange):
+			if boundaryErr := nameBoundaryError(err, "voice", fzfmodel.ErrVoiceNameEmpty, fzfmodel.ErrVoiceNameTooLong, fzfmodel.ErrVoiceNameNotASCII); boundaryErr != nil {
+				return nil, boundaryErr
+			}
+			if errors.Is(err, fzfmodel.ErrVoiceIndexOutOfRange) {
 				return nil, errf(codeInvalidValue, "voice slot %d out of range", slot)
 			}
-			return nil, errf(codeInvalidValue, "could not rename voice: %v", err)
+			return nil, errf(codeInvalidValue, "voice could not be renamed")
 		}
 		return patches, nil
 	})

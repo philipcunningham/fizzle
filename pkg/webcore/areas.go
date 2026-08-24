@@ -61,20 +61,8 @@ type dumpState struct {
 // newDumpState parses a full dump into the context the area ops work
 // over. disVN is the document's DIS-mode count, 0 for walk mode.
 func newDumpState(fzf []byte, disVN int) (*dumpState, *Error) {
-	if disVN > 0 {
-		if _, err := fzutil.ParseFZFHeaderWithVoiceCount(fzf, disVN); err != nil {
-			disVN = 0
-		}
-	}
-	hdr, err := dumpHeaderFor(fzf, disVN)
-	if err != nil {
-		return nil, errf("invalid-image", "%v", err)
-	}
-	start := hdr.VoiceAreaStart + disk.VoiceAreaSectors(hdr.NVoice)*disk.SectorSize
-	if start > len(fzf) {
-		return nil, errf("invalid-image", "the voice area runs past the dump")
-	}
 	var doc *fzfmodel.Document
+	var err error
 	if disVN > 0 {
 		doc, err = fzfmodel.NewDiskFile(fzf, disVN)
 	} else {
@@ -83,17 +71,31 @@ func newDumpState(fzf []byte, disVN int) (*dumpState, *Error) {
 	if err != nil {
 		return nil, errf("invalid-image", "%v", err)
 	}
+	layout := doc.Layout()
+	// Keep an already-recorded DIS mode when its count agrees with the
+	// resolved document, even where the byte walk reaches the same count and
+	// therefore needs no DIS authority to parse. History owns that mode.
+	if disVN > 0 && layout.VoiceCount() != disVN {
+		disVN = 0
+	}
+	hdr := &fzutil.FZFHeader{
+		NVoice:         layout.VoiceCount(),
+		BStep0:         layout.BStep0(),
+		NBankSectors:   layout.BankCount(),
+		VoiceAreaStart: layout.VoiceStart(),
+	}
 	return &dumpState{
 		fzf:        fzf,
 		header:     hdr,
 		doc:        doc,
-		audioStart: start,
+		audioStart: layout.AudioStart(),
 		walkBound:  min(bstepSum(fzf, hdr.NBankSectors), disk.MaxVoices),
 		disVN:      disVN,
 	}, nil
 }
 
-// dumpHeaderFor parses under a normalised DIS count, walking on 0.
+// dumpHeaderFor is the compatibility parser used by callers that have not yet
+// migrated to the resolved document context.
 func dumpHeaderFor(fzf []byte, vn int) (*fzutil.FZFHeader, error) {
 	if vn > 0 {
 		return fzutil.ParseFZFHeaderWithVoiceCount(fzf, vn)
@@ -112,19 +114,23 @@ func (d *dumpState) voiceAreaSectors() int {
 // bstepSum), DIS mode validates under the count the write-back
 // stamps. A moved audio start plays every voice from the wrong bytes.
 func (d *dumpState) checkGeometry() *Error {
-	vn := 0
+	var (
+		layout fzutil.FZFLayout
+		err    error
+	)
 	if d.disVN > 0 {
-		vn = d.header.NVoice
+		layout, err = fzutil.ResolveDiskFZFLayout(d.fzf, d.header.NVoice)
+	} else {
+		layout, err = fzutil.ResolveStandaloneFZFLayout(d.fzf)
 	}
-	hdr, err := dumpHeaderFor(d.fzf, vn)
 	if err != nil {
 		return errf(codeVoiceWalk, "the change leaves a dump no reader can parse: %v", err)
 	}
-	read := hdr.VoiceAreaStart + disk.VoiceAreaSectors(hdr.NVoice)*disk.SectorSize
+	read := layout.AudioStart()
 	if read != d.audioStart {
 		return errf(codeVoiceWalk,
 			"the change moves the audio: a reader walks %d voices and looks for the audio at byte %d, where this dump holds it at %d",
-			hdr.NVoice, read, d.audioStart)
+			layout.VoiceCount(), read, d.audioStart)
 	}
 	return nil
 }
@@ -553,19 +559,13 @@ func (s *Session) RenameBank(bank int, name string) (Snapshot, *Error) {
 		if err == nil {
 			return patches, nil
 		}
-		switch {
-		case errors.Is(err, fzfmodel.ErrBankNameEmpty), errors.Is(err, fzfmodel.ErrBankNameTooLong):
-			return nil, errf(codeInvalidValue, "bank name must be 1 to %d characters", disk.LabelSize)
-		case errors.Is(err, fzfmodel.ErrBankNameNotASCII):
-			for _, r := range name {
-				if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
-					return nil, errf(codeInvalidValue, "bank name contains non-ASCII character %q", string(r))
-				}
-			}
-		case errors.Is(err, fzfmodel.ErrBankIndexOutOfRange):
+		if boundaryErr := nameBoundaryError(err, "bank", fzfmodel.ErrBankNameEmpty, fzfmodel.ErrBankNameTooLong, fzfmodel.ErrBankNameNotASCII); boundaryErr != nil {
+			return nil, boundaryErr
+		}
+		if errors.Is(err, fzfmodel.ErrBankIndexOutOfRange) {
 			return nil, errf(codeInvalidValue, "bank %d out of range", bank)
 		}
-		return nil, errf(codeInvalidValue, "could not rename bank: %v", err)
+		return nil, errf(codeInvalidValue, "bank could not be renamed")
 	})
 }
 

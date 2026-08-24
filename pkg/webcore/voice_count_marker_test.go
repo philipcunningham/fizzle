@@ -59,6 +59,31 @@ func TestLoadMarkedDumpOnFreshDisk(t *testing.T) {
 	}
 }
 
+func TestDumpStateUsesDocumentMarkerAuthority(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(dump, fzfbuilder.BanklessDumpVoices)
+	walked, err := fzutil.ParseFZFHeader(dump)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if walked.NVoice == fzfbuilder.BanklessDumpVoices {
+		t.Fatal("fixture walk already sees every voice; test would not expose split authority")
+	}
+
+	state, cerr := newDumpState(dump, 0)
+	if cerr != nil {
+		t.Fatal(cerr)
+	}
+	layout := state.doc.Layout()
+	if state.header.NVoice != layout.VoiceCount() || state.header.NVoice != fzfbuilder.BanklessDumpVoices {
+		t.Fatalf("header/document voices = %d/%d, want %d", state.header.NVoice, layout.VoiceCount(), fzfbuilder.BanklessDumpVoices)
+	}
+	if state.audioStart != layout.AudioStart() {
+		t.Fatalf("state/document audio start = %d/%d", state.audioStart, layout.AudioStart())
+	}
+}
+
 // A walk-mode extract carries no marker, stale or otherwise.
 func TestWalkModeExtractClearsStaleMarker(t *testing.T) {
 	t.Parallel()

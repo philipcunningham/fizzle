@@ -217,4 +217,9 @@ func TestRenameBankReturnsTypedValidationErrors(t *testing.T) {
 			}
 		})
 	}
+	_, err = doc.RenameBank(0, "BAD☃")
+	var nameErr *fzf.NameError
+	if !errors.As(err, &nameErr) || nameErr.Character != '☃' {
+		t.Fatalf("name error = %#v, want offending snowman", nameErr)
+	}
 }
