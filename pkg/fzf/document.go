@@ -24,6 +24,20 @@ var (
 	ErrBankNameNotASCII     = errors.New("fzf: bank name is not printable ASCII")
 )
 
+// NameError identifies the invalid character in a printable-ASCII name.
+// Err is one of the exported name sentinels.
+type NameError struct {
+	Err       error
+	Character rune
+}
+
+func (e *NameError) Error() string {
+	return fmt.Sprintf("%v: %q", e.Err, e.Character)
+}
+
+// Unwrap supports errors.Is against the exported name sentinel.
+func (e *NameError) Unwrap() error { return e.Err }
+
 // Document owns an FZF dump and the layout resolved for its source context.
 // Construction copies the input, and Bytes returns a fresh copy, so callers
 // cannot change the bytes independently of the retained layout.
@@ -122,7 +136,7 @@ func validateName(name string, empty, tooLong, notASCII error) error {
 	}
 	for _, r := range name {
 		if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
-			return fmt.Errorf("%w: %q", notASCII, r)
+			return &NameError{Err: notASCII, Character: r}
 		}
 	}
 	return nil
