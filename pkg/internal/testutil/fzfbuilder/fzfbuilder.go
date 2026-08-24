@@ -116,8 +116,9 @@ func MakeSharedVoiceDump(t *testing.T) []byte {
 	return data
 }
 
-// FullDumpDISTail decodes the DIS sector of the image's FULL-DATA-FZ.
-func FullDumpDISTail(t *testing.T, img *disk.Image) disk.DisSector {
+// FindFullDumpDISTail decodes the DIS sector of the image's FULL-DATA-FZ.
+// The bool is false when the image has no full dump.
+func FindFullDumpDISTail(t *testing.T, img *disk.Image) (disk.DisSector, bool) {
 	t.Helper()
 	entries, err := img.Directory()
 	if err != nil {
@@ -135,6 +136,16 @@ func FullDumpDISTail(t *testing.T, img *disk.Image) disk.DisSector {
 		if err != nil {
 			t.Fatal(err)
 		}
+		return dis, true
+	}
+	return disk.DisSector{}, false
+}
+
+// FullDumpDISTail decodes the DIS sector of the image's FULL-DATA-FZ.
+func FullDumpDISTail(t *testing.T, img *disk.Image) disk.DisSector {
+	t.Helper()
+	dis, found := FindFullDumpDISTail(t, img)
+	if found {
 		return dis
 	}
 	t.Fatal("no FULL-DATA-FZ entry on image")

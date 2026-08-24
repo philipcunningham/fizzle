@@ -8,6 +8,30 @@ tier, parse context, expected authority, file count, and resolved-layout
 digest. `pkg/integration/layout_manifest_test.go` verifies that every corpus
 collection remains covered and that layout behavior changes deliberately.
 
+### Reviewing an intentional layout change
+
+Capture the current per-file records before changing a parser:
+
+```sh
+scratch=$(mktemp -d)
+UPDATE_LAYOUTS=true LAYOUT_SCRATCH_DIR="$scratch/before" \
+  go test ./pkg/integration \
+  -run TestStandaloneCorpusLayoutManifest -count=1 -v
+```
+
+After the parser change, write a second set and compare it:
+
+```sh
+UPDATE_LAYOUTS=true LAYOUT_SCRATCH_DIR="$scratch/after" \
+  go test ./pkg/integration \
+  -run TestStandaloneCorpusLayoutManifest -count=1 -v
+diff -ru "$scratch/before" "$scratch/after"
+```
+
+The JSON names every changed fixture and field. Only after reviewing those
+differences should the new `layoutDigest` values be copied into
+`../layout-manifest.json`.
+
 ## Archives
 
 | Directory                                    | Contents                                                   |

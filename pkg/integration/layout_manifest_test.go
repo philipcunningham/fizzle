@@ -112,7 +112,6 @@ func TestStandaloneCorpusLayoutManifest(t *testing.T) {
 	manifest := readLayoutManifest(t)
 	coveredRoots := make(map[string]bool, len(manifest.Collections))
 	for _, collection := range manifest.Collections {
-		collection := collection
 		t.Run(collection.ID, func(t *testing.T) {
 			if collection.Source == "" || collection.License == "" || collection.EvidenceTier == "" {
 				t.Fatal("collection is missing provenance metadata")
@@ -158,8 +157,14 @@ func TestStandaloneCorpusLayoutManifest(t *testing.T) {
 				t.Fatal(err)
 			}
 			digest := sha256.Sum256(encoded)
-			if got := hex.EncodeToString(digest[:]); got != collection.LayoutDigest {
-				t.Fatalf("layout digest = %s, want %s", got, collection.LayoutDigest)
+			got := hex.EncodeToString(digest[:])
+			scratch := writeLayoutScratch(t, collection.ID, got, records)
+			if got != collection.LayoutDigest {
+				if scratch == "" {
+					t.Fatalf("layout digest = %s, want %s; rerun with UPDATE_LAYOUTS=true for per-file records",
+						got, collection.LayoutDigest)
+				}
+				t.Fatalf("layout digest = %s, want %s; inspect %s", got, collection.LayoutDigest, scratch)
 			}
 		})
 	}
@@ -179,7 +184,6 @@ func TestDiskFixtureLayoutManifest(t *testing.T) {
 	manifest := readLayoutManifest(t)
 	covered := make(map[string]bool, len(manifest.DiskFixtures))
 	for _, fixture := range manifest.DiskFixtures {
-		fixture := fixture
 		t.Run(fixture.ID, func(t *testing.T) {
 			if fixture.EvidenceTier == "" || fixture.SourceSHA256 == "" || len(fixture.Tags) == 0 {
 				t.Fatal("disk fixture is missing provenance metadata")
@@ -198,10 +202,10 @@ func TestDiskFixtureLayoutManifest(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			entry, dis, found := fullDumpDIS(t, img)
+			dis, found := fzfbuilder.FindFullDumpDISTail(t, img)
 			if fixture.Layout == nil {
 				if found {
-					t.Fatalf("unexpected %s entry", entry.NameString())
+					t.Fatalf("unexpected %s entry", disk.FullDumpName)
 				}
 				return
 			}
@@ -243,27 +247,32 @@ func TestDiskFixtureLayoutManifest(t *testing.T) {
 	}
 }
 
-func fullDumpDIS(t *testing.T, img *disk.Image) (disk.DirEntry, disk.DisSector, bool) {
+func writeLayoutScratch(t *testing.T, id, digest string, records []layoutRecord) string {
 	t.Helper()
-	entries, err := img.Directory()
+	if os.Getenv("UPDATE_LAYOUTS") != "true" {
+		return ""
+	}
+	payload := struct {
+		Digest  string         `json:"layoutDigest"`
+		Records []layoutRecord `json:"records"`
+	}{Digest: digest, Records: records}
+	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, entry := range entries {
-		if entry.NameString() != disk.FullDumpName {
-			continue
-		}
-		sector, err := img.SectorRef(int(entry.DisSector))
-		if err != nil {
-			t.Fatal(err)
-		}
-		dis, err := disk.DecodeDisSector(sector)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return entry, dis, true
+	dir := os.Getenv("LAYOUT_SCRATCH_DIR")
+	if dir == "" {
+		dir = os.TempDir()
 	}
-	return disk.DirEntry{}, disk.DisSector{}, false
+	if err := os.MkdirAll(dir, 0o700); err != nil { //nolint:gosec // developer-selected scratch output
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "fizzle-layout-"+id+".json")
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil { //nolint:gosec // developer-selected scratch output
+		t.Fatal(err)
+	}
+	t.Logf("wrote layout records to %s", path)
+	return path
 }
 
 func TestGeneratedLayoutAuthorityMatrix(t *testing.T) {
