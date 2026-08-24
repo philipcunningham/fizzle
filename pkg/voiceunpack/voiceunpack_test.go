@@ -472,9 +472,9 @@ func TestUnpackMultiDiskDisk1NoPanic(t *testing.T) {
 func TestUnpackTooSmall(t *testing.T) {
 	t.Parallel()
 	data := []byte{0x01, 0x02}
-	hdr, err := fzutil.ParseFZFHeader(data)
+	layout, err := fzutil.ResolveStandaloneFZFLayout(data)
 	if err == nil {
-		_, _, err = unpack(data, hdr)
+		_, _, err = unpack(data, layout)
 	}
 	if err == nil {
 		t.Error("expected error for too-small input")
@@ -485,9 +485,9 @@ func TestUnpackInvalidVoiceCount(t *testing.T) {
 	t.Parallel()
 	data := make([]byte, disk.SectorSize)
 	binary.LittleEndian.PutUint16(data[0:2], 0)
-	hdr, err := fzutil.ParseFZFHeader(data)
+	layout, err := fzutil.ResolveStandaloneFZFLayout(data)
 	if err == nil {
-		_, _, err = unpack(data, hdr)
+		_, _, err = unpack(data, layout)
 	}
 	if err == nil {
 		t.Error("expected error for zero voice count")
