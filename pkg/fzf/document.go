@@ -7,6 +7,7 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
+	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 // Document owns an FZF dump and the layout resolved for its source context.
@@ -55,4 +56,29 @@ func (d *Document) Bytes() []byte {
 // Layout returns the document's immutable resolved layout.
 func (d *Document) Layout() fzutil.FZFLayout {
 	return d.layout
+}
+
+// RenameVoice returns a new document with the voice slot's name changed. The
+// receiver remains unchanged. Standalone marker authority is re-stamped after
+// the edit because the marker covers bytes in the bank and voice headers.
+func (d *Document) RenameVoice(index int, name string) (*Document, error) {
+	if name == "" {
+		return nil, fmt.Errorf("fzf: voice name must not be empty")
+	}
+	voice, err := d.Voice(index)
+	if err != nil {
+		return nil, err
+	}
+	patch, err := voice.NamePatch(name)
+	if err != nil {
+		return nil, err
+	}
+	updated := bytes.Clone(d.data)
+	if err := model.Apply(updated, []model.Patch{patch}); err != nil {
+		return nil, fmt.Errorf("fzf: renaming voice %d: %w", index, err)
+	}
+	if d.layout.VoiceCountSource() == fzutil.VoiceCountMarker {
+		fzutil.StampVoiceCountMarker(updated, d.layout.VoiceCount())
+	}
+	return newDocument(updated, d.layout), nil
 }
