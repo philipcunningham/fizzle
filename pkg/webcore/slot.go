@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/model"
 	"github.com/philipcunningham/fizzle/pkg/voiceedit"
@@ -160,15 +161,24 @@ func (s *Session) SetSlotEnvelope(slot int, which string, sustain, end int, rate
 
 // RenameVoiceSlot sets a slot's 12-character printable ASCII name.
 func (s *Session) RenameVoiceSlot(slot int, name string) (Snapshot, *Error) {
-	if len(name) == 0 || len(name) > disk.LabelSize {
-		return s.Snapshot(), errf(codeInvalidValue, "voice name must be 1 to %d characters", disk.LabelSize)
-	}
-	for _, r := range name {
-		if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
-			return s.Snapshot(), errf(codeInvalidValue, "voice name contains non-ASCII character %q", string(r))
+	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
+		var (
+			doc *fzfmodel.Document
+			err error
+		)
+		if d.disVN > 0 {
+			doc, err = fzfmodel.NewDiskFile(d.fzf, d.disVN)
+		} else {
+			doc, err = fzfmodel.NewStandalone(d.fzf)
 		}
-	}
-	return s.patchSlotVoice(slot, func([]byte) ([]voiceedit.Edit, error) {
-		return voiceedit.BuildNamePatch(name)
+		if err != nil {
+			return nil, errf("invalid-image", "%v", err)
+		}
+		updated, err := doc.RenameVoice(slot, name)
+		if err != nil {
+			return nil, errf(codeInvalidValue, "%v", err)
+		}
+		d.fzf = updated.Bytes()
+		return nil, nil
 	})
 }
