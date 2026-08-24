@@ -44,6 +44,23 @@ func TestDiskFileDocumentRetainsDISAuthority(t *testing.T) {
 		t.Fatalf("layout source/voices = %v/%d, want DIS/%d",
 			doc.Layout().VoiceCountSource(), doc.Layout().VoiceCount(), fzfbuilder.BanklessDumpVoices)
 	}
+
+	want := doc.Bytes()[0]
+	data[0] ^= 0xff
+	if got := doc.Bytes()[0]; got != want {
+		t.Fatalf("document changed with constructor input: got %#x, want %#x", got, want)
+	}
+}
+
+func TestDiskFileDocumentFallsBackFromUnsupportedDISCount(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	doc, err := fzf.NewDiskFile(data, 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Layout().VoiceCountSource() != fzutil.VoiceCountWalk {
+		t.Fatalf("source = %v, want walk", doc.Layout().VoiceCountSource())
+	}
 }
 
 func TestDocumentRejectsUnreadableBytes(t *testing.T) {

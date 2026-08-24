@@ -10,6 +10,8 @@ import (
 )
 
 // Document owns an FZF dump and the layout resolved for its source context.
+// Construction copies the input, and Bytes returns a fresh copy, so callers
+// cannot change the bytes independently of the retained layout.
 type Document struct {
 	data   []byte
 	layout fzutil.FZFLayout
@@ -26,6 +28,9 @@ func NewStandalone(data []byte) (*Document, error) {
 }
 
 // NewDiskFile constructs a document using the disk directory's voice count.
+// A count that is in range but cannot be validated above the bounded walk
+// falls back to the walk; callers can distinguish that case through
+// Layout().VoiceCountSource().
 func NewDiskFile(data []byte, disVoiceCount int) (*Document, error) {
 	if disVoiceCount < 1 || disVoiceCount > disk.MaxVoices {
 		return nil, fmt.Errorf("fzf: DIS voice count %d outside 1..%d", disVoiceCount, disk.MaxVoices)
