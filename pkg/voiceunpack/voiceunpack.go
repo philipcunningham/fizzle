@@ -25,6 +25,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskget"
 	"github.com/philipcunningham/fizzle/pkg/fileutil"
+	"github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/bitconv"
 )
@@ -34,12 +35,12 @@ import (
 // each voice header, e.g. "HOOVER.fzv". If two voices share the same name a
 // numeric suffix is appended. outputDir is created if it does not exist.
 func Unpack(fzfPath, outputDir string) error {
-	data, hdr, err := fzutil.ReadFZF(fzfPath)
+	doc, err := readStandalone(fzfPath)
 	if err != nil {
 		return fmt.Errorf("voiceunpack: %w", err)
 	}
 
-	voices, _, err := unpack(data, hdr)
+	voices, _, err := unpack(doc.Bytes(), doc.Layout())
 	if err != nil {
 		return err
 	}
@@ -60,11 +61,11 @@ func Unpack(fzfPath, outputDir string) error {
 // a dump opens with NoSound slots, as CASIO139.FZF does. sfzexport
 // tracks the export side of the same defect as F6.
 func UnpackData(fzfPath string) ([][]byte, []int, error) {
-	data, hdr, err := fzutil.ReadFZF(fzfPath)
+	doc, err := readStandalone(fzfPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("voiceunpack: %w", err)
 	}
-	return unpack(data, hdr)
+	return unpack(doc.Bytes(), doc.Layout())
 }
 
 // UnpackBank reads the FZF full dump at fzfPath and writes only the voices
@@ -78,12 +79,13 @@ func UnpackData(fzfPath string) ([][]byte, []int, error) {
 // Duplicates in vp[] emit a single voice; key-split sharing lives in the
 // FZF, not at the file-extraction level.
 func UnpackBank(fzfPath, outputDir string, bankIdx int) error {
-	data, hdr, err := fzutil.ReadFZF(fzfPath)
+	doc, err := readStandalone(fzfPath)
 	if err != nil {
 		return fmt.Errorf("voiceunpack: %w", err)
 	}
+	data := doc.Bytes()
 
-	nBanks := fzutil.CountBankSectors(data)
+	nBanks := doc.Layout().BankCount()
 	if bankIdx < 0 || bankIdx >= nBanks {
 		return fmt.Errorf("voiceunpack: bank index %d out of range [0, %d)", bankIdx, nBanks)
 	}
@@ -94,7 +96,7 @@ func UnpackBank(fzfPath, outputDir string, bankIdx int) error {
 		bstep = disk.MaxVoices
 	}
 
-	allVoices, slotIndices, err := unpack(data, hdr)
+	allVoices, slotIndices, err := unpack(data, doc.Layout())
 	if err != nil {
 		return err
 	}
@@ -147,10 +149,11 @@ func UnpackMultiDisk(disk1ImgPath, disk2ImgPath, outputDir string) error {
 	if err := diskget.Get(disk1ImgPath, disk.FullDumpName, d1FZF); err != nil {
 		return fmt.Errorf("voiceunpack: extracting FZF from disk 1: %w", err)
 	}
-	d1Data, hdr, err := fzutil.ReadFZF(d1FZF)
+	doc, err := readStandalone(d1FZF)
 	if err != nil {
 		return fmt.Errorf("voiceunpack: %w", err)
 	}
+	d1Data := doc.Bytes()
 
 	d2FZF := filepath.Join(tmpDir, "d2.dat")
 	if err := diskget.Get(disk2ImgPath, disk.FullDumpName, d2FZF); err != nil {
@@ -161,8 +164,7 @@ func UnpackMultiDisk(disk1ImgPath, disk2ImgPath, outputDir string) error {
 		return fmt.Errorf("voiceunpack: reading disk 2 data: %w", err)
 	}
 
-	voiceSectors := disk.VoiceAreaSectors(hdr.NVoice)
-	voiceAreaEnd := hdr.VoiceAreaStart + voiceSectors*disk.SectorSize
+	voiceAreaEnd := doc.Layout().AudioStart()
 	if len(d1Data) < voiceAreaEnd {
 		return fmt.Errorf("voiceunpack: disk 1 FZF too small for voice area")
 	}
@@ -172,7 +174,7 @@ func UnpackMultiDisk(disk1ImgPath, disk2ImgPath, outputDir string) error {
 	copy(combined[voiceAreaEnd:], d1Data[voiceAreaEnd:])
 	copy(combined[len(d1Data):], d2Data)
 
-	voices, _, err := unpack(combined, hdr)
+	voices, _, err := unpack(combined, doc.Layout())
 	if err != nil {
 		return err
 	}
@@ -217,14 +219,11 @@ func writeVoices(outputDir string, voices [][]byte) error {
 // the parallel slot-index slice lets callers reattach bank metadata (which
 // is keyed on slot, not on emit position) without re-walking the voice
 // area.
-func unpack(data []byte, hdr *fzutil.FZFHeader) ([][]byte, []int, error) {
-	nvoice := hdr.NVoice
-	voiceAreaStart := hdr.VoiceAreaStart
+func unpack(data []byte, layout fzutil.FZFLayout) ([][]byte, []int, error) {
+	return unpackAt(data, layout.VoiceCount(), layout.VoiceStart(), layout.AudioStart())
+}
 
-	voiceSectors := disk.VoiceAreaSectors(nvoice)
-	voiceAreaSize := voiceSectors * disk.SectorSize
-	voiceAreaEnd := voiceAreaStart + voiceAreaSize
-
+func unpackAt(data []byte, nvoice, voiceAreaStart, voiceAreaEnd int) ([][]byte, []int, error) {
 	if len(data) < voiceAreaEnd {
 		return nil, nil, fmt.Errorf("voiceunpack: FZF too small for %d voices (need %d bytes, have %d)",
 			nvoice, voiceAreaEnd, len(data))
@@ -317,6 +316,14 @@ func unpack(data []byte, hdr *fzutil.FZFHeader) ([][]byte, []int, error) {
 	}
 
 	return voices, slotIndices, nil
+}
+
+func readStandalone(path string) (*fzf.Document, error) {
+	data, err := fzutil.ReadBounded(path, fzutil.MaxReadSize)
+	if err != nil {
+		return nil, err
+	}
+	return fzf.NewStandalone(data)
 }
 
 // subtractSampleOffsets adjusts the sample pointer fields in a voice header

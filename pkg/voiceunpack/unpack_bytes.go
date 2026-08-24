@@ -3,6 +3,8 @@ package voiceunpack
 import (
 	"fmt"
 
+	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 )
 
@@ -18,11 +20,11 @@ import (
 // wavst/waved/genst/gened become relative to the extracted voice's audio
 // bytes rather than the combined wave area's.
 func UnpackDataFromBytes(data []byte) ([][]byte, []int, error) {
-	hdr, _, err := fzutil.ResolveStandaloneFZF(data)
+	doc, err := fzf.NewStandalone(data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("voiceunpack: %w", err)
 	}
-	return unpack(data, hdr)
+	return unpack(doc.Bytes(), doc.Layout())
 }
 
 // UnpackDataFromBytesWithVoiceCount is UnpackDataFromBytes with a
@@ -32,5 +34,6 @@ func UnpackDataFromBytesWithVoiceCount(data []byte, vn int) ([][]byte, []int, er
 	if err != nil {
 		return nil, nil, fmt.Errorf("voiceunpack: %w", err)
 	}
-	return unpack(data, hdr)
+	audioStart := hdr.VoiceAreaStart + disk.VoiceAreaSectors(hdr.NVoice)*disk.SectorSize
+	return unpackAt(data, hdr.NVoice, hdr.VoiceAreaStart, audioStart)
 }

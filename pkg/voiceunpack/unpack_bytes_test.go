@@ -20,3 +20,11 @@ func TestUnpackHonoursVoiceCountMarker(t *testing.T) {
 		t.Errorf("voices = %d, want %d", len(voices), fzfbuilder.BanklessDumpVoices)
 	}
 }
+
+func TestUnpackWithVoiceCountRejectsInvalidCount(t *testing.T) {
+	t.Parallel()
+	dump := fzfbuilder.MakeBanklessVoiceDump(t)
+	if _, _, err := UnpackDataFromBytesWithVoiceCount(dump, 0); err == nil {
+		t.Fatal("zero voice count was accepted")
+	}
+}
