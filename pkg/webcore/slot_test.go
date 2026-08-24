@@ -31,7 +31,7 @@ func unpackSlot(t *testing.T, s *Session, slot int) []byte {
 // list, then pins the unpacked slot byte for byte against the file
 // result. Unpack rewrites wave pointers identically on both sides, so
 // any divergence is a real semantic difference.
-func slotFileParity(t *testing.T, s *Session, slot int, doSlot func() *Error, filePatches func(fzv []byte) []voiceedit.Patch) {
+func slotFileParity(t *testing.T, s *Session, slot int, doSlot func() *Error, filePatches func(fzv []byte) []voiceedit.Edit) {
 	t.Helper()
 	want := unpackSlot(t, s, slot)
 	if err := voiceedit.ApplyToFZVBytes(want, filePatches(want)); err != nil {
@@ -50,7 +50,7 @@ func TestSlotParamNumberMatchesFileEdit(t *testing.T) {
 	s := twoVoiceSession(t)
 	slotFileParity(t, s, 1,
 		func() *Error { _, cerr := s.SetSlotParamNumber(1, fieldCutoff, 90); return cerr },
-		func(fzv []byte) []voiceedit.Patch {
+		func(fzv []byte) []voiceedit.Edit {
 			patches, err := numberPatches(fieldCutoff, 90, fzv)
 			if err != nil {
 				t.Fatal(err)
@@ -63,7 +63,7 @@ func TestSlotParamOptionMatchesFileEdit(t *testing.T) {
 	s := twoVoiceSession(t)
 	slotFileParity(t, s, 0,
 		func() *Error { _, cerr := s.SetSlotParamOption(0, fieldPlaybackMode, "reverse"); return cerr },
-		func(fzv []byte) []voiceedit.Patch {
+		func(fzv []byte) []voiceedit.Edit {
 			patches, err := optionPatches(fieldPlaybackMode, "reverse", fzv)
 			if err != nil {
 				t.Fatal(err)
@@ -226,7 +226,7 @@ func TestSlotEnvelopeMatchesFileEdit(t *testing.T) {
 	stops := []int{99, 90, 80, 70, 60, 50, 40, 30}
 	slotFileParity(t, s, 0,
 		func() *Error { _, cerr := s.SetSlotEnvelope(0, "dca", 3, 6, rates, stops); return cerr },
-		func(fzv []byte) []voiceedit.Patch {
+		func(fzv []byte) []voiceedit.Edit {
 			vp, err := fzvinfo.ParseBytes(fzv)
 			if err != nil {
 				t.Fatal(err)

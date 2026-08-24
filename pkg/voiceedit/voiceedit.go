@@ -4,6 +4,7 @@
 package voiceedit
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/fileutil"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/bitconv"
+	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 // Sentinel errors. Wrap with %w; match with errors.Is, not on message text.
@@ -25,26 +27,30 @@ var (
 	ErrFileTooSmall     = errors.New("voiceedit: file too small")
 )
 
-// Patch describes a modification to a voice header. When Bytes is non-nil it
+// Edit describes a modification to a voice header. When Bytes is non-nil it
 // is written verbatim at Offset and Size/Value are ignored. Otherwise Size
 // (1 or 2) bytes from Value are written as little-endian.
-type Patch struct {
+type Edit struct {
 	Offset int
 	Size   int    // 1 or 2 (ignored when Bytes is set)
 	Value  uint16 // ignored when Bytes is set
 	Bytes  []byte // multi-byte payload; when non-nil takes precedence over Size/Value
 }
 
-// ApplyToFZVBytes applies patches to FZV voice file bytes in place:
+// ApplyToFZVBytes applies edits to FZV voice file bytes in place:
 // the same validation and patching as ApplyToFZV with no filesystem.
-func ApplyToFZVBytes(data []byte, patches []Patch) error {
+func ApplyToFZVBytes(data []byte, patches []Edit) error {
 	if len(data) < disk.SectorSize {
 		return fmt.Errorf("%w (%d bytes, need at least %d)", ErrFileTooSmall, len(data), disk.SectorSize)
 	}
 	if !disk.IsPrintableName(data[disk.VoiceNameOffset : disk.VoiceNameOffset+disk.LabelSize]) {
 		return ErrNotVoiceFile
 	}
-	if err := applyPatches(data, 0, patches); err != nil {
+	resolved, err := resolvePatches(data, 0, patches)
+	if err != nil {
+		return fmt.Errorf("voiceedit: %w", err)
+	}
+	if err := model.Apply(data, resolved); err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}
 	return nil
@@ -55,13 +61,13 @@ func ApplyToFZVBytes(data []byte, patches []Patch) error {
 // the voice header (byte 0 of the file). The read-modify-write sequence is
 // serialised across processes via fileutil.WithFileLock so concurrent writers
 // can't lose each other's edits.
-func ApplyToFZV(path string, patches []Patch) error {
+func ApplyToFZV(path string, patches []Edit) error {
 	return fileutil.WithFileLock(path, func() error {
 		return applyToFZVLocked(path, patches)
 	})
 }
 
-func applyToFZVLocked(path string, patches []Patch) error {
+func applyToFZVLocked(path string, patches []Edit) error {
 	data, err := fzutil.ReadBounded(path, fzutil.MaxReadSize)
 	if err != nil {
 		return fmt.Errorf("voiceedit: reading FZV: %w", err)
@@ -77,15 +83,15 @@ func applyToFZVLocked(path string, patches []Patch) error {
 }
 
 // ApplyToFZFVoice reads the FZF file at path, locates the voice by name,
-// applies patches to that voice's header, and writes back atomically. It
+// applies edits to that voice's header, and writes back atomically. It
 // takes the same cross-process lock as ApplyToFZV.
-func ApplyToFZFVoice(path string, voiceName string, patches []Patch) error {
+func ApplyToFZFVoice(path string, voiceName string, patches []Edit) error {
 	return fileutil.WithFileLock(path, func() error {
 		return applyToFZFVoiceLocked(path, voiceName, patches)
 	})
 }
 
-func applyToFZFVoiceLocked(path string, voiceName string, patches []Patch) error {
+func applyToFZFVoiceLocked(path string, voiceName string, patches []Edit) error {
 	data, err := fzutil.ReadBounded(path, fzutil.MaxReadSize)
 	if err != nil {
 		return fmt.Errorf("voiceedit: reading FZF: %w", err)
@@ -102,10 +108,11 @@ func applyToFZFVoiceLocked(path string, voiceName string, patches []Patch) error
 	if voiceOffset+disk.VoiceHeaderUsed > len(data) {
 		return fmt.Errorf("voiceedit: voice %d header extends beyond file", idx)
 	}
-	if err := applyPatches(data, voiceOffset, patches); err != nil {
+	resolved, err := resolveFZFPatches(data, hdr, idx, voiceOffset, patches)
+	if err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}
-	if err := syncBankKeyRange(data, hdr, idx, voiceOffset, patches); err != nil {
+	if err := model.Apply(data, resolved); err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}
 	if err := fileutil.WriteAtomic(path, data); err != nil {
@@ -115,11 +122,11 @@ func applyToFZFVoiceLocked(path string, voiceName string, patches []Patch) error
 	return nil
 }
 
-// ApplyToFZFSlotBytes applies patches to one voice slot's header inside
+// ApplyToFZFSlotBytes applies edits to one voice slot's header inside
 // FZF full dump bytes, in place: the in-memory, slot-addressed sibling
 // of ApplyToFZFVoice. Key-range patches mirror into every bank site
 // that references the slot, exactly as the file-path edit does.
-func ApplyToFZFSlotBytes(data []byte, slot int, patches []Patch) error {
+func ApplyToFZFSlotBytes(data []byte, slot int, patches []Edit) error {
 	hdr, err := fzutil.ParseFZFHeader(data)
 	if err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
@@ -129,7 +136,7 @@ func ApplyToFZFSlotBytes(data []byte, slot int, patches []Patch) error {
 
 // ApplyToFZFSlotBytesWithHeader is ApplyToFZFSlotBytes under a header
 // the caller already parsed.
-func ApplyToFZFSlotBytesWithHeader(data []byte, hdr *fzutil.FZFHeader, slot int, patches []Patch) error {
+func ApplyToFZFSlotBytesWithHeader(data []byte, hdr *fzutil.FZFHeader, slot int, patches []Edit) error {
 	if slot < 0 || slot >= hdr.NVoice {
 		return fmt.Errorf("voiceedit: voice slot must be 0 to %d, got %d", hdr.NVoice-1, slot)
 	}
@@ -137,17 +144,18 @@ func ApplyToFZFSlotBytesWithHeader(data []byte, hdr *fzutil.FZFHeader, slot int,
 	if voiceOffset+disk.VoiceHeaderUsed > len(data) {
 		return fmt.Errorf("voiceedit: voice %d header extends beyond file", slot)
 	}
-	if err := applyPatches(data, voiceOffset, patches); err != nil {
+	resolved, err := resolveFZFPatches(data, hdr, slot, voiceOffset, patches)
+	if err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}
-	if err := syncBankKeyRange(data, hdr, slot, voiceOffset, patches); err != nil {
+	if err := model.Apply(data, resolved); err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}
 	return nil
 }
 
-// syncBankKeyRange mirrors any key-range patches (key-low / key-high / cent)
-// from the voice header into every bank site that references the voice slot.
+// resolveFZFPatches resolves a voice edit and any key-range fan-out into one
+// stale-safe batch, so the header and every referencing bank change atomically.
 //
 // Spec context: the voice-header fields at 0xae/0xaf/0xb0 (`hwid`/`lwid`/`cent`,
 // §2-1) are read only when the FZ-1 loads a voice standalone via the per-voice
@@ -158,9 +166,18 @@ func ApplyToFZFSlotBytesWithHeader(data []byte, hdr *fzutil.FZFHeader, slot int,
 // touching only the voice header is a silent no-op on hardware playback. The
 // fan-out mirrors fzfmidi.Set and fzfoutput.Set.
 //
-// Non-key-range patches (filter, LFO, envelope, name, tune, playback mode)
+// Non-key-range edits (filter, LFO, envelope, name, tune, playback mode)
 // have no bank counterpart and are skipped.
-func syncBankKeyRange(data []byte, hdr *fzutil.FZFHeader, idx int, voiceOffset int, patches []Patch) error {
+func resolveFZFPatches(data []byte, hdr *fzutil.FZFHeader, idx int, voiceOffset int, patches []Edit) ([]model.Patch, error) {
+	resolved, err := resolvePatches(data, voiceOffset, patches)
+	if err != nil {
+		return nil, err
+	}
+	updatedHeader := append([]byte(nil), data[voiceOffset:voiceOffset+disk.VoiceHeaderUsed]...)
+	if err := model.Apply(updatedHeader, relativePatches(resolved, voiceOffset)); err != nil {
+		return nil, err
+	}
+
 	bankOffsetFor := func(voiceHdrOffset int) (int, bool) {
 		switch voiceHdrOffset {
 		case disk.VoiceKeyHighOffset:
@@ -173,62 +190,93 @@ func syncBankKeyRange(data []byte, hdr *fzutil.FZFHeader, idx int, voiceOffset i
 		return 0, false
 	}
 
-	var sites []fzutil.BankSite
-	sitesLoaded := false
+	sites := fzutil.FindBankSitesForVoice(data, hdr, idx)
+	seen := make(map[int]struct{})
 	for _, p := range patches {
 		bankOff, ok := bankOffsetFor(p.Offset)
 		if !ok {
 			continue
 		}
-		// Read the post-write byte from the voice-header slot, so this
-		// works whichever way applyPatches wrote it (Value or Bytes).
-		srcOff := voiceOffset + p.Offset
-		if srcOff >= len(data) {
-			return fmt.Errorf("key-range source byte at %d beyond data", srcOff)
-		}
-		newByte := data[srcOff]
-		if !sitesLoaded {
-			sites = fzutil.FindBankSitesForVoice(data, hdr, idx)
-			sitesLoaded = true
-		}
+		newByte := updatedHeader[p.Offset]
 		for _, site := range sites {
 			off := site.BankIdx*disk.SectorSize + bankOff + site.SplitIdx
 			if off >= len(data) {
-				return fmt.Errorf("bank site write at %d beyond data", off)
+				return nil, fmt.Errorf("bank site write at %d beyond data", off)
 			}
-			data[off] = newByte
+			if _, ok := seen[off]; ok {
+				continue
+			}
+			seen[off] = struct{}{}
+			resolved = append(resolved, model.Patch{Offset: off, Old: []byte{data[off]}, New: []byte{newByte}})
 		}
 	}
-	return nil
+	return resolved, nil
 }
 
-func applyPatches(data []byte, base int, patches []Patch) error {
+func resolvePatches(data []byte, base int, patches []Edit) ([]model.Patch, error) {
+	if base < 0 || base+disk.VoiceHeaderUsed > len(data) {
+		return nil, fmt.Errorf("voice header at %d extends beyond data", base)
+	}
+	original := data[base : base+disk.VoiceHeaderUsed]
+	updated := append([]byte(nil), original...)
+	touched := make([]bool, len(updated))
 	for _, p := range patches {
 		size := p.Size
 		if p.Bytes != nil {
 			size = len(p.Bytes)
 		}
 		if p.Offset < 0 || p.Offset+size > disk.VoiceHeaderUsed {
-			return fmt.Errorf("voiceedit: patch offset %d (size %d) out of voice header range", p.Offset, size)
-		}
-		off := base + p.Offset
-		if off+size > len(data) {
-			return fmt.Errorf("voiceedit: patch at %d extends beyond data", off)
+			return nil, fmt.Errorf("voiceedit: patch offset %d (size %d) out of voice header range", p.Offset, size)
 		}
 		if p.Bytes != nil {
-			copy(data[off:off+size], p.Bytes)
+			copy(updated[p.Offset:p.Offset+size], p.Bytes)
+			for i := p.Offset; i < p.Offset+size; i++ {
+				touched[i] = true
+			}
 			continue
 		}
 		switch p.Size {
 		case 1:
-			data[off] = byte(p.Value) //nolint:gosec // G115: value validated before patch creation
+			updated[p.Offset] = byte(p.Value) //nolint:gosec // G115: value validated before patch creation
 		case 2:
-			binary.LittleEndian.PutUint16(data[off:], p.Value)
+			binary.LittleEndian.PutUint16(updated[p.Offset:], p.Value)
 		default:
-			return fmt.Errorf("%w: %d", ErrUnsupportedPatch, p.Size)
+			return nil, fmt.Errorf("%w: %d", ErrUnsupportedPatch, p.Size)
+		}
+		for i := p.Offset; i < p.Offset+size; i++ {
+			touched[i] = true
 		}
 	}
-	return nil
+
+	var resolved []model.Patch
+	for start := 0; start < len(touched); {
+		for start < len(touched) && (!touched[start] || original[start] == updated[start]) {
+			start++
+		}
+		if start == len(touched) {
+			break
+		}
+		end := start + 1
+		for end < len(touched) && touched[end] && original[end] != updated[end] {
+			end++
+		}
+		resolved = append(resolved, model.Patch{
+			Offset: base + start,
+			Old:    bytes.Clone(original[start:end]),
+			New:    bytes.Clone(updated[start:end]),
+		})
+		start = end
+	}
+	return resolved, nil
+}
+
+func relativePatches(patches []model.Patch, base int) []model.Patch {
+	relative := make([]model.Patch, len(patches))
+	for i, patch := range patches {
+		relative[i] = patch
+		relative[i].Offset -= base
+	}
+	return relative
 }
 func findVoiceIndex(data []byte, hdr *fzutil.FZFHeader, name string) (int, error) {
 	target := strings.ToUpper(strings.TrimSpace(name))
@@ -256,15 +304,15 @@ func findVoiceIndex(data []byte, hdr *fzutil.FZFHeader, name string) (int, error
 // so BuildLFODelayPatches owns both, and no panel row reaches the
 // resonance depth at all. Taking them here would let a caller write a
 // raw delay and skip the attack the machine pairs with it.
-func BuildLFOPatches(wave, rate, pitch, amp, filter int, origLFOName uint8) ([]Patch, error) {
-	var patches []Patch
+func BuildLFOPatches(wave, rate, pitch, amp, filter int, origLFOName uint8) ([]Edit, error) {
+	var patches []Edit
 	if wave != Unchanged {
 		if err := ValidateWaveform(wave); err != nil {
 			return nil, err
 		}
 		// A clean byte(wave) would silently clear bit 7 (phase-sync).
 		val := uint8(wave)&disk.LFOWaveformMask | (origLFOName & disk.LFOPhaseFlag) //nolint:gosec // wave is validated above (0..5)
-		patches = append(patches, Patch{Offset: disk.VoiceLFONameOffset, Size: 1, Value: uint16(val)})
+		patches = append(patches, Edit{Offset: disk.VoiceLFONameOffset, Size: 1, Value: uint16(val)})
 	}
 	type lfoParam struct {
 		name   string
@@ -282,7 +330,7 @@ func BuildLFOPatches(wave, rate, pitch, amp, filter int, origLFOName uint8) ([]P
 			if err := ValidateByte(p.name, p.val, 0, 127); err != nil {
 				return nil, err
 			}
-			patches = append(patches, Patch{Offset: p.offset, Size: 1, Value: bitconv.NarrowU16(p.val)})
+			patches = append(patches, Edit{Offset: p.offset, Size: 1, Value: bitconv.NarrowU16(p.val)})
 		}
 	}
 	return patches, nil
@@ -295,7 +343,7 @@ func BuildLFOPatches(wave, rate, pitch, amp, filter int, origLFOName uint8) ([]P
 // 127: the panel's row has no sign column and refuses to go below zero, so
 // spec §2-1's blanket claim is wrong for that one. Pass Unchanged for any
 // parameter to leave it unmodified.
-func BuildModulationPatches(dcaKF, dcaRS, dcfKF, dcfRS, velDCAKF, velDCFKF, velDCQKF, velDCARS, velDCFRS int) ([]Patch, error) {
+func BuildModulationPatches(dcaKF, dcaRS, dcfKF, dcfRS, velDCAKF, velDCFKF, velDCQKF, velDCARS, velDCFRS int) ([]Edit, error) {
 	type kfParam struct {
 		name   string
 		val    int
@@ -307,13 +355,13 @@ func BuildModulationPatches(dcaKF, dcaRS, dcfKF, dcfRS, velDCAKF, velDCFKF, velD
 		{"dcf-level-kf", dcfKF, disk.VoiceDCFKFOffset},
 		{"dcf-rate-kf", dcfRS, disk.VoiceDCFRSOffset},
 	}
-	var patches []Patch
+	var patches []Edit
 	for _, p := range kfParams {
 		if p.val != Unchanged {
 			if err := ValidateByte(p.name, p.val, disk.MinKFDisplay, disk.MaxKFDisplay); err != nil {
 				return nil, err
 			}
-			patches = append(patches, Patch{Offset: p.offset, Size: 1, Value: uint16(disk.KFDisplayToByte(p.val))})
+			patches = append(patches, Edit{Offset: p.offset, Size: 1, Value: uint16(disk.KFDisplayToByte(p.val))})
 		}
 	}
 	type signedParam struct {
@@ -339,7 +387,7 @@ func BuildModulationPatches(dcaKF, dcaRS, dcfKF, dcfRS, velDCAKF, velDCFKF, velD
 			if err := ValidateByte(p.name, p.val, lo, 127); err != nil {
 				return nil, err
 			}
-			patches = append(patches, Patch{Offset: p.offset, Size: 1, Value: uint16(uint8(int8(p.val)))}) //nolint:gosec // G115: intentional two's complement conversion; value validated above
+			patches = append(patches, Edit{Offset: p.offset, Size: 1, Value: uint16(uint8(int8(p.val)))}) //nolint:gosec // G115: intentional two's complement conversion; value validated above
 		}
 	}
 	return patches, nil
@@ -349,11 +397,11 @@ func BuildModulationPatches(dcaKF, dcaRS, dcfKF, dcfRS, velDCAKF, velDCFKF, velD
 // writes. The row has no independent attack control: moving it writes
 // the delay word and the attack byte together, so both come from the
 // one display value.
-func BuildLFODelayPatches(display int) ([]Patch, error) {
+func BuildLFODelayPatches(display int) ([]Edit, error) {
 	if display < 0 || display > disk.MaxLFODelayDisplay {
 		return nil, fmt.Errorf("voiceedit: lfo-delay must be 0 to %d, got %d", disk.MaxLFODelayDisplay, display)
 	}
-	return []Patch{
+	return []Edit{
 		{Offset: disk.VoiceLFODelayOffset, Size: 2, Value: disk.LFODelayDisplayToWord(display)},
 		{Offset: disk.VoiceLFOAtckOffset, Size: 1, Value: uint16(disk.LFOAttackForDelay(display))},
 	}, nil
@@ -361,7 +409,7 @@ func BuildLFODelayPatches(display int) ([]Patch, error) {
 
 // BuildLFOSyncPatch sets the phase-sync flag in the lfo_name byte,
 // keeping the waveform index beside it.
-func BuildLFOSyncPatch(option string, origLFOName uint8) ([]Patch, error) {
+func BuildLFOSyncPatch(option string, origLFOName uint8) ([]Edit, error) {
 	val := origLFOName & disk.LFOWaveformMask
 	switch option {
 	case "on":
@@ -370,7 +418,7 @@ func BuildLFOSyncPatch(option string, origLFOName uint8) ([]Patch, error) {
 	default:
 		return nil, fmt.Errorf("voiceedit: lfo-sync must be on or off, got %q", option)
 	}
-	return []Patch{{Offset: disk.VoiceLFONameOffset, Size: 1, Value: uint16(val)}}, nil
+	return []Edit{{Offset: disk.VoiceLFONameOffset, Size: 1, Value: uint16(val)}}, nil
 }
 
 // BuildFilterPatches creates patches for filter cutoff and resonance.
@@ -378,19 +426,19 @@ func BuildLFOSyncPatch(option string, origLFOName uint8) ([]Patch, error) {
 // The resonance byte is stored directly (the full byte is used by the hardware,
 // not just the upper nibble as the spec suggests). Pass Unchanged to leave
 // a parameter unmodified.
-func BuildFilterPatches(cutoff, resonance int) ([]Patch, error) {
-	var patches []Patch
+func BuildFilterPatches(cutoff, resonance int) ([]Edit, error) {
+	var patches []Edit
 	if cutoff != Unchanged {
 		if err := ValidateByte("cutoff", cutoff, 0, 127); err != nil {
 			return nil, err
 		}
-		patches = append(patches, Patch{Offset: disk.VoiceDCFOffset, Size: 1, Value: bitconv.NarrowU16(cutoff)})
+		patches = append(patches, Edit{Offset: disk.VoiceDCFOffset, Size: 1, Value: bitconv.NarrowU16(cutoff)})
 	}
 	if resonance != Unchanged {
 		if err := ValidateByte("resonance", resonance, 0, disk.MaxResonance); err != nil {
 			return nil, err
 		}
-		patches = append(patches, Patch{Offset: disk.VoiceDCQOffset, Size: 1, Value: bitconv.NarrowU16(resonance)})
+		patches = append(patches, Edit{Offset: disk.VoiceDCQOffset, Size: 1, Value: bitconv.NarrowU16(resonance)})
 	}
 	return patches, nil
 }
@@ -403,14 +451,14 @@ func BuildFilterPatches(cutoff, resonance int) ([]Patch, error) {
 // carry "All Voices"), and upper-casing on commit mutates a field the user
 // only tabbed through. findVoiceIndex matches case-insensitively, so lookups
 // still work either way.
-func BuildNamePatch(name string) ([]Patch, error) {
+func BuildNamePatch(name string) ([]Edit, error) {
 	if len(name) > disk.LabelSize {
 		return nil, fmt.Errorf("voiceedit: name %q exceeds %d characters", name, disk.LabelSize)
 	}
 	padded := disk.PadLabel(name)
 	payload := make([]byte, disk.VoiceNameFieldSize)
 	copy(payload, padded[:])
-	return []Patch{{Offset: disk.VoiceNameOffset, Bytes: payload}}, nil
+	return []Edit{{Offset: disk.VoiceNameOffset, Bytes: payload}}, nil
 }
 
 // ValidateByte checks that val is within the given range.
@@ -457,7 +505,7 @@ const (
 // MSB of looped); origSt and origEd carry the current cell values so
 // those bits survive the write. start must be below end, and end must
 // fit the 24-bit loopst address space so the pair stays addressable.
-func BuildLoopPatch(index int, start, end uint32, origSt, origEd uint32) ([]Patch, error) {
+func BuildLoopPatch(index int, start, end uint32, origSt, origEd uint32) ([]Edit, error) {
 	if index < 0 || index >= disk.MaxGenerators {
 		return nil, fmt.Errorf("voiceedit: loop index must be 0 to %d, got %d", disk.MaxGenerators-1, index)
 	}
@@ -473,7 +521,7 @@ func BuildLoopPatch(index int, start, end uint32, origSt, origEd uint32) ([]Patc
 	edBytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(stBytes, newSt)
 	binary.LittleEndian.PutUint32(edBytes, newEd)
-	return []Patch{
+	return []Edit{
 		{Offset: disk.VoiceLoopSt0Offset + index*4, Bytes: stBytes},
 		{Offset: disk.VoiceLoopEd0Offset + index*4, Bytes: edBytes},
 	}, nil
@@ -484,7 +532,7 @@ func BuildLoopPatch(index int, start, end uint32, origSt, origEd uint32) ([]Patc
 // 16-bit little-endian entries; xf ranges 0 to disk.MaxLoopXF (0
 // disables the cross-fade) and tm ranges 0 to disk.MaxLoopTm (fresh
 // voices carry 0, so 0 passes even though the spec's lower bound is 1).
-func BuildLoopAttrPatch(index, xf, tm int) ([]Patch, error) {
+func BuildLoopAttrPatch(index, xf, tm int) ([]Edit, error) {
 	if index < 0 || index >= disk.MaxGenerators {
 		return nil, fmt.Errorf("voiceedit: loop index must be 0 to %d, got %d", disk.MaxGenerators-1, index)
 	}
@@ -494,7 +542,7 @@ func BuildLoopAttrPatch(index, xf, tm int) ([]Patch, error) {
 	if tm < 0 || tm > disk.MaxLoopTm {
 		return nil, fmt.Errorf("voiceedit: loop time must be 0 to %d, got %d", disk.MaxLoopTm, tm)
 	}
-	return []Patch{
+	return []Edit{
 		{Offset: disk.VoiceLoopXFOffset + index*disk.LoopXFEntrySize, Size: 2, Value: bitconv.NarrowU16(xf)},
 		{Offset: disk.VoiceLoopTmOffset + index*disk.LoopTmEntrySize, Size: 2, Value: bitconv.NarrowU16(tm)},
 	}, nil
@@ -503,14 +551,14 @@ func BuildLoopAttrPatch(index, xf, tm int) ([]Patch, error) {
 // BuildLoopSelectPatch creates patches for the sustain and release
 // loop designations (loop_sus, loop_end). Valid values are 0 to 7 for
 // a loop index, or disk.NoSustainLoop (8) for none.
-func BuildLoopSelectPatch(sustain, release int) ([]Patch, error) {
+func BuildLoopSelectPatch(sustain, release int) ([]Edit, error) {
 	if err := ValidateByte("loop-sustain", sustain, 0, disk.NoSustainLoop); err != nil {
 		return nil, err
 	}
 	if err := ValidateByte("loop-release", release, 0, disk.NoSustainLoop); err != nil {
 		return nil, err
 	}
-	return []Patch{
+	return []Edit{
 		{Offset: disk.VoiceLoopSusOffset, Size: 1, Value: bitconv.NarrowU16(sustain)},
 		{Offset: disk.VoiceLoopEndOffset, Size: 1, Value: bitconv.NarrowU16(release)},
 	}, nil
@@ -518,17 +566,17 @@ func BuildLoopSelectPatch(sustain, release int) ([]Patch, error) {
 
 // BuildTunePatch creates a patch for the voice tuning (DCP field). The value
 // is in 1/256-semitone units and stored as a uint16 (two's complement).
-func BuildTunePatch(tune int) ([]Patch, error) {
+func BuildTunePatch(tune int) ([]Edit, error) {
 	if tune < -32768 || tune > 32767 {
 		return nil, fmt.Errorf("voiceedit: tune must be -32768 to 32767, got %d", tune)
 	}
-	return []Patch{{Offset: disk.VoiceDCPOffset, Size: 2, Value: uint16(int16(tune))}}, nil //nolint:gosec // validated above
+	return []Edit{{Offset: disk.VoiceDCPOffset, Size: 2, Value: uint16(int16(tune))}}, nil //nolint:gosec // validated above
 }
 
 // BuildKeyRangePatch creates patches for the key range (key-low, key-high,
 // root). Each value is a MIDI note number (0 to 127). Pass Unchanged for
 // any parameter to leave it unmodified.
-func BuildKeyRangePatch(keyLow, keyHigh, root int) ([]Patch, error) {
+func BuildKeyRangePatch(keyLow, keyHigh, root int) ([]Edit, error) {
 	type keyParam struct {
 		name   string
 		val    int
@@ -539,13 +587,13 @@ func BuildKeyRangePatch(keyLow, keyHigh, root int) ([]Patch, error) {
 		{"key-high", keyHigh, disk.VoiceKeyHighOffset},
 		{"root", root, disk.VoiceKeyCentOffset},
 	}
-	var patches []Patch
+	var patches []Edit
 	for _, p := range params {
 		if p.val != Unchanged {
 			if err := ValidateByte(p.name, p.val, 0, disk.MaxMIDINote); err != nil {
 				return nil, err
 			}
-			patches = append(patches, Patch{Offset: p.offset, Size: 1, Value: bitconv.NarrowU16(p.val)})
+			patches = append(patches, Edit{Offset: p.offset, Size: 1, Value: bitconv.NarrowU16(p.val)})
 		}
 	}
 	return patches, nil
@@ -560,12 +608,12 @@ var playbackModes = map[string]uint16{
 
 // BuildPlaybackModePatch creates a patch for the voice playback mode. The mode
 // name is matched case-insensitively. Valid modes: Normal, Reverse, Cue, Synth.
-func BuildPlaybackModePatch(mode string) ([]Patch, error) {
+func BuildPlaybackModePatch(mode string) ([]Edit, error) {
 	val, ok := playbackModes[strings.ToLower(mode)]
 	if !ok {
 		return nil, fmt.Errorf("voiceedit: unknown playback mode %q (use: normal, reverse, cue, synth)", mode)
 	}
-	return []Patch{{Offset: disk.VoiceLoopModeOffset, Size: 2, Value: val}}, nil
+	return []Edit{{Offset: disk.VoiceLoopModeOffset, Size: 2, Value: val}}, nil
 }
 
 // BuildDCAPatches creates patches for DCA envelope parameters. Pass Unchanged
@@ -573,7 +621,7 @@ func BuildPlaybackModePatch(mode string) ([]Patch, error) {
 // Rates and levels use the hardware display scale (0 to 99). origRates carries
 // the original rate bytes so the sign bit (envelope direction) survives a
 // magnitude-only change.
-func BuildDCAPatches(sustain, end int, rates, stops [disk.EnvelopeStages]int, origRates [disk.EnvelopeStages]uint8) ([]Patch, error) {
+func BuildDCAPatches(sustain, end int, rates, stops [disk.EnvelopeStages]int, origRates [disk.EnvelopeStages]uint8) ([]Edit, error) {
 	return buildEnvelopePatches("dca", sustain, end, rates, stops, origRates,
 		disk.VoiceDCASusOffset, disk.VoiceDCAEndOffset,
 		disk.VoiceDCARateOffset, disk.VoiceDCAStopOffset)
@@ -583,25 +631,25 @@ func BuildDCAPatches(sustain, end int, rates, stops [disk.EnvelopeStages]int, or
 // conventions as BuildDCAPatches: Unchanged skips a field or element, rates
 // and levels use the 0 to 99 display scale, and origRates preserves the
 // envelope-direction sign bit.
-func BuildDCFPatches(sustain, end int, rates, stops [disk.EnvelopeStages]int, origRates [disk.EnvelopeStages]uint8) ([]Patch, error) {
+func BuildDCFPatches(sustain, end int, rates, stops [disk.EnvelopeStages]int, origRates [disk.EnvelopeStages]uint8) ([]Edit, error) {
 	return buildEnvelopePatches("dcf", sustain, end, rates, stops, origRates,
 		disk.VoiceDCFSusOffset, disk.VoiceDCFEndOffset,
 		disk.VoiceDCFRateOffset, disk.VoiceDCFStopOffset)
 }
 
-func buildEnvelopePatches(prefix string, sustain, end int, rates, stops [disk.EnvelopeStages]int, origRates [disk.EnvelopeStages]uint8, susOff, endOff, rateOff, stopOff int) ([]Patch, error) {
-	var patches []Patch
+func buildEnvelopePatches(prefix string, sustain, end int, rates, stops [disk.EnvelopeStages]int, origRates [disk.EnvelopeStages]uint8, susOff, endOff, rateOff, stopOff int) ([]Edit, error) {
+	var patches []Edit
 	if sustain != Unchanged {
 		if err := ValidateByte(prefix+"-sustain", sustain, 0, 7); err != nil {
 			return nil, err
 		}
-		patches = append(patches, Patch{Offset: susOff, Size: 1, Value: bitconv.NarrowU16(sustain)})
+		patches = append(patches, Edit{Offset: susOff, Size: 1, Value: bitconv.NarrowU16(sustain)})
 	}
 	if end != Unchanged {
 		if err := ValidateByte(prefix+"-end", end, 0, 7); err != nil {
 			return nil, err
 		}
-		patches = append(patches, Patch{Offset: endOff, Size: 1, Value: bitconv.NarrowU16(end)})
+		patches = append(patches, Edit{Offset: endOff, Size: 1, Value: bitconv.NarrowU16(end)})
 	}
 	for i := range disk.EnvelopeStages {
 		if rates[i] != Unchanged {
@@ -612,13 +660,13 @@ func buildEnvelopePatches(prefix string, sustain, end int, rates, stops [disk.En
 			if origRates[i]&disk.RateSignBit != 0 {
 				b |= disk.RateSignBit
 			}
-			patches = append(patches, Patch{Offset: rateOff + i, Size: 1, Value: uint16(b)})
+			patches = append(patches, Edit{Offset: rateOff + i, Size: 1, Value: uint16(b)})
 		}
 		if stops[i] != Unchanged {
 			if stops[i] < 0 || stops[i] > disk.DisplayMax {
 				return nil, fmt.Errorf("voiceedit: %s-level-%d must be 0 to %d, got %d", prefix, i+1, disk.DisplayMax, stops[i])
 			}
-			patches = append(patches, Patch{Offset: stopOff + i, Size: 1, Value: uint16(disk.StopDisplayToByte(stops[i]))})
+			patches = append(patches, Edit{Offset: stopOff + i, Size: 1, Value: uint16(disk.StopDisplayToByte(stops[i]))})
 		}
 	}
 	return patches, nil

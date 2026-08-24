@@ -69,8 +69,8 @@ func intIfSet(cmd *cli.Command, name string) int {
 	return voiceedit.Unchanged
 }
 
-func collectPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceedit.Patch, error) {
-	var all []voiceedit.Patch
+func collectPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceedit.Edit, error) {
+	var all []voiceedit.Edit
 
 	lfo, err := collectLFOPatches(cmd, params)
 	if err != nil {
@@ -111,7 +111,7 @@ func collectPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceedit.
 	return all, nil
 }
 
-func collectLFOPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceedit.Patch, error) {
+func collectLFOPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceedit.Edit, error) {
 	wave := voiceedit.Unchanged
 	if cmd.IsSet("lfo-wave") {
 		name := cmd.String("lfo-wave")
@@ -131,7 +131,7 @@ func collectLFOPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceed
 	// Both flags write this one byte, so the sync has to fold into the
 	// waveform's own patch rather than following it. Two patches at one
 	// offset apply in order, and the second would drop the first.
-	var syncPatches []voiceedit.Patch
+	var syncPatches []voiceedit.Edit
 	if cmd.IsSet("lfo-sync") {
 		var serr error
 		syncPatches, serr = voiceedit.BuildLFOSyncPatch(cmd.String("lfo-sync"), origLFOName)
@@ -171,14 +171,14 @@ func collectLFOPatches(cmd *cli.Command, params *fzvinfo.VoiceParams) ([]voiceed
 	return patches, nil
 }
 
-func collectFilterPatches(cmd *cli.Command) ([]voiceedit.Patch, error) {
+func collectFilterPatches(cmd *cli.Command) ([]voiceedit.Edit, error) {
 	return voiceedit.BuildFilterPatches(
 		intIfSet(cmd, "cutoff"),
 		intIfSet(cmd, "resonance"),
 	)
 }
 
-func collectModulationPatches(cmd *cli.Command) ([]voiceedit.Patch, error) {
+func collectModulationPatches(cmd *cli.Command) ([]voiceedit.Edit, error) {
 	return voiceedit.BuildModulationPatches(
 		intIfSet(cmd, "dca-level-kf"),
 		intIfSet(cmd, "dca-rate-kf"),
@@ -192,8 +192,8 @@ func collectModulationPatches(cmd *cli.Command) ([]voiceedit.Patch, error) {
 	)
 }
 
-func collectMetaPatches(cmd *cli.Command) ([]voiceedit.Patch, error) {
-	var all []voiceedit.Patch
+func collectMetaPatches(cmd *cli.Command) ([]voiceedit.Edit, error) {
+	var all []voiceedit.Edit
 
 	if cmd.IsSet("name") {
 		namePatches, err := voiceedit.BuildNamePatch(cmd.String("name"))
@@ -232,9 +232,9 @@ func collectMetaPatches(cmd *cli.Command) ([]voiceedit.Patch, error) {
 	return all, nil
 }
 
-type envelopeBuildFunc func(sustain, end int, rates, stops [disk.EnvelopeStages]int, origRates [disk.EnvelopeStages]uint8) ([]voiceedit.Patch, error)
+type envelopeBuildFunc func(sustain, end int, rates, stops [disk.EnvelopeStages]int, origRates [disk.EnvelopeStages]uint8) ([]voiceedit.Edit, error)
 
-func collectEnvelopePatches(cmd *cli.Command, prefix string, origRates [disk.EnvelopeStages]uint8, buildFn envelopeBuildFunc) ([]voiceedit.Patch, error) {
+func collectEnvelopePatches(cmd *cli.Command, prefix string, origRates [disk.EnvelopeStages]uint8, buildFn envelopeBuildFunc) ([]voiceedit.Edit, error) {
 	sustain := intIfSet(cmd, prefix+"-sustain")
 	end := intIfSet(cmd, prefix+"-end")
 
