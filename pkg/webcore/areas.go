@@ -481,6 +481,15 @@ func patchDumpBytes(fzf []byte, disVN int, build func(d *dumpState) ([]model.Pat
 	return d.fzf, d.header.NVoice, nil
 }
 
+func applyDocumentOperation(d *dumpState, result fzfmodel.OperationResult) *Error {
+	updated, err := result.Apply(d.fzf)
+	if err != nil {
+		return errf("patch-failed", "%v", err)
+	}
+	d.fzf = updated
+	return nil
+}
+
 // checkArea validates bank and area indices against the dump.
 func (d *dumpState) checkArea(bank, area int) *Error {
 	if bank < 0 || bank >= d.header.NBankSectors {
@@ -555,9 +564,9 @@ func (s *Session) SetAreaField(bank, area int, field string, value int) (Snapsho
 // RenameBank sets a bank's 12-character printable ASCII name (R11).
 func (s *Session) RenameBank(bank int, name string) (Snapshot, *Error) {
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
-		patches, err := d.doc.RenameBank(bank, name)
+		result, err := d.doc.RenameBank(bank, name)
 		if err == nil {
-			return patches, nil
+			return nil, applyDocumentOperation(d, result)
 		}
 		if boundaryErr := nameBoundaryError(err, "bank", fzfmodel.ErrBankNameEmpty, fzfmodel.ErrBankNameTooLong, fzfmodel.ErrBankNameNotASCII); boundaryErr != nil {
 			return nil, boundaryErr
@@ -578,12 +587,11 @@ func (s *Session) SwapAreas(bank, a, b int) (Snapshot, *Error) {
 		if cerr := d.checkArea(bank, b); cerr != nil {
 			return nil, cerr
 		}
-		if a == b {
-			return nil, nil
+		result, err := d.doc.SwapAreas(bank, a, b)
+		if err != nil {
+			return nil, errf(codeInvalidValue, "areas could not be swapped")
 		}
-		return container.SwapAreaPatches(d.fzf, container.SwapAreaParams{
-			Base: bank * disk.SectorSize, SrcArea: a, TgtArea: b,
-		}), nil
+		return nil, applyDocumentOperation(d, result)
 	})
 }
 

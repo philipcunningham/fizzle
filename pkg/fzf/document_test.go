@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
-	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
 func TestStandaloneDocumentOwnsBytesAndLayout(t *testing.T) {
@@ -82,7 +82,7 @@ func TestDiskFileDocumentRejectsInvalidDISCount(t *testing.T) {
 	}
 }
 
-func TestRenameVoiceReturnsAtomicPatchesAndRetainsMarkerAuthority(t *testing.T) {
+func TestRenameVoiceReturnsAtomicOperationAndRetainsMarkerAuthority(t *testing.T) {
 	data := fzfbuilder.MakeBanklessVoiceDump(t)
 	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
 	doc, err := fzf.NewStandalone(data)
@@ -91,24 +91,21 @@ func TestRenameVoiceReturnsAtomicPatchesAndRetainsMarkerAuthority(t *testing.T) 
 	}
 	before := doc.Bytes()
 
-	patches, err := doc.RenameVoice(0, "NEW NAME")
+	result, err := doc.RenameVoice(0, "NEW NAME")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(patches) != 2 {
-		t.Fatalf("patch count = %d, want name and marker patches", len(patches))
-	}
 	stale := doc.Bytes()
-	stale[patches[0].Offset] ^= 0xff
+	stale[doc.Layout().VoiceStart()+disk.VoiceNameOffset] ^= 0xff
 	staleBefore := bytes.Clone(stale)
-	if err := model.Apply(stale, patches); err == nil {
+	if _, err := result.Apply(stale); err == nil {
 		t.Fatal("expected stale voice pre-image to reject the name and marker batch")
 	}
 	if !bytes.Equal(stale, staleBefore) {
 		t.Fatal("rejected rename mutated the stale document")
 	}
-	updated := doc.Bytes()
-	if err := model.Apply(updated, patches); err != nil {
+	updated, err := result.Apply(doc.Bytes())
+	if err != nil {
 		t.Fatal(err)
 	}
 	reopened, err := fzf.NewStandalone(updated)
@@ -160,22 +157,19 @@ func TestRenameVoiceRejectsInvalidInputWithoutMutation(t *testing.T) {
 	}
 }
 
-func TestRenameBankReturnsNameAndMarkerPatches(t *testing.T) {
+func TestRenameBankReturnsAtomicOperationWithMarker(t *testing.T) {
 	data := fzfbuilder.MakeBanklessVoiceDump(t)
 	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
 	doc, err := fzf.NewStandalone(data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	patches, err := doc.RenameBank(0, "NEW BANK")
+	result, err := doc.RenameBank(0, "NEW BANK")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(patches) != 2 {
-		t.Fatalf("patch count = %d, want name and marker patches", len(patches))
-	}
-	updated := doc.Bytes()
-	if err := model.Apply(updated, patches); err != nil {
+	updated, err := result.Apply(doc.Bytes())
+	if err != nil {
 		t.Fatal(err)
 	}
 	reopened, err := fzf.NewStandalone(updated)
@@ -221,5 +215,60 @@ func TestRenameBankReturnsTypedValidationErrors(t *testing.T) {
 	var nameErr *fzf.NameError
 	if !errors.As(err, &nameErr) || nameErr.Character != '☃' {
 		t.Fatalf("name error = %#v, want offending snowman", nameErr)
+	}
+}
+
+func TestSwapAreasReturnsAtomicOperationAndRetainsMarker(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
+	doc, err := fzf.NewStandalone(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := doc.Bank(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _ := before.VoiceSlot(0)
+	second, _ := before.VoiceSlot(1)
+
+	result, err := doc.SwapAreas(1, 0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := result.Apply(doc.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := fzf.NewStandalone(updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, _ := reopened.Bank(1)
+	gotFirst, _ := after.VoiceSlot(0)
+	gotSecond, _ := after.VoiceSlot(1)
+	if gotFirst != second || gotSecond != first {
+		t.Fatalf("voice slots = %d, %d; want %d, %d", gotFirst, gotSecond, second, first)
+	}
+	if reopened.Layout().VoiceCountSource() != fzutil.VoiceCountMarker {
+		t.Fatalf("reopened source = %v, want marker", reopened.Layout().VoiceCountSource())
+	}
+}
+
+func TestSwapAreasRejectsInvalidIndicesWithoutMutation(t *testing.T) {
+	data, _ := fzfbuilder.MakeTestFZF(t, []string{"LOW", "HIGH"})
+	doc, err := fzf.NewStandalone(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := doc.Bytes()
+	if _, err := doc.SwapAreas(1, 0, 1); !errors.Is(err, fzf.ErrBankIndexOutOfRange) {
+		t.Fatalf("bank error = %v", err)
+	}
+	if _, err := doc.SwapAreas(0, 0, 2); !errors.Is(err, fzf.ErrAreaIndexOutOfRange) {
+		t.Fatalf("area error = %v", err)
+	}
+	if !bytes.Equal(doc.Bytes(), before) {
+		t.Fatal("invalid swap mutated the document")
 	}
 }

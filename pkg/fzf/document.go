@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/philipcunningham/fizzle/pkg/container"
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/model"
@@ -22,6 +23,7 @@ var (
 	ErrBankNameEmpty        = errors.New("fzf: bank name is empty")
 	ErrBankNameTooLong      = errors.New("fzf: bank name is too long")
 	ErrBankNameNotASCII     = errors.New("fzf: bank name is not printable ASCII")
+	ErrAreaIndexOutOfRange  = errors.New("fzf: area index out of range")
 )
 
 // NameError identifies the invalid character in a printable-ASCII name.
@@ -86,45 +88,78 @@ func (d *Document) Layout() fzutil.FZFLayout {
 	return d.layout
 }
 
-// RenameVoice returns the stale-safe patches for changing a voice slot's name.
-// Standalone marker authority is included in the same patch batch because the
-// marker covers bytes in the bank and voice headers.
-func (d *Document) RenameVoice(index int, name string) ([]model.Patch, error) {
+// RenameVoice returns an atomic fixed-size operation for changing a voice
+// slot's name. Standalone marker authority is part of the same result because
+// the marker covers bytes in the bank and voice headers.
+func (d *Document) RenameVoice(index int, name string) (OperationResult, error) {
 	if err := validateName(name, ErrVoiceNameEmpty, ErrVoiceNameTooLong, ErrVoiceNameNotASCII); err != nil {
-		return nil, err
+		return OperationResult{}, err
 	}
 	if index < 0 || index >= d.layout.VoiceCount() {
-		return nil, fmt.Errorf("%w: %d", ErrVoiceIndexOutOfRange, index)
+		return OperationResult{}, fmt.Errorf("%w: %d", ErrVoiceIndexOutOfRange, index)
 	}
 	voice, err := d.Voice(index)
 	if err != nil {
-		return nil, err
+		return OperationResult{}, err
 	}
 	patch, err := voice.NamePatch(name)
 	if err != nil {
-		return nil, err
+		return OperationResult{}, err
 	}
-	return d.withMarkerPatch(patch)
+	patches, err := d.withMarkerPatches([]model.Patch{patch})
+	if err != nil {
+		return OperationResult{}, err
+	}
+	return fixedOperation(patches), nil
 }
 
-// RenameBank returns the stale-safe patches for changing a bank's name. A
-// marker re-stamp, where required, is part of the same atomic batch.
-func (d *Document) RenameBank(index int, name string) ([]model.Patch, error) {
+// RenameBank returns an atomic fixed-size operation for changing a bank's
+// name. A marker re-stamp, where required, is part of the same result.
+func (d *Document) RenameBank(index int, name string) (OperationResult, error) {
 	if err := validateName(name, ErrBankNameEmpty, ErrBankNameTooLong, ErrBankNameNotASCII); err != nil {
-		return nil, err
+		return OperationResult{}, err
 	}
 	if index < 0 || index >= d.layout.BankCount() {
-		return nil, fmt.Errorf("%w: %d", ErrBankIndexOutOfRange, index)
+		return OperationResult{}, fmt.Errorf("%w: %d", ErrBankIndexOutOfRange, index)
 	}
 	bank, err := d.Bank(index)
 	if err != nil {
-		return nil, err
+		return OperationResult{}, err
 	}
 	patch, err := bank.NamePatch(name)
 	if err != nil {
-		return nil, err
+		return OperationResult{}, err
 	}
-	return d.withMarkerPatch(patch)
+	patches, err := d.withMarkerPatches([]model.Patch{patch})
+	if err != nil {
+		return OperationResult{}, err
+	}
+	return fixedOperation(patches), nil
+}
+
+// SwapAreas returns an atomic fixed-size operation that exchanges two areas
+// and all their parallel bank fields.
+func (d *Document) SwapAreas(bankIndex, first, second int) (OperationResult, error) {
+	bank, err := d.Bank(bankIndex)
+	if err != nil {
+		return OperationResult{}, fmt.Errorf("%w: %d", ErrBankIndexOutOfRange, bankIndex)
+	}
+	for _, area := range []int{first, second} {
+		if area < 0 || area >= bank.AreaCount() {
+			return OperationResult{}, fmt.Errorf("%w: bank %d area %d", ErrAreaIndexOutOfRange, bankIndex, area)
+		}
+	}
+	if first == second {
+		return fixedOperation(nil), nil
+	}
+	patches := container.SwapAreaPatches(d.data, container.SwapAreaParams{
+		Base: bankIndex * disk.SectorSize, SrcArea: first, TgtArea: second,
+	})
+	patches, err = d.withMarkerPatches(patches)
+	if err != nil {
+		return OperationResult{}, err
+	}
+	return fixedOperation(patches), nil
 }
 
 func validateName(name string, empty, tooLong, notASCII error) error {
@@ -142,8 +177,7 @@ func validateName(name string, empty, tooLong, notASCII error) error {
 	return nil
 }
 
-func (d *Document) withMarkerPatch(patch model.Patch) ([]model.Patch, error) {
-	patches := []model.Patch{patch}
+func (d *Document) withMarkerPatches(patches []model.Patch) ([]model.Patch, error) {
 	if d.layout.VoiceCountSource() == fzutil.VoiceCountMarker {
 		updated := bytes.Clone(d.data)
 		if err := model.Apply(updated, patches); err != nil {

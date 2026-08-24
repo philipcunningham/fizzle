@@ -162,7 +162,7 @@ func (s *Session) SetSlotEnvelope(slot int, which string, sustain, end int, rate
 // RenameVoiceSlot sets a slot's 12-character printable ASCII name.
 func (s *Session) RenameVoiceSlot(slot int, name string) (Snapshot, *Error) {
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
-		patches, err := d.doc.RenameVoice(slot, name)
+		result, err := d.doc.RenameVoice(slot, name)
 		if err != nil {
 			if boundaryErr := nameBoundaryError(err, "voice", fzfmodel.ErrVoiceNameEmpty, fzfmodel.ErrVoiceNameTooLong, fzfmodel.ErrVoiceNameNotASCII); boundaryErr != nil {
 				return nil, boundaryErr
@@ -172,6 +172,6 @@ func (s *Session) RenameVoiceSlot(slot int, name string) (Snapshot, *Error) {
 			}
 			return nil, errf(codeInvalidValue, "voice could not be renamed")
 		}
-		return patches, nil
+		return nil, applyDocumentOperation(d, result)
 	})
 }
