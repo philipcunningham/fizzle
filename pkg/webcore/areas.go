@@ -103,12 +103,6 @@ func dumpHeaderFor(fzf []byte, vn int) (*fzutil.FZFHeader, error) {
 	return fzutil.ParseFZFHeader(fzf)
 }
 
-// voiceAreaSectors is the number of sectors the voice area physically
-// spans, which is four slots each.
-func (d *dumpState) voiceAreaSectors() int {
-	return (d.audioStart - d.header.VoiceAreaStart) / disk.SectorSize
-}
-
 // checkGeometry refuses an operation that leaves the audio at a byte
 // a reader would not derive: walk mode re-derives the count (see
 // bstepSum), DIS mode validates under the count the write-back
@@ -160,12 +154,6 @@ func bstepSum(fzf []byte, nBanks int) int {
 	return total
 }
 
-// slotReferenced reports whether any bank's vp[] plays the voice in
-// this slot.
-func slotReferenced(d *dumpState, slot int) bool {
-	return len(fzutil.FindBankSitesForVoice(d.fzf, d.header, slot)) > 0
-}
-
 // ensureVoiceSlots brings the voice area back in step with the banks
 // whenever an operation moves a bstep (see bstepSum). It is the one
 // place that does so.
@@ -182,34 +170,7 @@ func slotReferenced(d *dumpState, slot int) bool {
 // walk ends on the audio's own bytes) one more area changes neither
 // and there is nothing to do.
 func ensureVoiceSlots(d *dumpState, delta, freed int) *Error {
-	if d.disVN > 0 {
-		// DIS mode: the write-back stamps the count into the DIS tail,
-		// so bsteps bound nothing. A voice outside every bank keeps its
-		// slot, the same way the firmware keeps it.
-		return nil
-	}
-	count := d.header.NVoice
-	sum := bstepSum(d.fzf, d.header.NBankSectors) + delta
-	target := count
-	switch {
-	case sum < count:
-		// The lowered bound cuts the walk short, so the slots past it
-		// leave the voice area and the audio comes up to meet them.
-		target = sum
-	case count == d.walkBound:
-		// The bound is what stops the walk, so raising it has to land on
-		// real empty slots rather than on the audio.
-		if sum > disk.MaxVoices {
-			return errf("voice-limit",
-				"the instrument already holds %d of %d voice slots, and the areas arriving need %d more",
-				count, disk.MaxVoices, sum-disk.MaxVoices)
-		}
-		target = sum
-	}
-	if target < 1 {
-		return errf(codeInvalidValue, "an instrument needs at least one area")
-	}
-	return resizeVoiceArea(d, target, freed)
+	return resizeVoiceArea(d, delta, freed, 0)
 }
 
 // allocVoiceSlot reserves the next slot for an operation that writes a
@@ -223,7 +184,7 @@ func allocVoiceSlot(d *dumpState) (int, *Error) {
 		return 0, errf("voice-limit",
 			"the instrument already holds %d voices; this one needs a free slot", disk.MaxVoices)
 	}
-	if cerr := resizeVoiceArea(d, slot+1, noFreedSlot); cerr != nil {
+	if cerr := resizeVoiceArea(d, 0, noFreedSlot, slot+1); cerr != nil {
 		return 0, cerr
 	}
 	return slot, nil
@@ -233,111 +194,55 @@ func allocVoiceSlot(d *dumpState) (int, *Error) {
 // moving the voice and audio boundary to suit. Wave pointers are
 // sample addresses into the audio area, so the audio moving with its
 // own start leaves every voice playing the same samples.
-func resizeVoiceArea(d *dumpState, target, freed int) *Error {
+func resizeVoiceArea(d *dumpState, delta, freed, target int) *Error {
+	params := container.VoiceAreaResizeParams{
+		BankCount: d.header.NBankSectors, VoiceCount: d.header.NVoice,
+		VoiceStart: d.header.VoiceAreaStart, AudioStart: d.audioStart,
+		WalkBound: d.walkBound, BStepDelta: delta, FreedSlot: freed,
+		DiskMode: d.disVN > 0,
+	}
+	var (
+		resized container.VoiceAreaResize
+		err     error
+	)
+	if target > 0 {
+		resized, err = container.ResizeVoiceAreaToOwned(d.fzf, params, target)
+	} else {
+		resized, err = container.ResizeVoiceAreaOwned(d.fzf, params)
+	}
+	if err != nil {
+		return voiceAreaBoundaryError(err)
+	}
+	d.fzf, d.header.NVoice, d.audioStart = resized.Data, resized.VoiceCount, resized.AudioStart
+	return nil
+}
+
+func voiceAreaBoundaryError(err error) *Error {
+	var areaErr *container.VoiceAreaError
+	if !errors.As(err, &areaErr) {
+		return errf("invalid-image", "voice area could not be resized")
+	}
 	switch {
-	case target > d.header.NVoice:
-		if cerr := growVoiceSlots(d, target); cerr != nil {
-			return cerr
+	case errors.Is(err, container.ErrVoiceLimit) && areaErr.Extra > 0:
+		return errf("voice-limit", "the instrument already holds %d of %d voice slots, and the areas arriving need %d more",
+			areaErr.VoiceCount, disk.MaxVoices, areaErr.Extra)
+	case errors.Is(err, container.ErrVoiceLimit):
+		return errf("voice-limit", "the instrument already holds %d voices; this one needs a free slot", disk.MaxVoices)
+	case errors.Is(err, container.ErrMinimumArea):
+		return errf(codeInvalidValue, "an instrument needs at least one area")
+	case errors.Is(err, container.ErrSpareVoice):
+		label := fmt.Sprintf("in slot %d", areaErr.Slot)
+		if areaErr.Name != "" {
+			label = fmt.Sprintf("%q", areaErr.Name)
 		}
-	case target < d.header.NVoice:
-		if cerr := shrinkVoiceSlots(d, target, freed); cerr != nil {
-			return cerr
-		}
+		return errf(codeSpareVoice, "voice %s is played by no area, and the voice area has to give a slot back; map it or delete it first", label)
+	case errors.Is(err, container.ErrNoSpareVoice):
+		return errf("voice-limit", "every voice slot is still played by an area; giving one back would drop a voice")
+	case errors.Is(err, container.ErrInvalidVoiceArea):
+		return errf("invalid-image", "voice slot %d extends past the voice area", areaErr.Slot)
 	default:
-		return nil
+		return errf("invalid-image", "voice area could not be resized")
 	}
-	d.header.NVoice = target
-	return nil
-}
-
-// growVoiceSlots opens the slots between the current count and target,
-// growing the voice area by whole sectors when the count crosses one.
-func growVoiceSlots(d *dumpState, target int) *Error {
-	if grow := disk.VoiceAreaSectors(target) - d.voiceAreaSectors(); grow > 0 {
-		growBytes := grow * disk.SectorSize
-		grown := make([]byte, len(d.fzf)+growBytes)
-		copy(grown[:d.audioStart], d.fzf[:d.audioStart])
-		copy(grown[d.audioStart+growBytes:], d.fzf[d.audioStart:])
-		d.fzf = grown
-		d.audioStart += growBytes
-	}
-	// A claimed slot has to read as an empty slot rather than as
-	// whatever the padding held: a stale header there would walk into
-	// the count as a voice of its own.
-	for slot := d.header.NVoice; slot < target; slot++ {
-		off := disk.VoiceSlotOffset(d.header.VoiceAreaStart, slot)
-		if off+disk.VoicePackSize > d.audioStart {
-			return errf("invalid-image", "voice slot %d extends past the voice area", slot)
-		}
-		clear(d.fzf[off : off+disk.VoicePackSize])
-	}
-	return nil
-}
-
-// shrinkVoiceSlots gives slots back until the voice area holds target,
-// and shrinks it by a sector each time the count crosses one. A slot
-// that falls off the end while an area still plays it takes an unused
-// slot's place first, so no area is left pointing past the count.
-func shrinkVoiceSlots(d *dumpState, target, freed int) *Error {
-	sectors := d.voiceAreaSectors()
-	capacity := sectors * disk.VoicesPerSector
-	for count := d.header.NVoice; count > target; count-- {
-		if !slotReferenced(d, count-1) {
-			continue // an unplayed top slot just falls off the end
-		}
-		drop, cerr := spareVoiceSlot(d, freed, count-1)
-		if cerr != nil {
-			return cerr
-		}
-		compactVoiceSlot(d, drop, capacity)
-		switch {
-		case freed == drop:
-			freed = noFreedSlot
-		case freed > drop:
-			freed--
-		}
-	}
-	// Past the count is padding; clear it so no stale header walks back
-	// into the count when the next area arrives.
-	if tail := disk.VoiceSlotOffset(d.header.VoiceAreaStart, target); tail < d.audioStart {
-		clear(d.fzf[tail:d.audioStart])
-	}
-	if shrink := (sectors - disk.VoiceAreaSectors(target)) * disk.SectorSize; shrink > 0 {
-		d.fzf = append(d.fzf[:d.audioStart-shrink], d.fzf[d.audioStart:]...)
-		d.audioStart -= shrink
-	}
-	return nil
-}
-
-// spareVoiceSlot picks the slot a shrinking voice area gives up, from
-// the slots below limit that no area plays. The deleted area's own
-// slot goes first, so an area that leaves takes its voice with it.
-// Failing that a silent placeholder goes, which costs nothing. What
-// stays is a named voice no area plays, so the operation refuses and
-// names it rather than losing it in silence (codeSpareVoice).
-func spareVoiceSlot(d *dumpState, freed, limit int) (int, *Error) {
-	if freed >= 0 && freed < limit && !slotReferenced(d, freed) {
-		return freed, nil
-	}
-	named := noFreedSlot
-	for slot := limit - 1; slot >= 0; slot-- {
-		if slotReferenced(d, slot) {
-			continue
-		}
-		if slotIsPlaceholder(d, slot) {
-			return slot, nil
-		}
-		if named < 0 {
-			named = slot
-		}
-	}
-	if named >= 0 {
-		return 0, errf(codeSpareVoice,
-			"voice %s is played by no area, and the voice area has to give a slot back; map it or delete it first",
-			slotLabel(d, named))
-	}
-	return 0, errf("voice-limit",
-		"every voice slot is still played by an area; giving one back would drop a voice")
 }
 
 // slotIsPlaceholder reports whether a slot holds the silent
@@ -354,67 +259,6 @@ func slotIsPlaceholder(d *dumpState, slot int) bool {
 	}
 	return binary.LittleEndian.Uint32(h[disk.VoiceWaveStartOffset:]) ==
 		binary.LittleEndian.Uint32(h[disk.VoiceWaveEndOffset:])
-}
-
-// slotLabel names a voice slot the way the voice list does, falling
-// back to the slot number for the blank names factory dumps carry.
-func slotLabel(d *dumpState, slot int) string {
-	off := disk.VoiceSlotOffset(d.header.VoiceAreaStart, slot)
-	if off+disk.VoiceNameOffset+disk.LabelSize <= len(d.fzf) {
-		name := disk.TrimPadded(d.fzf[off+disk.VoiceNameOffset : off+disk.VoiceNameOffset+disk.LabelSize])
-		if name != "" {
-			return fmt.Sprintf("%q", name)
-		}
-	}
-	return fmt.Sprintf("in slot %d", slot)
-}
-
-// compactVoiceSlot takes one slot out of the voice area: the slots
-// above it shift down by one pack, and every vp[] entry above it
-// counts down with them, so each area keeps the voice it had.
-func compactVoiceSlot(d *dumpState, slot, count int) {
-	start := d.header.VoiceAreaStart
-	end := start + disk.VoiceAreaSectors(count)*disk.SectorSize
-	if end > len(d.fzf) {
-		end = len(d.fzf)
-	}
-	from := disk.VoiceSlotOffset(start, slot)
-	if from+disk.VoicePackSize > end {
-		return
-	}
-	// Slots are contiguous 256 byte packs, four to a sector, so the
-	// shift is one move.
-	copy(d.fzf[from:], d.fzf[from+disk.VoicePackSize:end])
-	clear(d.fzf[end-disk.VoicePackSize : end])
-	for b := 0; b < d.header.NBankSectors; b++ {
-		base := b * disk.SectorSize
-		for i := 0; i < bankBstep(d.fzf, b); i++ {
-			off := base + disk.BankVoiceNumOffset + i*disk.VPEntrySize
-			if off+disk.VPEntrySize > len(d.fzf) {
-				break
-			}
-			if v := int(binary.LittleEndian.Uint16(d.fzf[off:])); v > slot {
-				binary.LittleEndian.PutUint16(d.fzf[off:], uint16(v-1)) // #nosec G115 -- a slot index, bounded by disk.MaxVoices
-			}
-		}
-	}
-}
-
-// voiceRootKey reads a voice slot's own root key, the note its samples
-// were recorded at. A fresh area plays the voice from there. A zero
-// byte is not a usable root: it is what a blank slot carries, and the
-// empty instrument's silent placeholder is all zeros, so taking it at
-// face value pitches every note from C-1. Middle C stands in for it.
-func voiceRootKey(d *dumpState, slot int) byte {
-	off := disk.VoiceSlotOffset(d.header.VoiceAreaStart, slot) + disk.VoiceKeyCentOffset
-	if off >= len(d.fzf) {
-		return defaultRootKey
-	}
-	root := d.fzf[off]
-	if root == 0 || root > disk.MaxMIDINote {
-		return defaultRootKey
-	}
-	return root
 }
 
 // patchDump extracts the document's full dump (stitched across a
@@ -485,6 +329,14 @@ func applyDocumentOperation(d *dumpState, result fzfmodel.OperationResult) *Erro
 	updated, err := result.ApplyOwned(d.fzf)
 	if err != nil {
 		return errf("patch-failed", "%v", err)
+	}
+	if result.IsStructural() {
+		d.fzf = updated
+		if voiceCount, audioStart, ok := result.VoiceGeometry(); ok {
+			d.header.NVoice = voiceCount
+			d.audioStart = audioStart
+		}
+		return nil
 	}
 	d.fzf = updated
 	return nil
@@ -611,29 +463,11 @@ func (s *Session) DeleteArea(bank, area int) (Snapshot, *Error) {
 }
 
 func deleteAreaPatches(d *dumpState, bank, area int) ([]model.Patch, *Error) {
-	if cerr := d.checkArea(bank, area); cerr != nil {
-		return nil, cerr
+	result, err := d.doc.DeleteArea(bank, area)
+	if err != nil {
+		return nil, documentAreaBoundaryError(err, bank, area)
 	}
-	bstep := bankBstep(d.fzf, bank)
-	if bstep <= 1 {
-		// A bank with no areas drops out of the dump on the next
-		// parse, taking every later bank's mapping with it.
-		return nil, errf(codeLastArea,
-			"area %d is bank %d's only area; a bank with no areas drops out of the dump", area, bank)
-	}
-	freed, _ := disk.BankVPLookup(d.fzf, bank, area)
-	patches := container.DeleteAreaPatches(d.fzf, container.DeleteAreaParams{
-		Base: bank * disk.SectorSize, AreaIdx: area, Bstep: bstep,
-	})
-	// The lowered bstep goes in first, so the scan for slots areas still
-	// play sees the areas that survive rather than the one leaving.
-	if err := model.Apply(d.fzf, patches); err != nil {
-		return nil, errf("patch-failed", "%v", err)
-	}
-	if cerr := ensureVoiceSlots(d, 0, freed); cerr != nil {
-		return nil, cerr
-	}
-	return nil, nil
+	return nil, applyDocumentOperation(d, result)
 }
 
 // AddArea appends an area playing an existing voice slot, with the
@@ -646,42 +480,37 @@ func (s *Session) AddArea(bank, voiceSlot int) (Snapshot, *Error) {
 }
 
 func addAreaPatches(d *dumpState, bank, voiceSlot int) ([]model.Patch, *Error) {
-	if bank < 0 || bank >= d.header.NBankSectors {
-		return nil, errf(codeInvalidValue, "bank %d out of range", bank)
+	result, err := d.doc.AddArea(bank, voiceSlot)
+	if err != nil {
+		return nil, documentAreaBoundaryError(err, bank, voiceSlot)
 	}
-	if voiceSlot < 0 || voiceSlot >= d.header.NVoice {
-		return nil, errf(codeInvalidValue, "voice slot %d out of range", voiceSlot)
+	return nil, applyDocumentOperation(d, result)
+}
+
+func documentAreaBoundaryError(err error, bank, index int) *Error {
+	var indexErr *fzfmodel.IndexError
+	if errors.As(err, &indexErr) {
+		switch {
+		case errors.Is(err, fzfmodel.ErrBankIndexOutOfRange):
+			return errf(codeInvalidValue, "bank %d out of range", indexErr.Index)
+		case errors.Is(err, fzfmodel.ErrVoiceIndexOutOfRange):
+			return errf(codeInvalidValue, "voice slot %d out of range", indexErr.Index)
+		case errors.Is(err, fzfmodel.ErrAreaIndexOutOfRange):
+			return errf(codeInvalidValue, "area %d out of range", indexErr.Index)
+		}
 	}
-	bstep := bankBstep(d.fzf, bank)
-	if bstep >= disk.MaxVoices {
-		return nil, errf("bank-full", "bank %d already holds %d areas", bank, disk.MaxVoices)
+	switch {
+	case errors.Is(err, fzfmodel.ErrBankFull):
+		return errf("bank-full", "bank %d already holds %d areas", bank, disk.MaxVoices)
+	case errors.Is(err, fzfmodel.ErrLastArea):
+		return errf(codeLastArea, "area %d is bank %d's only area; a bank with no areas drops out of the dump", index, bank)
+	case errors.Is(err, container.ErrVoiceLimit), errors.Is(err, container.ErrMinimumArea),
+		errors.Is(err, container.ErrSpareVoice), errors.Is(err, container.ErrNoSpareVoice),
+		errors.Is(err, container.ErrInvalidVoiceArea):
+		return voiceAreaBoundaryError(err)
+	default:
+		return errf(codeInvalidValue, "area operation could not be completed")
 	}
-	root := voiceRootKey(d, voiceSlot)
-	// The bstep bump rides in the patches below, so the voice area is
-	// brought in step with a change it does not carry yet.
-	if cerr := ensureVoiceSlots(d, 1, noFreedSlot); cerr != nil {
-		return nil, cerr
-	}
-	base := bank * disk.SectorSize
-	vpOff := base + disk.BankVoiceNumOffset + bstep*disk.VPEntrySize
-	oldVP := make([]byte, disk.VPEntrySize)
-	copy(oldVP, d.fzf[vpOff:vpOff+disk.VPEntrySize])
-	newVP := make([]byte, disk.VPEntrySize)
-	binary.LittleEndian.PutUint16(newVP, uint16(voiceSlot)) // #nosec G115 -- bounded by NVoice above
-	patches := []model.Patch{{Offset: vpOff, Old: oldVP, New: newVP}}
-	patches = append(patches, container.DefaultBankRangePatches(d.fzf, bank, bstep)...)
-	// The area arrives playable, as the join path builds one: the
-	// voice's own root key, and the CLI builder's output default. A
-	// zero gchn routes to no generator, which the sampler plays
-	// silently, and a zero root pitches every note from C-1.
-	patches = append(patches,
-		bytePatch(d.fzf, base+disk.BankKeyCentOffset+bstep, root),
-		bytePatch(d.fzf, base+disk.BankAudioOutOffset+bstep, disk.PolyphonicAudioOut),
-	)
-	if bump, ok := container.BankBstepBumpPatch(d.fzf, bank, bstep); ok {
-		patches = append(patches, bump)
-	}
-	return patches, nil
 }
 
 // MapVoice maps a voice into the first bank with room, in one action

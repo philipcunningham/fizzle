@@ -198,7 +198,7 @@ func joinKeyRange(d *dumpState, bank, skipArea int, keyLow, keyHigh, keyCentre u
 
 // voiceHeaderKeyPatches mirrors an area's key range into the voice
 // slot's own header. The CLI builder writes both from one keygroup, and
-// fizzle reads the header back: voiceRootKey pitches a later area from
+// fizzle reads the header back: the area operation pitches a later area from
 // it, and unpacking the slot as an .fzv carries it out. Leaving the two
 // to disagree would give the same voice one range on hardware and
 // another everywhere fizzle looks.
