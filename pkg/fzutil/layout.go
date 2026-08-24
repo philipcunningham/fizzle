@@ -41,6 +41,8 @@ func ResolveStandaloneFZFLayout(data []byte) (FZFLayout, error) {
 	return resolveFZFLayout(data, MarkerVoiceCount(data), VoiceCountMarker)
 }
 
+// resolveFZFLayout applies the one acceptance policy: an explicit count wins
+// only where it validates above the walk.
 func resolveFZFLayout(data []byte, candidate int, source VoiceCountSource) (FZFLayout, error) {
 	header, walkErr := ParseFZFHeader(data)
 	resolvedSource := VoiceCountWalk
