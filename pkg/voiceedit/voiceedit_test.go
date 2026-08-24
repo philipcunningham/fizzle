@@ -632,6 +632,44 @@ func TestApplyToFZVBytesRejectsBatchAtomically(t *testing.T) {
 	}
 }
 
+func TestApplyToFZFSlotBytesRejectsHeaderAndBankBatchAtomically(t *testing.T) {
+	t.Parallel()
+	fzfPath := extractTestFZF(t, "../../testdata/synthetic/TECHNO.img", "FULL-DATA-FZ")
+	data, err := os.ReadFile(fzfPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hdr, err := fzutil.ParseFZFHeader(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot, err := findVoiceIndex(data, hdr, "COWBELL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sites := fzutil.FindBankSitesForVoice(data, hdr, slot)
+	if len(sites) == 0 {
+		t.Fatal("COWBELL has no bank site; test would not exercise fan-out")
+	}
+	bankOffset := sites[0].BankIdx*disk.SectorSize + disk.BankKeyLowOffset + sites[0].SplitIdx
+	const newKeyLow = 40
+	if data[bankOffset] == newKeyLow {
+		t.Fatal("bank key-low already has test value; test would not observe a partial write")
+	}
+	before := bytes.Clone(data)
+	edits := []Edit{
+		{Offset: disk.VoiceKeyLowOffset, Size: 1, Value: newKeyLow},
+		{Offset: disk.VoiceHeaderUsed, Size: 1, Value: 7},
+	}
+
+	if err := ApplyToFZFSlotBytesWithHeader(data, hdr, slot, edits); err == nil {
+		t.Fatal("expected out-of-range edit to reject the batch")
+	}
+	if !bytes.Equal(data, before) {
+		t.Fatalf("failed batch mutated the FZF; first bank difference is at %d", bankOffset)
+	}
+}
+
 func TestApplyToFZVBytesCoalescesSequentialWrites(t *testing.T) {
 	t.Parallel()
 	data, err := os.ReadFile(buildTestFZV(t))
