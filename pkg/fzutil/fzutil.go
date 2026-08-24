@@ -287,25 +287,21 @@ const (
 // 30 with 32 live voices) and never hides the voices past it; a
 // marker belongs to a standalone copy and never competes here.
 func ResolveDiskFZF(data []byte, disVN int) (*FZFHeader, VoiceCountSource, error) {
-	return resolveFZF(data, disVN, VoiceCountDIS)
+	layout, err := ResolveDiskFZFLayout(data, disVN)
+	if err != nil {
+		return nil, VoiceCountWalk, err
+	}
+	return layout.compatibilityHeader(), layout.VoiceCountSource(), nil
 }
 
 // ResolveStandaloneFZF parses a standalone dump under its marker
 // record, where one binds.
 func ResolveStandaloneFZF(data []byte) (*FZFHeader, VoiceCountSource, error) {
-	return resolveFZF(data, MarkerVoiceCount(data), VoiceCountMarker)
-}
-
-// resolveFZF is the one acceptance policy: an explicit count wins
-// only where it validates above the walk.
-func resolveFZF(data []byte, candidate int, src VoiceCountSource) (*FZFHeader, VoiceCountSource, error) {
-	walk, werr := ParseFZFHeader(data)
-	if candidate > 0 && (werr != nil || walk.NVoice < candidate) {
-		if hdr, err := ParseFZFHeaderWithVoiceCount(data, candidate); err == nil {
-			return hdr, src, nil
-		}
+	layout, err := ResolveStandaloneFZFLayout(data)
+	if err != nil {
+		return nil, VoiceCountWalk, err
 	}
-	return walk, VoiceCountWalk, werr
+	return layout.compatibilityHeader(), layout.VoiceCountSource(), nil
 }
 
 // voiceMarkerMagic guards the voice-count marker record: the offset
