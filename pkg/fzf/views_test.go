@@ -95,14 +95,41 @@ func TestViewNamePatchesAreAbsoluteAndStaleSafe(t *testing.T) {
 	}
 }
 
+func TestVoiceNamePatchWritesTheFullField(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	voiceName := fzfbuilder.BanklessDumpBanks*disk.SectorSize + disk.VoiceNameOffset
+	data[voiceName+disk.LabelSize] = 0xab
+	data[voiceName+disk.LabelSize+1] = 0xcd
+	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
+	doc, err := fzf.NewStandalone(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	voice, err := doc.Voice(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	patch, err := voice.NamePatch("RENAMED")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(patch.New) != disk.VoiceNameFieldSize || patch.New[disk.LabelSize] != 0 || patch.New[disk.LabelSize+1] != 0 {
+		t.Fatalf("voice name payload = % x", patch.New)
+	}
+}
+
 func TestDISViewReadsCountsAndBuildsPatch(t *testing.T) {
-	sector := disk.EncodeDisSector(disk.DisSector{
+	encoded := disk.EncodeDisSector(disk.DisSector{
 		Extents:    [][2]uint16{{2, 8}},
 		BankCount:  2,
 		VoiceCount: 5,
 		WaveCount:  7,
 	})
-	view, err := fzf.NewDISView(sector)
+	base := disk.SectorSize
+	backing := make([]byte, base+disk.SectorSize)
+	copy(backing[base:], encoded)
+	sector := backing[base:]
+	view, err := fzf.NewDISView(sector, base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +140,10 @@ func TestDISViewReadsCountsAndBuildsPatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := model.Apply(sector, []model.Patch{patch}); err != nil {
+	if patch.Offset != base+disk.DisVoiceCountOffset {
+		t.Fatalf("patch offset = %d, want %d", patch.Offset, base+disk.DisVoiceCountOffset)
+	}
+	if err := model.Apply(backing, []model.Patch{patch}); err != nil {
 		t.Fatal(err)
 	}
 	if got := int(sector[disk.DisVoiceCountOffset]); got != 6 {
@@ -125,8 +155,11 @@ func TestDISViewReadsCountsAndBuildsPatch(t *testing.T) {
 	if _, err := view.VoiceCountPatch(disk.MaxVoices + 1); err == nil {
 		t.Fatal("DIS view accepted an out-of-range voice count")
 	}
-	if _, err := fzf.NewDISView(sector[:disk.SectorSize-1]); err == nil {
+	if _, err := fzf.NewDISView(sector[:disk.SectorSize-1], base); err == nil {
 		t.Fatal("DIS view accepted a short sector")
+	}
+	if _, err := fzf.NewDISView(sector, -1); err == nil {
+		t.Fatal("DIS view accepted a negative backing offset")
 	}
 }
 

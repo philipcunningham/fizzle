@@ -58,8 +58,10 @@ func (v BankView) VoiceSlot(area int) (int, error) {
 }
 
 // NamePatch returns a stale-safe patch that changes the bank's display name.
+// Applying it invalidates a standalone voice-count marker; re-stamp the marker
+// after applying the complete patch batch.
 func (v BankView) NamePatch(name string) (model.Patch, error) {
-	return labelPatch(v.data, v.offset, disk.BankNameOffset, name)
+	return namePatch(v.data, v.offset, disk.BankNameOffset, disk.LabelSize, name)
 }
 
 // VoiceView is a bounded, zero-copy view of one voice header in a Document.
@@ -102,21 +104,29 @@ func (v VoiceView) WaveEnd() uint32 {
 }
 
 // NamePatch returns a stale-safe patch that changes the voice's display name.
+// Applying it invalidates a standalone voice-count marker; re-stamp the marker
+// after applying the complete patch batch.
 func (v VoiceView) NamePatch(name string) (model.Patch, error) {
-	return labelPatch(v.data, v.offset, disk.VoiceNameOffset, name)
+	return namePatch(v.data, v.offset, disk.VoiceNameOffset, disk.VoiceNameFieldSize, name)
 }
 
 // DISView is a bounded, zero-copy view of one data-information sector.
 type DISView struct {
-	data []byte
+	data   []byte
+	offset int
 }
 
 // NewDISView validates sector and returns a view over its first sector.
-func NewDISView(sector []byte) (DISView, error) {
+// offset is the sector's absolute byte offset in the buffer that will receive
+// patches produced by the view.
+func NewDISView(sector []byte, offset int) (DISView, error) {
+	if offset < 0 {
+		return DISView{}, fmt.Errorf("fzf: DIS offset %d must not be negative", offset)
+	}
 	if _, err := disk.DecodeDisSector(sector); err != nil {
 		return DISView{}, err
 	}
-	return DISView{data: sector[:disk.SectorSize]}, nil
+	return DISView{data: sector[:disk.SectorSize], offset: offset}, nil
 }
 
 // BankCount returns the DIS tail's bank count.
@@ -142,14 +152,16 @@ func (v DISView) VoiceCountPatch(count int) (model.Patch, error) {
 	old := bytes.Clone(v.data[disk.DisVoiceCountOffset:disk.DisWaveCountOffset])
 	updated := make([]byte, 2)
 	binary.LittleEndian.PutUint16(updated, uint16(count)) //nolint:gosec // count is bounded above
-	return model.Patch{Offset: disk.DisVoiceCountOffset, Old: old, New: updated}, nil
+	return model.Patch{Offset: v.offset + disk.DisVoiceCountOffset, Old: old, New: updated}, nil
 }
 
-func labelPatch(data []byte, base, relative int, name string) (model.Patch, error) {
+func namePatch(data []byte, base, relative, width int, name string) (model.Patch, error) {
 	if len(name) > disk.LabelSize || !disk.IsPrintableName([]byte(name)) {
 		return model.Patch{}, fmt.Errorf("fzf: name must be at most %d printable ASCII characters", disk.LabelSize)
 	}
 	label := disk.PadLabel(name)
-	old := bytes.Clone(data[relative : relative+disk.LabelSize])
-	return model.Patch{Offset: base + relative, Old: old, New: label[:]}, nil
+	old := bytes.Clone(data[relative : relative+width])
+	updated := make([]byte, width)
+	copy(updated, label[:])
+	return model.Patch{Offset: base + relative, Old: old, New: updated}, nil
 }
