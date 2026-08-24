@@ -3,6 +3,7 @@ package fzf
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 
@@ -24,6 +25,8 @@ var (
 	ErrBankNameTooLong      = errors.New("fzf: bank name is too long")
 	ErrBankNameNotASCII     = errors.New("fzf: bank name is not printable ASCII")
 	ErrAreaIndexOutOfRange  = errors.New("fzf: area index out of range")
+	ErrBankFull             = errors.New("fzf: bank is full")
+	ErrLastArea             = errors.New("fzf: bank must retain one area")
 )
 
 // NameError identifies the invalid character in a printable-ASCII name.
@@ -59,8 +62,9 @@ func (e *IndexError) Unwrap() error { return e.Err }
 // Construction copies the input, and Bytes returns a fresh copy, so callers
 // cannot change the bytes independently of the retained layout.
 type Document struct {
-	data   []byte
-	layout fzutil.FZFLayout
+	data     []byte
+	layout   fzutil.FZFLayout
+	diskMode bool
 }
 
 // NewStandalone constructs a document using standalone marker and walk policy.
@@ -70,7 +74,7 @@ func NewStandalone(data []byte) (*Document, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newDocument(owned, layout), nil
+	return newDocument(owned, layout, false), nil
 }
 
 // NewDiskFile constructs a document using the disk directory's voice count.
@@ -86,11 +90,11 @@ func NewDiskFile(data []byte, disVoiceCount int) (*Document, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newDocument(owned, layout), nil
+	return newDocument(owned, layout, layout.VoiceCount() == disVoiceCount), nil
 }
 
-func newDocument(data []byte, layout fzutil.FZFLayout) *Document {
-	return &Document{data: data, layout: layout}
+func newDocument(data []byte, layout fzutil.FZFLayout, diskMode bool) *Document {
+	return &Document{data: data, layout: layout, diskMode: diskMode}
 }
 
 // Bytes returns a copy of the original dump bytes.
@@ -175,6 +179,110 @@ func (d *Document) SwapAreas(bankIndex, first, second int) (OperationResult, err
 		return OperationResult{}, err
 	}
 	return fixedOperation(patches), nil
+}
+
+// AddArea returns a structural operation that appends an area playing an
+// existing voice slot and keeps the voice and audio boundary readable.
+func (d *Document) AddArea(bankIndex, voiceIndex int) (OperationResult, error) {
+	bank, err := d.Bank(bankIndex)
+	if err != nil {
+		return OperationResult{}, &IndexError{Err: ErrBankIndexOutOfRange, Index: bankIndex, Limit: d.layout.BankCount()}
+	}
+	voice, err := d.Voice(voiceIndex)
+	if err != nil {
+		return OperationResult{}, &IndexError{Err: ErrVoiceIndexOutOfRange, Index: voiceIndex, Limit: d.layout.VoiceCount()}
+	}
+	area := bank.AreaCount()
+	if area >= disk.MaxVoices {
+		return OperationResult{}, fmt.Errorf("%w: bank %d", ErrBankFull, bankIndex)
+	}
+
+	working := bytes.Clone(d.data)
+	resized, err := container.ResizeVoiceAreaOwned(working, d.resizeParams(1, -1))
+	if err != nil {
+		return OperationResult{}, err
+	}
+	base := bankIndex * disk.SectorSize
+	voicePointer := make([]byte, disk.VPEntrySize)
+	binary.LittleEndian.PutUint16(voicePointer, uint16(voiceIndex)) //nolint:gosec // bounded voice index
+	patches := []model.Patch{{
+		Offset: base + disk.BankVoiceNumOffset + area*disk.VPEntrySize,
+		Old:    bytes.Clone(resized.Data[base+disk.BankVoiceNumOffset+area*disk.VPEntrySize : base+disk.BankVoiceNumOffset+(area+1)*disk.VPEntrySize]),
+		New:    voicePointer,
+	}}
+	patches = append(patches, container.DefaultBankRangePatches(resized.Data, bankIndex, area)...)
+	root := voice.RootKey()
+	if root == 0 || root > disk.MaxMIDINote {
+		root = 60
+	}
+	patches = append(patches,
+		oneBytePatch(resized.Data, base+disk.BankKeyCentOffset+area, root),
+		oneBytePatch(resized.Data, base+disk.BankAudioOutOffset+area, disk.PolyphonicAudioOut),
+	)
+	if bump, ok := container.BankBstepBumpPatch(resized.Data, bankIndex, area); ok {
+		patches = append(patches, bump)
+	}
+	if err := model.Apply(resized.Data, patches); err != nil {
+		return OperationResult{}, fmt.Errorf("fzf: adding area: %w", err)
+	}
+	d.stampMarker(resized.Data, resized.VoiceCount)
+	return structuralAreaOperation(d.data, resized.Data, resized.VoiceCount, resized.AudioStart), nil
+}
+
+// DeleteArea returns a structural operation that removes one area and gives
+// its unreferenced voice slot back where the resolved walk requires it.
+func (d *Document) DeleteArea(bankIndex, areaIndex int) (OperationResult, error) {
+	bank, err := d.Bank(bankIndex)
+	if err != nil {
+		return OperationResult{}, &IndexError{Err: ErrBankIndexOutOfRange, Index: bankIndex, Limit: d.layout.BankCount()}
+	}
+	if areaIndex < 0 || areaIndex >= bank.AreaCount() {
+		return OperationResult{}, &IndexError{Err: ErrAreaIndexOutOfRange, Index: areaIndex, Limit: bank.AreaCount()}
+	}
+	if bank.AreaCount() <= 1 {
+		return OperationResult{}, fmt.Errorf("%w: bank %d area %d", ErrLastArea, bankIndex, areaIndex)
+	}
+	freed, err := bank.VoiceSlot(areaIndex)
+	if err != nil {
+		return OperationResult{}, err
+	}
+	working := bytes.Clone(d.data)
+	patches := container.DeleteAreaPatches(working, container.DeleteAreaParams{
+		Base: bankIndex * disk.SectorSize, AreaIdx: areaIndex, Bstep: bank.AreaCount(),
+	})
+	if err := model.Apply(working, patches); err != nil {
+		return OperationResult{}, fmt.Errorf("fzf: deleting area: %w", err)
+	}
+	resized, err := container.ResizeVoiceAreaOwned(working, d.resizeParams(0, freed))
+	if err != nil {
+		return OperationResult{}, err
+	}
+	d.stampMarker(resized.Data, resized.VoiceCount)
+	return structuralAreaOperation(d.data, resized.Data, resized.VoiceCount, resized.AudioStart), nil
+}
+
+func (d *Document) resizeParams(delta, freed int) container.VoiceAreaResizeParams {
+	bound := 0
+	for bank := 0; bank < d.layout.BankCount(); bank++ {
+		view, _ := d.Bank(bank)
+		bound += view.AreaCount()
+	}
+	return container.VoiceAreaResizeParams{
+		BankCount: d.layout.BankCount(), VoiceCount: d.layout.VoiceCount(),
+		VoiceStart: d.layout.VoiceStart(), AudioStart: d.layout.AudioStart(),
+		WalkBound: min(bound, disk.MaxVoices), BStepDelta: delta,
+		FreedSlot: freed, DiskMode: d.diskMode,
+	}
+}
+
+func (d *Document) stampMarker(data []byte, voiceCount int) {
+	if d.layout.VoiceCountSource() == fzutil.VoiceCountMarker {
+		fzutil.StampVoiceCountMarker(data, voiceCount)
+	}
+}
+
+func oneBytePatch(data []byte, offset int, value byte) model.Patch {
+	return model.Patch{Offset: offset, Old: []byte{data[offset]}, New: []byte{value}}
 }
 
 func validateName(name string, empty, tooLong, notASCII error) error {

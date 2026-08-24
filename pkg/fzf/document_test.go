@@ -277,3 +277,86 @@ func TestSwapAreasRejectsInvalidIndicesWithoutMutation(t *testing.T) {
 		t.Fatal("invalid swap mutated the document")
 	}
 }
+
+func TestDiskAreaAddRetainsExplicitVoiceGeometry(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	doc, err := fzf.NewDiskFile(data, fzfbuilder.BanklessDumpVoices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := doc.AddArea(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := result.Apply(doc.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated) != len(data) {
+		t.Fatalf("length = %d, want unchanged %d", len(updated), len(data))
+	}
+	reopened, err := fzf.NewDiskFile(updated, fzfbuilder.BanklessDumpVoices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.Layout().AudioStart() != doc.Layout().AudioStart() {
+		t.Fatalf("audio start = %d, want %d", reopened.Layout().AudioStart(), doc.Layout().AudioStart())
+	}
+}
+
+func TestAddThenDeleteAreaUsesStructuralReplacementAndPreservesAudio(t *testing.T) {
+	data, _ := fzfbuilder.MakeTestFZF(t, []string{"ONE", "TWO", "THREE", "FOUR"})
+	doc, err := fzf.NewStandalone(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalAudio := bytes.Clone(data[doc.Layout().AudioStart():])
+	bank, _ := doc.Bank(0)
+	originalAreas := bank.AreaCount()
+
+	added, err := doc.AddArea(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !added.IsStructural() {
+		t.Fatal("area add did not return a structural operation")
+	}
+	addedBytes, err := added.Apply(doc.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	withArea, err := fzf.NewStandalone(addedBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addedBank, _ := withArea.Bank(0)
+	if addedBank.AreaCount() != originalAreas+1 {
+		t.Fatalf("area count = %d, want %d", addedBank.AreaCount(), originalAreas+1)
+	}
+	if !bytes.Equal(addedBytes[withArea.Layout().AudioStart():], originalAudio) {
+		t.Fatal("area add changed audio bytes")
+	}
+
+	deleted, err := withArea.DeleteArea(0, originalAreas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !deleted.IsStructural() {
+		t.Fatal("area delete did not return a structural operation")
+	}
+	restoredBytes, err := deleted.Apply(withArea.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := fzf.NewStandalone(restoredBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restoredBank, _ := restored.Bank(0)
+	if restoredBank.AreaCount() != originalAreas {
+		t.Fatalf("restored area count = %d, want %d", restoredBank.AreaCount(), originalAreas)
+	}
+	if !bytes.Equal(restoredBytes[restored.Layout().AudioStart():], originalAudio) {
+		t.Fatal("area delete changed audio bytes")
+	}
+}

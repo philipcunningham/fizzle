@@ -23,6 +23,19 @@ type OperationResult struct {
 	patches     []model.Patch
 	preimage    []byte
 	replacement []byte
+	voiceCount  int
+	audioStart  int
+	hasGeometry bool
+}
+
+// IsStructural reports whether applying the result replaces document
+// structure rather than changing fixed-size fields.
+func (r OperationResult) IsStructural() bool { return r.kind == operationStructural }
+
+// VoiceGeometry returns updated voice geometry when a structural operation
+// changes it.
+func (r OperationResult) VoiceGeometry() (voiceCount, audioStart int, ok bool) {
+	return r.voiceCount, r.audioStart, r.hasGeometry
 }
 
 func fixedOperation(patches []model.Patch) OperationResult {
@@ -43,6 +56,14 @@ func structuralOperation(preimage, replacement []byte) OperationResult {
 		preimage:    bytes.Clone(preimage),
 		replacement: bytes.Clone(replacement),
 	}
+}
+
+func structuralAreaOperation(preimage, replacement []byte, voiceCount, audioStart int) OperationResult {
+	result := structuralOperation(preimage, replacement)
+	result.voiceCount = voiceCount
+	result.audioStart = audioStart
+	result.hasGeometry = true
+	return result
 }
 
 // Apply validates the operation against current and returns new owned bytes.
