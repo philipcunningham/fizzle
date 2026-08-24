@@ -421,10 +421,10 @@ func checkSelectField(fieldID string) *Error {
 
 // loopSelectBuilder clamps the sustain and release designations both
 // loop-select setters share; 8 means none.
-func loopSelectBuilder(sustain, release int) func([]byte) ([]voiceedit.Patch, error) {
+func loopSelectBuilder(sustain, release int) func([]byte) ([]voiceedit.Edit, error) {
 	sustain = clampInt(sustain, 0, disk.NoSustainLoop)
 	release = clampInt(release, 0, disk.NoSustainLoop)
-	return func([]byte) ([]voiceedit.Patch, error) {
+	return func([]byte) ([]voiceedit.Edit, error) {
 		return voiceedit.BuildLoopSelectPatch(sustain, release)
 	}
 }
@@ -436,7 +436,7 @@ func (s *Session) SetParamNumber(fileName, fieldID string, value int) (Snapshot,
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Patch, error) {
+	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Edit, error) {
 		return numberPatches(fieldID, value, voiceBytes)
 	})
 }
@@ -446,7 +446,7 @@ func (s *Session) SetParamOption(fileName, fieldID, option string) (Snapshot, *E
 	if cerr := checkSelectField(fieldID); cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Patch, error) {
+	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Edit, error) {
 		return optionPatches(fieldID, option, voiceBytes)
 	})
 }
@@ -466,7 +466,7 @@ func (s *Session) openedImage() (*disk.Image, *Error) {
 
 // patchVoice applies build's patches to a voice file on the image and
 // adopts the result.
-func (s *Session) patchVoice(fileName string, build func([]byte) ([]voiceedit.Patch, error)) (Snapshot, *Error) {
+func (s *Session) patchVoice(fileName string, build func([]byte) ([]voiceedit.Edit, error)) (Snapshot, *Error) {
 	img, cerr := s.openedImage()
 	if cerr != nil {
 		return s.Snapshot(), cerr

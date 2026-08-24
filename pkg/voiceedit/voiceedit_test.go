@@ -15,6 +15,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
+	"github.com/philipcunningham/fizzle/pkg/model"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 	"github.com/philipcunningham/fizzle/pkg/voiceunpack"
 )
@@ -128,7 +129,7 @@ func TestValidateWaveform(t *testing.T) {
 	}
 }
 
-// Patch building tests.
+// Edit building tests.
 
 func TestBuildLFOPatches(t *testing.T) {
 	t.Parallel()
@@ -383,7 +384,7 @@ func TestApplyToFZVMultiplePatches(t *testing.T) {
 
 	lfoPatches, _ := BuildLFOPatches(3, 25, Unchanged, Unchanged, 50, 0)
 	filterPatches, _ := BuildFilterPatches(64, 7)
-	all := make([]Patch, 0, len(lfoPatches)+len(filterPatches))
+	all := make([]Edit, 0, len(lfoPatches)+len(filterPatches))
 	all = append(all, lfoPatches...)
 	all = append(all, filterPatches...)
 
@@ -411,7 +412,7 @@ func TestApplyToFZVMultiplePatches(t *testing.T) {
 
 func TestApplyToFZVInvalidPath(t *testing.T) {
 	t.Parallel()
-	err := ApplyToFZV("/nonexistent/path.fzv", []Patch{{Offset: 0xA0, Size: 1, Value: 42}})
+	err := ApplyToFZV("/nonexistent/path.fzv", []Edit{{Offset: 0xA0, Size: 1, Value: 42}})
 	if err == nil {
 		t.Error("expected error for non-existent file")
 	}
@@ -427,7 +428,7 @@ func TestApplyToFZVRejectsCorruptFile(t *testing.T) {
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		t.Fatal(err)
 	}
-	err := ApplyToFZV(path, []Patch{{Offset: 0xA0, Size: 1, Value: 42}})
+	err := ApplyToFZV(path, []Edit{{Offset: 0xA0, Size: 1, Value: 42}})
 	if err == nil {
 		t.Error("expected error for corrupt file")
 	}
@@ -442,7 +443,7 @@ func TestApplyToFZVTooSmall(t *testing.T) {
 	if err := os.WriteFile(path, make([]byte, 100), 0644); err != nil {
 		t.Fatal(err)
 	}
-	err := ApplyToFZV(path, []Patch{{Offset: 0xA0, Size: 1, Value: 42}})
+	err := ApplyToFZV(path, []Edit{{Offset: 0xA0, Size: 1, Value: 42}})
 	if err == nil {
 		t.Error("expected error for file smaller than sector size")
 	}
@@ -451,7 +452,7 @@ func TestApplyToFZVTooSmall(t *testing.T) {
 func TestApplyToFZVOutOfRange(t *testing.T) {
 	t.Parallel()
 	path := buildTestFZV(t)
-	err := ApplyToFZV(path, []Patch{{Offset: disk.VoiceHeaderUsed + 1, Size: 1, Value: 42}})
+	err := ApplyToFZV(path, []Edit{{Offset: disk.VoiceHeaderUsed + 1, Size: 1, Value: 42}})
 	if err == nil {
 		t.Error("expected error for offset beyond header")
 	}
@@ -513,7 +514,7 @@ func TestApplyToFZFVoicePreservesOthers(t *testing.T) {
 func TestApplyToFZFVoiceNotFound(t *testing.T) {
 	t.Parallel()
 	fzfPath := extractTestFZF(t, "../../testdata/synthetic/TECHNO.img", "FULL-DATA-FZ")
-	err := ApplyToFZFVoice(fzfPath, "NONEXISTENT", []Patch{{Offset: 0xA0, Size: 1, Value: 42}})
+	err := ApplyToFZFVoice(fzfPath, "NONEXISTENT", []Edit{{Offset: 0xA0, Size: 1, Value: 42}})
 	if err == nil {
 		t.Error("expected error for non-existent voice")
 	}
@@ -589,8 +590,8 @@ func TestNamePatchRoundTrip(t *testing.T) {
 func TestApplyToFZVUint16Patch(t *testing.T) {
 	t.Parallel()
 	path := buildTestFZV(t)
-	patch := Patch{Offset: disk.VoiceLFODelayOffset, Size: 2, Value: 50}
-	if err := ApplyToFZV(path, []Patch{patch}); err != nil {
+	patch := Edit{Offset: disk.VoiceLFODelayOffset, Size: 2, Value: 50}
+	if err := ApplyToFZV(path, []Edit{patch}); err != nil {
 		t.Fatal(err)
 	}
 	params := parseFZV(t, path)
@@ -602,12 +603,83 @@ func TestApplyToFZVUint16Patch(t *testing.T) {
 func TestApplyPatchUnsupportedSize(t *testing.T) {
 	t.Parallel()
 	path := buildTestFZV(t)
-	err := ApplyToFZV(path, []Patch{{Offset: 0xA0, Size: 3, Value: 42}})
+	err := ApplyToFZV(path, []Edit{{Offset: 0xA0, Size: 3, Value: 42}})
 	if err == nil {
 		t.Fatal("expected error for unsupported patch size")
 	}
 	if !errors.Is(err, ErrUnsupportedPatch) {
 		t.Errorf("expected ErrUnsupportedPatch, got %v", err)
+	}
+}
+
+func TestApplyToFZVBytesRejectsBatchAtomically(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(buildTestFZV(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := bytes.Clone(data)
+	patches := []Edit{
+		{Offset: disk.VoiceLFORateOffset, Size: 1, Value: 42},
+		{Offset: disk.VoiceHeaderUsed, Size: 1, Value: 7},
+	}
+
+	if err := ApplyToFZVBytes(data, patches); err == nil {
+		t.Fatal("expected out-of-range patch to reject the batch")
+	}
+	if !bytes.Equal(data, before) {
+		t.Fatal("failed batch mutated the voice")
+	}
+}
+
+func TestApplyToFZVBytesCoalescesSequentialWrites(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(buildTestFZV(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	patches := []Edit{
+		{Offset: disk.VoiceLFONameOffset, Size: 1, Value: 0x80},
+		{Offset: disk.VoiceLFONameOffset, Size: 1, Value: 0x83},
+	}
+
+	if err := ApplyToFZVBytes(data, patches); err != nil {
+		t.Fatal(err)
+	}
+	if got := data[disk.VoiceLFONameOffset]; got != 0x83 {
+		t.Fatalf("LFO name byte = %#02x, want final sequential value 0x83", got)
+	}
+}
+
+func TestResolvePatchesProducesStaleSafeAbsolutePatch(t *testing.T) {
+	t.Parallel()
+	data := make([]byte, 2*disk.SectorSize)
+	base := disk.SectorSize
+	data[base+disk.VoiceLFORateOffset] = 9
+
+	patches, err := resolvePatches(data, base, []Edit{{
+		Offset: disk.VoiceLFORateOffset,
+		Size:   1,
+		Value:  42,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(patches) != 1 {
+		t.Fatalf("patch count = %d, want 1", len(patches))
+	}
+	patch := patches[0]
+	if patch.Offset != base+disk.VoiceLFORateOffset || !bytes.Equal(patch.Old, []byte{9}) || !bytes.Equal(patch.New, []byte{42}) {
+		t.Fatalf("resolved patch = %+v", patch)
+	}
+
+	data[patch.Offset] = 10
+	before := bytes.Clone(data)
+	if err := model.Apply(data, patches); err == nil {
+		t.Fatal("expected stale pre-image rejection")
+	}
+	if !bytes.Equal(data, before) {
+		t.Fatal("stale patch mutated the data")
 	}
 }
 
@@ -621,7 +693,7 @@ func TestApplyToFZFVoiceInvalidFZF(t *testing.T) {
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		t.Fatal(err)
 	}
-	err := ApplyToFZFVoice(path, "TEST", []Patch{{Offset: 0xA0, Size: 1, Value: 42}})
+	err := ApplyToFZFVoice(path, "TEST", []Edit{{Offset: 0xA0, Size: 1, Value: 42}})
 	if err == nil {
 		t.Error("expected error for invalid FZF file")
 	}
@@ -928,7 +1000,7 @@ func TestEditPreservesFileSize(t *testing.T) {
 	}
 	lfoPatches, _ := BuildLFOPatches(2, 50, 10, 20, 30, 0)
 	filterPatches, _ := BuildFilterPatches(80, 10)
-	all := make([]Patch, 0, len(lfoPatches)+len(filterPatches))
+	all := make([]Edit, 0, len(lfoPatches)+len(filterPatches))
 	all = append(all, lfoPatches...)
 	all = append(all, filterPatches...)
 	if err := ApplyToFZV(path, all); err != nil {
@@ -956,7 +1028,7 @@ func TestPatchPreservesAudio(t *testing.T) {
 
 	patches, _ := BuildLFOPatches(0, 42, 10, 20, 50, 0)
 	filterPatches, _ := BuildFilterPatches(64, 7)
-	all := make([]Patch, 0, len(patches)+len(filterPatches))
+	all := make([]Edit, 0, len(patches)+len(filterPatches))
 	all = append(all, patches...)
 	all = append(all, filterPatches...)
 	if err := ApplyToFZV(path, all); err != nil {
@@ -1404,7 +1476,7 @@ func TestDCAEditPreservesOtherParams(t *testing.T) {
 
 	lfoPatches, _ := BuildLFOPatches(2, 50, 10, 20, 30, 0)
 	filterPatches, _ := BuildFilterPatches(64, 7)
-	setup := make([]Patch, 0, len(lfoPatches)+len(filterPatches))
+	setup := make([]Edit, 0, len(lfoPatches)+len(filterPatches))
 	setup = append(setup, lfoPatches...)
 	setup = append(setup, filterPatches...)
 	if err := ApplyToFZV(path, setup); err != nil {
@@ -1888,7 +1960,7 @@ func TestApplyToFZFSlotBytesMatchesByName(t *testing.T) {
 	if perr != nil {
 		t.Fatal(perr)
 	}
-	patches := make([]Patch, 0, len(keyPatches)+len(lfoPatches))
+	patches := make([]Edit, 0, len(keyPatches)+len(lfoPatches))
 	patches = append(patches, keyPatches...)
 	patches = append(patches, lfoPatches...)
 

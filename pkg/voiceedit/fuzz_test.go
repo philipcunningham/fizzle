@@ -48,7 +48,7 @@ func FuzzFZVEditChain(f *testing.F) {
 				valByte = seed[0]
 			}
 
-			var patches []Patch
+			var patches []Edit
 			var err error
 
 			switch cat {

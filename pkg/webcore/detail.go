@@ -106,15 +106,15 @@ func clampGeneration(frames, startFrame, endFrame int) (start, end int) {
 // generationPatches writes the generation window's two 4-byte cells.
 // base is the voice's own wave start, which is zero for a standalone
 // file and the slot's absolute address inside a dump.
-func generationPatches(base uint32, start, end int) []voiceedit.Patch {
-	cell := func(offset int, addr uint32) voiceedit.Patch {
+func generationPatches(base uint32, start, end int) []voiceedit.Edit {
+	cell := func(offset int, addr uint32) voiceedit.Edit {
 		buf := make([]byte, 4)
 		binary.LittleEndian.PutUint32(buf, addr)
-		return voiceedit.Patch{Offset: offset, Bytes: buf}
+		return voiceedit.Edit{Offset: offset, Bytes: buf}
 	}
 	// #nosec G115 -- start and end are clamped non-negative, and to the
 	// voice's own frame count, by clampGeneration.
-	return []voiceedit.Patch{
+	return []voiceedit.Edit{
 		cell(disk.VoiceGenStartOffset, base+uint32(start)),
 		cell(disk.VoiceGenEndOffset, base+uint32(end)),
 	}
@@ -125,7 +125,7 @@ func generationPatches(base uint32, start, end int) []voiceedit.Patch {
 // A standalone voice starts at sample zero, so the cells already hold
 // the frames the boundary speaks and no rebase applies.
 func (s *Session) SetGeneration(fileName string, startFrame, endFrame int) (Snapshot, *Error) {
-	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Patch, error) {
+	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Edit, error) {
 		vp, err := fzvinfo.ParseBytes(voiceBytes)
 		if err != nil {
 			return nil, err
@@ -142,7 +142,7 @@ func (s *Session) SetLoop(fileName string, index, startFrame, endFrame int) (Sna
 	if index < 0 || index >= disk.MaxGenerators {
 		return s.Snapshot(), errf(codeInvalidValue, "loop index must be 0 to %d, got %d", disk.MaxGenerators-1, index)
 	}
-	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Patch, error) {
+	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Edit, error) {
 		vp, err := fzvinfo.ParseBytes(voiceBytes)
 		if err != nil {
 			return nil, err
@@ -166,7 +166,7 @@ const (
 // buildEnvelopePatches carries the validation and display-scale
 // clamps SetEnvelope and SetSlotEnvelope share; the returned builder
 // takes whichever header parse the caller owns (R16).
-func buildEnvelopePatches(which string, sustain, end int, rates, stops []int) (func(vp *fzvinfo.VoiceParams) ([]voiceedit.Patch, error), *Error) {
+func buildEnvelopePatches(which string, sustain, end int, rates, stops []int) (func(vp *fzvinfo.VoiceParams) ([]voiceedit.Edit, error), *Error) {
 	if which != envDCA && which != envDCF {
 		return nil, errf("invalid-field", "envelope must be dca or dcf, got %q", which)
 	}
@@ -182,7 +182,7 @@ func buildEnvelopePatches(which string, sustain, end int, rates, stops []int) (f
 	for i, v := range stops {
 		st[i] = clampInt(v, 0, 99)
 	}
-	return func(vp *fzvinfo.VoiceParams) ([]voiceedit.Patch, error) {
+	return func(vp *fzvinfo.VoiceParams) ([]voiceedit.Edit, error) {
 		origRates, origStops := vp.DCARates, vp.DCAStops
 		if which != envDCA {
 			origRates, origStops = vp.DCFRates, vp.DCFStops
@@ -210,7 +210,7 @@ func buildEnvelopePatches(which string, sustain, end int, rates, stops []int) (f
 // buildLoopPatch carries the frame clamps SetLoop and SetSlotLoop
 // share: voice-relative frames against the header's current cells,
 // rebased by base into the shared audio area (R17).
-func buildLoopPatch(hdr []byte, index, startFrame, endFrame, frames int, base uint32) ([]voiceedit.Patch, error) {
+func buildLoopPatch(hdr []byte, index, startFrame, endFrame, frames int, base uint32) ([]voiceedit.Edit, error) {
 	if frames < 2 {
 		return nil, errf(codeInvalidValue, "voice holds no loopable audio")
 	}
@@ -232,7 +232,7 @@ func (s *Session) SetEnvelope(fileName, which string, sustain, end int, rates, s
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Patch, error) {
+	return s.patchVoice(fileName, func(voiceBytes []byte) ([]voiceedit.Edit, error) {
 		vp, err := fzvinfo.ParseBytes(voiceBytes)
 		if err != nil {
 			return nil, err

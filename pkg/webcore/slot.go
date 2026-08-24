@@ -25,7 +25,7 @@ import (
 // of current values) and returns voiceedit patches, which apply
 // through the same slot patcher the CLI's fzf edit uses, bank
 // key-range fan-out included.
-func (s *Session) patchSlotVoice(slot int, build func(hdr []byte) ([]voiceedit.Patch, error)) (Snapshot, *Error) {
+func (s *Session) patchSlotVoice(slot int, build func(hdr []byte) ([]voiceedit.Edit, error)) (Snapshot, *Error) {
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
 		hdr, cerr := slotHeader(d, slot)
 		if cerr != nil {
@@ -84,7 +84,7 @@ func (s *Session) SetSlotParamNumber(slot int, fieldID string, value int) (Snaps
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Patch, error) {
+	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Edit, error) {
 		return numberPatches(fieldID, value, hdr)
 	})
 }
@@ -95,7 +95,7 @@ func (s *Session) SetSlotParamOption(slot int, fieldID, option string) (Snapshot
 	if cerr := checkSelectField(fieldID); cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Patch, error) {
+	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Edit, error) {
 		return optionPatches(fieldID, option, hdr)
 	})
 }
@@ -106,7 +106,7 @@ func (s *Session) SetSlotParamOption(slot int, fieldID, option string) (Snapshot
 // write rebases; without that a window written as frames would address
 // another voice's samples.
 func (s *Session) SetSlotGeneration(slot, startFrame, endFrame int) (Snapshot, *Error) {
-	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Patch, error) {
+	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Edit, error) {
 		base, waveEnd := slotWaveBounds(hdr)
 		start, end := clampGeneration(int(waveEnd-base), startFrame, endFrame)
 		return generationPatches(base, start, end), nil
@@ -120,7 +120,7 @@ func (s *Session) SetSlotLoop(slot, index, startFrame, endFrame int) (Snapshot, 
 	if index < 0 || index >= disk.MaxGenerators {
 		return s.Snapshot(), errf(codeInvalidValue, "loop index must be 0 to %d, got %d", disk.MaxGenerators-1, index)
 	}
-	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Patch, error) {
+	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Edit, error) {
 		base, waveEnd := slotWaveBounds(hdr)
 		return buildLoopPatch(hdr, index, startFrame, endFrame, int(waveEnd-base), base)
 	})
@@ -131,7 +131,7 @@ func (s *Session) SetSlotLoop(slot, index, startFrame, endFrame int) (Snapshot, 
 func (s *Session) SetSlotLoopAttr(slot, index, xf, tm int) (Snapshot, *Error) {
 	xf = clampInt(xf, 0, disk.MaxLoopXF)
 	tm = clampInt(tm, 0, disk.MaxLoopTm)
-	return s.patchSlotVoice(slot, func([]byte) ([]voiceedit.Patch, error) {
+	return s.patchSlotVoice(slot, func([]byte) ([]voiceedit.Edit, error) {
 		return voiceedit.BuildLoopAttrPatch(index, xf, tm)
 	})
 }
@@ -149,7 +149,7 @@ func (s *Session) SetSlotEnvelope(slot int, which string, sustain, end int, rate
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Patch, error) {
+	return s.patchSlotVoice(slot, func(hdr []byte) ([]voiceedit.Edit, error) {
 		vp, err := slotParams(hdr)
 		if err != nil {
 			return nil, err
@@ -168,7 +168,7 @@ func (s *Session) RenameVoiceSlot(slot int, name string) (Snapshot, *Error) {
 			return s.Snapshot(), errf(codeInvalidValue, "voice name contains non-ASCII character %q", string(r))
 		}
 	}
-	return s.patchSlotVoice(slot, func([]byte) ([]voiceedit.Patch, error) {
+	return s.patchSlotVoice(slot, func([]byte) ([]voiceedit.Edit, error) {
 		return voiceedit.BuildNamePatch(name)
 	})
 }

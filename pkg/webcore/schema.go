@@ -133,7 +133,7 @@ func schemaField(id string) (SchemaField, bool) {
 // numberPatches builds the voiceedit patches for a clamped numeric
 // field value. voiceBytes provides current values where a builder
 // needs them.
-func numberPatches(id string, n int, voiceBytes []byte) ([]voiceedit.Patch, error) {
+func numberPatches(id string, n int, voiceBytes []byte) ([]voiceedit.Edit, error) {
 	const u = voiceedit.Unchanged
 	switch id {
 	case fieldTune:
@@ -186,7 +186,7 @@ func numberPatches(id string, n int, voiceBytes []byte) ([]voiceedit.Patch, erro
 
 // optionPatches builds patches for a select field. voiceBytes provides
 // the current lfo_name byte so its phase-sync flag survives.
-func optionPatches(id, option string, voiceBytes []byte) ([]voiceedit.Patch, error) {
+func optionPatches(id, option string, voiceBytes []byte) ([]voiceedit.Edit, error) {
 	const u = voiceedit.Unchanged
 	switch id {
 	case fieldPlaybackMode:

@@ -1513,7 +1513,7 @@ func TestEditFZFVoiceRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	all := make([]voiceedit.Patch, 0, len(patches)+len(filterPatches))
+	all := make([]voiceedit.Edit, 0, len(patches)+len(filterPatches))
 	all = append(all, patches...)
 	all = append(all, filterPatches...)
 
@@ -1643,7 +1643,7 @@ func TestEditVoiceInImageRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	all := make([]voiceedit.Patch, 0, len(patches)+len(filterPatches))
+	all := make([]voiceedit.Edit, 0, len(patches)+len(filterPatches))
 	all = append(all, patches...)
 	all = append(all, filterPatches...)
 
