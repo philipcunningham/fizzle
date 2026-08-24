@@ -13,14 +13,14 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )
 
-// benchVoices builds n voices of the given sample length, keyed one per
-// semitone, the shape of a fully loaded instrument.
-func benchVoices(b *testing.B, n, samples int) ([][]byte, []voicebuild.Keygroup) {
+// benchVoices builds n voices of 7000 samples, keyed one per semitone, the
+// shape of a fully loaded instrument.
+func benchVoices(b *testing.B, n int) ([][]byte, []voicebuild.Keygroup) {
 	b.Helper()
 	voices := make([][]byte, n)
 	groups := make([]voicebuild.Keygroup, n)
 	for i := range voices {
-		pcm := make([]int16, samples)
+		pcm := make([]int16, 7000)
 		for j := range pcm {
 			pcm[j] = int16(j % 157)
 		}
@@ -61,7 +61,7 @@ func benchSession(b *testing.B, voices [][]byte, groups []voicebuild.Keygroup) *
 // drag hot path, where the UI fires an edit per pointer move. Each edit
 // copies the image and rebuilds the snapshot.
 func BenchmarkSlotEditFullInstrument(b *testing.B) {
-	voices, groups := benchVoices(b, 64, 7000)
+	voices, groups := benchVoices(b, 64)
 	s := benchSession(b, voices, groups)
 	s.BeginGesture()
 
@@ -74,12 +74,29 @@ func BenchmarkSlotEditFullInstrument(b *testing.B) {
 	}
 }
 
+// BenchmarkRenameVoiceFullInstrument measures a fixed-size document operation
+// on the same 64 voice near-full instrument.
+func BenchmarkRenameVoiceFullInstrument(b *testing.B) {
+	voices, groups := benchVoices(b, 64)
+	s := benchSession(b, voices, groups)
+	s.BeginGesture()
+	names := [2]string{"RENAMED A", "RENAMED B"}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		if _, cerr := s.RenameVoiceSlot(0, names[i%len(names)]); cerr != nil {
+			b.Fatal(cerr)
+		}
+	}
+}
+
 // BenchmarkSlotEditSmallInstrument is the same edit on a 4 voice
 // instrument: the difference against the 64 voice case is what the
 // per-slot re-parse costs, as against the flat cost of copying the
 // image.
 func BenchmarkSlotEditSmallInstrument(b *testing.B) {
-	voices, groups := benchVoices(b, 4, 7000)
+	voices, groups := benchVoices(b, 4)
 	s := benchSession(b, voices, groups)
 	s.BeginGesture()
 
@@ -133,7 +150,7 @@ func BenchmarkSlotEditSplitPair(b *testing.B) {
 // BenchmarkSnapshotFullInstrument isolates the snapshot rebuild from
 // the patch: this is what an edit pays on top of the byte write.
 func BenchmarkSnapshotFullInstrument(b *testing.B) {
-	voices, groups := benchVoices(b, 64, 7000)
+	voices, groups := benchVoices(b, 64)
 	s := benchSession(b, voices, groups)
 
 	b.ReportAllocs()

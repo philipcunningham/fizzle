@@ -40,6 +40,21 @@ func (e *NameError) Error() string {
 // Unwrap supports errors.Is against the exported name sentinel.
 func (e *NameError) Unwrap() error { return e.Err }
 
+// IndexError identifies an out-of-range document index and its exclusive
+// upper bound. Err identifies the indexed domain object.
+type IndexError struct {
+	Err   error
+	Index int
+	Limit int
+}
+
+func (e *IndexError) Error() string {
+	return fmt.Sprintf("%v: index %d outside 0..%d", e.Err, e.Index, e.Limit-1)
+}
+
+// Unwrap supports errors.Is against the exported index sentinel.
+func (e *IndexError) Unwrap() error { return e.Err }
+
 // Document owns an FZF dump and the layout resolved for its source context.
 // Construction copies the input, and Bytes returns a fresh copy, so callers
 // cannot change the bytes independently of the retained layout.
@@ -96,7 +111,7 @@ func (d *Document) RenameVoice(index int, name string) (OperationResult, error) 
 		return OperationResult{}, err
 	}
 	if index < 0 || index >= d.layout.VoiceCount() {
-		return OperationResult{}, fmt.Errorf("%w: %d", ErrVoiceIndexOutOfRange, index)
+		return OperationResult{}, &IndexError{Err: ErrVoiceIndexOutOfRange, Index: index, Limit: d.layout.VoiceCount()}
 	}
 	voice, err := d.Voice(index)
 	if err != nil {
@@ -120,7 +135,7 @@ func (d *Document) RenameBank(index int, name string) (OperationResult, error) {
 		return OperationResult{}, err
 	}
 	if index < 0 || index >= d.layout.BankCount() {
-		return OperationResult{}, fmt.Errorf("%w: %d", ErrBankIndexOutOfRange, index)
+		return OperationResult{}, &IndexError{Err: ErrBankIndexOutOfRange, Index: index, Limit: d.layout.BankCount()}
 	}
 	bank, err := d.Bank(index)
 	if err != nil {
@@ -142,11 +157,11 @@ func (d *Document) RenameBank(index int, name string) (OperationResult, error) {
 func (d *Document) SwapAreas(bankIndex, first, second int) (OperationResult, error) {
 	bank, err := d.Bank(bankIndex)
 	if err != nil {
-		return OperationResult{}, fmt.Errorf("%w: %d", ErrBankIndexOutOfRange, bankIndex)
+		return OperationResult{}, &IndexError{Err: ErrBankIndexOutOfRange, Index: bankIndex, Limit: d.layout.BankCount()}
 	}
 	for _, area := range []int{first, second} {
 		if area < 0 || area >= bank.AreaCount() {
-			return OperationResult{}, fmt.Errorf("%w: bank %d area %d", ErrAreaIndexOutOfRange, bankIndex, area)
+			return OperationResult{}, &IndexError{Err: ErrAreaIndexOutOfRange, Index: area, Limit: bank.AreaCount()}
 		}
 	}
 	if first == second {

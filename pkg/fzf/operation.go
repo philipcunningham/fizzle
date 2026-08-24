@@ -48,13 +48,23 @@ func structuralOperation(preimage, replacement []byte) OperationResult {
 // Apply validates the operation against current and returns new owned bytes.
 // current is unchanged on success and failure.
 func (r OperationResult) Apply(current []byte) ([]byte, error) {
+	return r.apply(bytes.Clone(current))
+}
+
+// ApplyOwned applies the operation to a buffer whose ownership the caller
+// transfers. Fixed-size operations reuse that buffer. Structural operations
+// return fresh replacement bytes because the result retains its own copy.
+func (r OperationResult) ApplyOwned(current []byte) ([]byte, error) {
+	return r.apply(current)
+}
+
+func (r OperationResult) apply(current []byte) ([]byte, error) {
 	switch r.kind {
 	case operationFixed:
-		updated := bytes.Clone(current)
-		if err := model.Apply(updated, r.patches); err != nil {
+		if err := model.Apply(current, r.patches); err != nil {
 			return nil, fmt.Errorf("fzf: applying fixed-size operation: %w", err)
 		}
-		return updated, nil
+		return current, nil
 	case operationStructural:
 		if !bytes.Equal(current, r.preimage) {
 			return nil, errors.New("fzf: structural operation pre-image mismatch")
