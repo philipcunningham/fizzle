@@ -18,6 +18,10 @@ var (
 	ErrVoiceNameEmpty       = errors.New("fzf: voice name is empty")
 	ErrVoiceNameTooLong     = errors.New("fzf: voice name is too long")
 	ErrVoiceNameNotASCII    = errors.New("fzf: voice name is not printable ASCII")
+	ErrBankIndexOutOfRange  = errors.New("fzf: bank index out of range")
+	ErrBankNameEmpty        = errors.New("fzf: bank name is empty")
+	ErrBankNameTooLong      = errors.New("fzf: bank name is too long")
+	ErrBankNameNotASCII     = errors.New("fzf: bank name is not printable ASCII")
 )
 
 // Document owns an FZF dump and the layout resolved for its source context.
@@ -72,16 +76,8 @@ func (d *Document) Layout() fzutil.FZFLayout {
 // Standalone marker authority is included in the same patch batch because the
 // marker covers bytes in the bank and voice headers.
 func (d *Document) RenameVoice(index int, name string) ([]model.Patch, error) {
-	if name == "" {
-		return nil, ErrVoiceNameEmpty
-	}
-	if len(name) > disk.LabelSize {
-		return nil, fmt.Errorf("%w: got %d bytes", ErrVoiceNameTooLong, len(name))
-	}
-	for _, r := range name {
-		if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
-			return nil, fmt.Errorf("%w: %q", ErrVoiceNameNotASCII, r)
-		}
+	if err := validateName(name, ErrVoiceNameEmpty, ErrVoiceNameTooLong, ErrVoiceNameNotASCII); err != nil {
+		return nil, err
 	}
 	if index < 0 || index >= d.layout.VoiceCount() {
 		return nil, fmt.Errorf("%w: %d", ErrVoiceIndexOutOfRange, index)
@@ -94,11 +90,50 @@ func (d *Document) RenameVoice(index int, name string) ([]model.Patch, error) {
 	if err != nil {
 		return nil, err
 	}
+	return d.withMarkerPatch(patch)
+}
+
+// RenameBank returns the stale-safe patches for changing a bank's name. A
+// marker re-stamp, where required, is part of the same atomic batch.
+func (d *Document) RenameBank(index int, name string) ([]model.Patch, error) {
+	if err := validateName(name, ErrBankNameEmpty, ErrBankNameTooLong, ErrBankNameNotASCII); err != nil {
+		return nil, err
+	}
+	if index < 0 || index >= d.layout.BankCount() {
+		return nil, fmt.Errorf("%w: %d", ErrBankIndexOutOfRange, index)
+	}
+	bank, err := d.Bank(index)
+	if err != nil {
+		return nil, err
+	}
+	patch, err := bank.NamePatch(name)
+	if err != nil {
+		return nil, err
+	}
+	return d.withMarkerPatch(patch)
+}
+
+func validateName(name string, empty, tooLong, notASCII error) error {
+	if name == "" {
+		return empty
+	}
+	if len(name) > disk.LabelSize {
+		return fmt.Errorf("%w: got %d bytes", tooLong, len(name))
+	}
+	for _, r := range name {
+		if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
+			return fmt.Errorf("%w: %q", notASCII, r)
+		}
+	}
+	return nil
+}
+
+func (d *Document) withMarkerPatch(patch model.Patch) ([]model.Patch, error) {
 	patches := []model.Patch{patch}
 	if d.layout.VoiceCountSource() == fzutil.VoiceCountMarker {
 		updated := bytes.Clone(d.data)
 		if err := model.Apply(updated, patches); err != nil {
-			return nil, fmt.Errorf("fzf: preparing voice %d rename: %w", index, err)
+			return nil, fmt.Errorf("fzf: preparing marker update: %w", err)
 		}
 		fzutil.StampVoiceCountMarker(updated, d.layout.VoiceCount())
 		markerOffset := disk.BankVoiceMarkerOffset
