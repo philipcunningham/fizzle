@@ -205,6 +205,83 @@ func TestRenameVoiceReturnsAtomicOperationAndRetainsMarkerAuthority(t *testing.T
 	}
 }
 
+func TestSetAreaFieldOwnsClampingWidthsAndMarkerAuthority(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
+	for _, test := range []struct {
+		name   string
+		field  fzf.AreaField
+		value  int
+		offset int
+		want   []byte
+	}{
+		{name: "key low clamps", field: fzf.AreaKeyLow, value: 900, offset: disk.BankKeyLowOffset, want: []byte{127}},
+		{name: "key high clamps", field: fzf.AreaKeyHigh, value: -1, offset: disk.BankKeyHighOffset, want: []byte{0}},
+		{name: "root clamps", field: fzf.AreaRootKey, value: 64, offset: disk.BankKeyCentOffset, want: []byte{64}},
+		{name: "velocity low has floor", field: fzf.AreaVelocityLow, value: 0, offset: disk.BankVelLowOffset, want: []byte{disk.MinVelocity}},
+		{name: "velocity high clamps", field: fzf.AreaVelocityHigh, value: 900, offset: disk.BankVelHighOffset, want: []byte{127}},
+		{name: "volume converts display scale", field: fzf.AreaVolume, value: 99, offset: disk.BankVolumeOffset, want: []byte{disk.AreaLevelToByte(99)}},
+		{name: "MIDI channel converts display scale", field: fzf.AreaMIDIChannel, value: 16, offset: disk.BankMIDIRecvChanOffset, want: []byte{15}},
+		{name: "output fills byte", field: fzf.AreaOutput, value: 900, offset: disk.BankAudioOutOffset, want: []byte{255}},
+		{name: "voice slot keeps word width", field: fzf.AreaVoiceSlot, value: 1, offset: disk.BankVoiceNumOffset, want: []byte{1, 0}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			doc, err := fzf.NewStandalone(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := doc.SetAreaField(0, 0, test.field, test.value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			updated, err := result.Apply(doc.Bytes())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := updated[test.offset : test.offset+len(test.want)]; !bytes.Equal(got, test.want) {
+				t.Fatalf("stored bytes = %v, want %v", got, test.want)
+			}
+			reopened, err := fzf.NewStandalone(updated)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if reopened.Layout().VoiceCountSource() != fzutil.VoiceCountMarker {
+				t.Fatalf("authority = %v, want marker", reopened.Layout().VoiceCountSource())
+			}
+		})
+	}
+}
+
+func TestSetAreaFieldRejectsInvalidTargetsWithoutMutation(t *testing.T) {
+	doc, err := fzf.NewDiskFile(fzfbuilder.MakeBanklessVoiceDump(t), fzfbuilder.BanklessDumpVoices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := doc.Bytes()
+	for _, test := range []struct {
+		name  string
+		bank  int
+		area  int
+		field fzf.AreaField
+		value int
+		want  error
+	}{
+		{name: "bank", bank: 99, field: fzf.AreaKeyLow, want: fzf.ErrBankIndexOutOfRange},
+		{name: "area", area: 99, field: fzf.AreaKeyLow, want: fzf.ErrAreaIndexOutOfRange},
+		{name: "voice", field: fzf.AreaVoiceSlot, value: 99, want: fzf.ErrVoiceIndexOutOfRange},
+		{name: "field", field: fzf.AreaField(255), want: fzf.ErrAreaFieldInvalid},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := doc.SetAreaField(test.bank, test.area, test.field, test.value); !errors.Is(err, test.want) {
+				t.Fatalf("error = %v, want %v", err, test.want)
+			}
+			if !bytes.Equal(doc.Bytes(), before) {
+				t.Fatal("rejected field edit mutated document")
+			}
+		})
+	}
+}
+
 func TestRenameVoiceRejectsInvalidInputWithoutMutation(t *testing.T) {
 	data := fzfbuilder.MakeBanklessVoiceDump(t)
 	doc, err := fzf.NewDiskFile(data, fzfbuilder.BanklessDumpVoices)

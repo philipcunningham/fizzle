@@ -309,31 +309,16 @@ func applyDocumentOperation(d *dumpState, result fzfmodel.OperationResult) *Erro
 	return nil
 }
 
-// checkArea validates bank and area indices against the dump.
-func (d *dumpState) checkArea(bank, area int) *Error {
-	if bank < 0 || bank >= d.header.NBankSectors {
-		return errf(codeInvalidValue, "bank must be 0 to %d, got %d", d.header.NBankSectors-1, bank)
-	}
-	if area < 0 || area >= bankBstep(d.fzf, bank) {
-		return errf(codeInvalidValue, "area %d out of range", area)
-	}
-	return nil
-}
-
-func bytePatch(data []byte, offset int, value byte) model.Patch {
-	return model.Patch{Offset: offset, Old: []byte{data[offset]}, New: []byte{value}}
-}
-
-// clampByte clamps to [0, hi]; gosec sees the byte-safe bound.
-func clampByte(v, hi int) byte {
-	return clampByteFrom(v, 0, hi)
-}
-
-// clampByteFrom clamps into an explicit span, for rows whose floor
-// isn't zero. The panel's MAX TOUCH and MIN TOUCH both start at 001,
-// and a velocity of zero silences the voice.
-func clampByteFrom(v, lo, hi int) byte {
-	return byte(clampInt(v, lo, hi) & 0xff) // #nosec G115 -- clamped to [lo,hi] within 0..255
+var areaFields = map[string]fzfmodel.AreaField{
+	"keyLow":         fzfmodel.AreaKeyLow,
+	"keyHigh":        fzfmodel.AreaKeyHigh,
+	"root":           fzfmodel.AreaRootKey,
+	fieldAreaVelLow:  fzfmodel.AreaVelocityLow,
+	fieldAreaVelHigh: fzfmodel.AreaVelocityHigh,
+	"volume":         fzfmodel.AreaVolume,
+	"midiChannel":    fzfmodel.AreaMIDIChannel,
+	"output":         fzfmodel.AreaOutput,
+	"voiceSlot":      fzfmodel.AreaVoiceSlot,
 }
 
 // SetAreaField edits one Area field (R12). Numeric fields clamp to
@@ -341,42 +326,26 @@ func clampByteFrom(v, lo, hi int) byte {
 // voiceSlot re-points the area at another voice.
 func (s *Session) SetAreaField(bank, area int, field string, value int) (Snapshot, *Error) {
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
-		if cerr := d.checkArea(bank, area); cerr != nil {
-			return nil, cerr
-		}
-		base := bank * disk.SectorSize
-		switch field {
-		case "keyLow":
-			return []model.Patch{bytePatch(d.fzf, base+disk.BankKeyLowOffset+area, clampByte(value, 127))}, nil
-		case "keyHigh":
-			return []model.Patch{bytePatch(d.fzf, base+disk.BankKeyHighOffset+area, clampByte(value, 127))}, nil
-		case "root":
-			return []model.Patch{bytePatch(d.fzf, base+disk.BankKeyCentOffset+area, clampByte(value, 127))}, nil
-		case fieldAreaVelLow:
-			return []model.Patch{bytePatch(d.fzf, base+disk.BankVelLowOffset+area, clampByteFrom(value, disk.MinVelocity, 127))}, nil
-		case fieldAreaVelHigh:
-			return []model.Patch{bytePatch(d.fzf, base+disk.BankVelHighOffset+area, clampByteFrom(value, disk.MinVelocity, 127))}, nil
-		case "volume":
-			// The panel's AREA LEVEL counts the opposite way to the
-			// stored byte, so convert rather than clamping the raw value.
-			return []model.Patch{bytePatch(d.fzf, base+disk.BankVolumeOffset+area, disk.AreaLevelToByte(value))}, nil
-		case "midiChannel":
-			return []model.Patch{bytePatch(d.fzf, base+disk.BankMIDIRecvChanOffset+area, clampByte(value-1, 15))}, nil
-		case "output":
-			return []model.Patch{bytePatch(d.fzf, base+disk.BankAudioOutOffset+area, clampByte(value, 255))}, nil
-		case "voiceSlot":
-			if value < 0 || value >= d.header.NVoice {
-				return nil, errf(codeInvalidValue, "voice slot %d out of range", value)
-			}
-			off := base + disk.BankVoiceNumOffset + area*disk.VPEntrySize
-			old := make([]byte, disk.VPEntrySize)
-			copy(old, d.fzf[off:off+disk.VPEntrySize])
-			replacement := make([]byte, disk.VPEntrySize)
-			binary.LittleEndian.PutUint16(replacement, uint16(value)) // #nosec G115 -- bounded by NVoice above
-			return []model.Patch{{Offset: off, Old: old, New: replacement}}, nil
-		default:
+		typedField, ok := areaFields[field]
+		if !ok {
 			return nil, errf("invalid-field", "%q is not an area field", field)
 		}
+		result, err := d.doc.SetAreaField(bank, area, typedField, value)
+		if err == nil {
+			return nil, applyDocumentOperation(d, result)
+		}
+		var indexErr *fzfmodel.IndexError
+		if errors.As(err, &indexErr) {
+			switch {
+			case errors.Is(err, fzfmodel.ErrBankIndexOutOfRange):
+				return nil, errf(codeInvalidValue, "bank must be 0 to %d, got %d", indexErr.Limit-1, indexErr.Index)
+			case errors.Is(err, fzfmodel.ErrAreaIndexOutOfRange):
+				return nil, errf(codeInvalidValue, "area %d out of range", indexErr.Index)
+			case errors.Is(err, fzfmodel.ErrVoiceIndexOutOfRange):
+				return nil, errf(codeInvalidValue, "voice slot %d out of range", indexErr.Index)
+			}
+		}
+		return nil, errf(codeInvalidValue, "area field could not be changed")
 	})
 }
 

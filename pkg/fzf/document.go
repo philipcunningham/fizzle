@@ -29,6 +29,7 @@ var (
 	ErrBankFull             = errors.New("fzf: bank is full")
 	ErrLastArea             = errors.New("fzf: bank must retain one area")
 	ErrAreaVoiceOutOfRange  = errors.New("fzf: area voice is out of range")
+	ErrAreaFieldInvalid     = errors.New("fzf: invalid area field")
 	ErrVoiceHeaderBounds    = errors.New("fzf: voice header is out of bounds")
 	ErrVoiceFileTooShort    = errors.New("fzf: voice file is shorter than one sector")
 	ErrVoicePCMMisaligned   = errors.New("fzf: voice PCM is misaligned")
