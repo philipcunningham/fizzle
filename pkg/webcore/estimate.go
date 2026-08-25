@@ -212,7 +212,7 @@ func (s *Session) profileDocument() (*docProfile, *Error) {
 	}
 	doc.dumpLen = len(d.fzf)
 	doc.voiceSlots = d.header.NVoice
-	doc.placeholder = placeholderSlot(d)
+	doc.placeholder = d.doc.HasPlaceholderVoice()
 	doc.audioBytes = len(d.fzf) - d.audioStart
 	return doc, nil
 }

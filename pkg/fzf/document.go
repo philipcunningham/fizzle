@@ -10,6 +10,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/container"
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
+	"github.com/philipcunningham/fizzle/pkg/internal/bitconv"
 	"github.com/philipcunningham/fizzle/pkg/model"
 )
 
@@ -29,6 +30,9 @@ var (
 	ErrLastArea             = errors.New("fzf: bank must retain one area")
 	ErrAreaVoiceOutOfRange  = errors.New("fzf: area voice is out of range")
 	ErrVoiceHeaderBounds    = errors.New("fzf: voice header is out of bounds")
+	ErrVoiceFileTooShort    = errors.New("fzf: voice file is shorter than one sector")
+	ErrVoicePCMMisaligned   = errors.New("fzf: voice PCM is misaligned")
+	ErrAllBanksFull         = errors.New("fzf: every bank is full")
 )
 
 // NameError identifies the invalid character in a printable-ASCII name.
@@ -318,6 +322,136 @@ func (d *Document) DuplicateArea(bankIndex, areaIndex int) (OperationResult, err
 	}
 	d.stampMarker(resized.Data, resized.VoiceCount)
 	return structuralAreaOperation(d.data, resized.Data, resized.VoiceCount, resized.AudioStart), nil
+}
+
+// AddVoice returns one structural operation that joins an FZV voice to the
+// instrument. It owns the format work as one transaction: reserving or
+// replacing a slot, appending PCM, rewriting absolute wave pointers, and
+// ensuring a bank area makes the new voice reachable by every reader.
+func (d *Document) AddVoice(fzv []byte) (OperationResult, error) {
+	if len(fzv) < disk.SectorSize {
+		return OperationResult{}, fmt.Errorf("%w: got %d bytes", ErrVoiceFileTooShort, len(fzv))
+	}
+	pcm := fzv[disk.SectorSize:]
+	if len(pcm)%disk.BytesPerSample != 0 {
+		return OperationResult{}, ErrVoicePCMMisaligned
+	}
+
+	working := bytes.Clone(d.data)
+	newSlot := 0
+	voiceCount := d.layout.VoiceCount()
+	audioStart := d.layout.AudioStart()
+	placeholder := d.placeholderSlot()
+	if !placeholder {
+		newSlot = voiceCount
+		resized, err := container.ResizeVoiceAreaToOwned(working, d.resizeParams(0, -1), voiceCount+1)
+		if err != nil {
+			return OperationResult{}, err
+		}
+		working, voiceCount, audioStart = resized.Data, resized.VoiceCount, resized.AudioStart
+	}
+
+	header := make([]byte, disk.VoicePackSize)
+	copy(header, fzv[:disk.VoicePackSize])
+	container.RewriteWavePointers(header, bitconv.NarrowU32((len(working)-audioStart)/disk.BytesPerSample))
+	working = append(working, pcm...)
+	copy(working[disk.VoiceSlotOffset(d.layout.VoiceStart(), newSlot):], header)
+
+	keyLow := header[disk.VoiceKeyLowOffset]
+	keyHigh := header[disk.VoiceKeyHighOffset]
+	keyCentre := header[disk.VoiceKeyCentOffset]
+	if placeholder {
+		bank, area, ok := d.firstAreaForVoice(0)
+		if !ok {
+			return OperationResult{}, &AreaVoiceError{Area: 0, Voice: 0, VoiceCount: d.layout.VoiceCount()}
+		}
+		keyLow, keyHigh, keyCentre = d.joinKeyRange(bank, area, keyLow, keyHigh, keyCentre)
+		d.writeAreaRange(working, bank, area, newSlot, keyLow, keyHigh, keyCentre, false)
+	} else {
+		bank := d.firstBankWithRoom()
+		if bank < 0 {
+			return OperationResult{}, ErrAllBanksFull
+		}
+		area, _ := d.Bank(bank)
+		areaIndex := area.AreaCount()
+		keyLow, keyHigh, keyCentre = d.joinKeyRange(bank, -1, keyLow, keyHigh, keyCentre)
+		d.writeAreaRange(working, bank, areaIndex, newSlot, keyLow, keyHigh, keyCentre, true)
+	}
+	voiceOffset := disk.VoiceSlotOffset(d.layout.VoiceStart(), newSlot)
+	working[voiceOffset+disk.VoiceKeyLowOffset] = keyLow
+	working[voiceOffset+disk.VoiceKeyHighOffset] = keyHigh
+	working[voiceOffset+disk.VoiceKeyCentOffset] = keyCentre
+	d.stampMarker(working, voiceCount)
+	return structuralAreaOperation(d.data, working, voiceCount, audioStart), nil
+}
+
+func (d *Document) placeholderSlot() bool {
+	if d.layout.VoiceCount() != 1 || len(d.data) != d.layout.AudioStart() {
+		return false
+	}
+	off := disk.VoiceSlotOffset(d.layout.VoiceStart(), 0)
+	h := d.data[off : off+disk.VoiceHeaderUsed]
+	return binary.LittleEndian.Uint16(h[disk.VoiceLoopModeOffset:]) == disk.PlaybackModeNoSound &&
+		binary.LittleEndian.Uint32(h[disk.VoiceWaveStartOffset:]) == binary.LittleEndian.Uint32(h[disk.VoiceWaveEndOffset:])
+}
+
+// HasPlaceholderVoice reports whether the document's only slot is the silent
+// placeholder that the first imported voice replaces in place.
+func (d *Document) HasPlaceholderVoice() bool { return d.placeholderSlot() }
+
+func (d *Document) firstAreaForVoice(slot int) (int, int, bool) {
+	for bank := 0; bank < d.layout.BankCount(); bank++ {
+		view, _ := d.Bank(bank)
+		for area := 0; area < view.AreaCount(); area++ {
+			if voice, err := view.VoiceSlot(area); err == nil && voice == slot {
+				return bank, area, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+func (d *Document) firstBankWithRoom() int {
+	for bank := 0; bank < d.layout.BankCount(); bank++ {
+		view, _ := d.Bank(bank)
+		if view.AreaCount() < disk.MaxVoices {
+			return bank
+		}
+	}
+	return -1
+}
+
+func (d *Document) joinKeyRange(bank, skipArea int, low, high, centre byte) (byte, byte, byte) {
+	if low != disk.DefaultKeyLow || high != disk.DefaultKeyHigh {
+		return low, high, centre
+	}
+	next := disk.FirstMIDINote
+	base := bank * disk.SectorSize
+	view, _ := d.Bank(bank)
+	for area := 0; area < view.AreaCount(); area++ {
+		if area == skipArea {
+			continue
+		}
+		if value := int(d.data[base+disk.BankKeyHighOffset+area]); value >= next {
+			next = value + 1
+		}
+	}
+	key := byte(min(next, disk.MaxMIDINote))
+	return key, key, key
+}
+
+func (d *Document) writeAreaRange(data []byte, bank, area, slot int, low, high, centre byte, appendArea bool) {
+	base := bank * disk.SectorSize
+	binary.LittleEndian.PutUint16(data[base+disk.BankVoiceNumOffset+area*disk.VPEntrySize:], uint16(slot)) //nolint:gosec // slot is format-bounded
+	data[base+disk.BankKeyLowOffset+area] = low
+	data[base+disk.BankKeyHighOffset+area] = high
+	data[base+disk.BankKeyCentOffset+area] = centre
+	if appendArea {
+		data[base+disk.BankVelLowOffset+area] = 1
+		data[base+disk.BankVelHighOffset+area] = 127
+		data[base+disk.BankAudioOutOffset+area] = disk.PolyphonicAudioOut
+		binary.LittleEndian.PutUint16(data[base+disk.BankVoiceCountOffset:], uint16(area+1)) //nolint:gosec // area is format-bounded
+	}
 }
 
 func (d *Document) resizeParams(delta, freed int) container.VoiceAreaResizeParams {
