@@ -541,48 +541,32 @@ func (s *Session) DuplicateArea(bank, area int) (Snapshot, *Error) {
 }
 
 func duplicateAreaPatches(d *dumpState, bank, area int) ([]model.Patch, *Error) {
-	if cerr := d.checkArea(bank, area); cerr != nil {
-		return nil, cerr
+	result, err := d.doc.DuplicateArea(bank, area)
+	if err == nil {
+		return nil, applyDocumentOperation(d, result)
 	}
-	bstep := bankBstep(d.fzf, bank)
-	if bstep >= disk.MaxVoices {
+	var indexErr *fzfmodel.IndexError
+	if errors.As(err, &indexErr) {
+		switch {
+		case errors.Is(err, fzfmodel.ErrBankIndexOutOfRange):
+			return nil, errf(codeInvalidValue, "bank must be 0 to %d, got %d", indexErr.Limit-1, indexErr.Index)
+		case errors.Is(err, fzfmodel.ErrAreaIndexOutOfRange):
+			return nil, errf(codeInvalidValue, "area %d out of range", indexErr.Index)
+		}
+	}
+	var voiceErr *fzfmodel.AreaVoiceError
+	if errors.As(err, &voiceErr) {
+		return nil, errf(codeInvalidValue, "area %d plays voice slot %d, and this instrument holds %d slots",
+			voiceErr.Area, voiceErr.Voice, voiceErr.VoiceCount)
+	}
+	switch {
+	case errors.Is(err, fzfmodel.ErrBankFull):
 		return nil, errf("bank-full", "bank %d already holds %d areas", bank, disk.MaxVoices)
-	}
-	srcSlot, ok := disk.BankVPLookup(d.fzf, bank, area)
-	if !ok {
-		return nil, errf(codeInvalidValue, "area %d has no voice", area)
-	}
-	// The same bound every other area op holds to. An area whose vp[]
-	// entry runs past the walked count plays bytes the reader takes for
-	// audio, and cloning those would give the instrument a voice made of
-	// samples rather than a copy of one it holds.
-	if srcSlot >= d.header.NVoice {
-		return nil, errf(codeInvalidValue,
-			"area %d plays voice slot %d, and this instrument holds %d slots", area, srcSlot, d.header.NVoice)
-	}
-	voiceAreaStart := d.header.VoiceAreaStart
-	srcOff := disk.VoiceSlotOffset(voiceAreaStart, srcSlot)
-	if srcOff+disk.VoicePackSize > len(d.fzf) {
+	case errors.Is(err, fzfmodel.ErrVoiceHeaderBounds):
 		return nil, errf("invalid-image", "source voice out of bounds")
+	case errors.Is(err, container.ErrVoiceLimit):
+		return nil, voiceAreaBoundaryError(err)
+	default:
+		return nil, errf(codeInvalidValue, "area could not be duplicated")
 	}
-	srcHeader := make([]byte, disk.VoicePackSize)
-	copy(srcHeader, d.fzf[srcOff:srcOff+disk.VoicePackSize])
-
-	// The clone takes a fresh voice slot, so the instrument's total
-	// voice count bounds it, not this bank's area count. The slot has to
-	// sit at the walked count exactly: a gap would hide it from every
-	// parser and be miscounted as audio.
-	newSlot, cerr := allocVoiceSlot(d)
-	if cerr != nil {
-		return nil, cerr
-	}
-
-	return container.DuplicateAreaPatches(d.fzf, container.DuplicateAreaParams{
-		Base:       bank * disk.SectorSize,
-		NewOff:     disk.VoiceSlotOffset(voiceAreaStart, newSlot),
-		SrcAreaIdx: area,
-		Bstep:      bstep,
-		NewSlot:    newSlot,
-		SrcHeader:  srcHeader,
-	}), nil
 }

@@ -64,6 +64,9 @@ func ResizeVoiceAreaToOwned(data []byte, p VoiceAreaResizeParams, target int) (V
 }
 
 func resizeVoiceAreaOwned(data []byte, p VoiceAreaResizeParams, target int, explicit bool) (VoiceAreaResize, error) {
+	if target > disk.MaxVoices {
+		return VoiceAreaResize{}, &VoiceAreaError{Err: ErrVoiceLimit, VoiceCount: p.VoiceCount}
+	}
 	if !explicit && !p.DiskMode {
 		sum := bankAreaSum(data, p.BankCount) + p.BStepDelta
 		switch {
