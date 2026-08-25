@@ -173,23 +173,6 @@ func ensureVoiceSlots(d *dumpState, delta, freed int) *Error {
 	return resizeVoiceArea(d, delta, freed, 0)
 }
 
-// allocVoiceSlot reserves the next slot for an operation that writes a
-// real voice header into it: duplicate clones one, and a joining voice
-// brings its own. Those raise a bstep and fill a slot in the same
-// move, so the slot is taken outright rather than derived from the
-// bound.
-func allocVoiceSlot(d *dumpState) (int, *Error) {
-	slot := d.header.NVoice
-	if slot >= disk.MaxVoices {
-		return 0, errf("voice-limit",
-			"the instrument already holds %d voices; this one needs a free slot", disk.MaxVoices)
-	}
-	if cerr := resizeVoiceArea(d, 0, noFreedSlot, slot+1); cerr != nil {
-		return 0, cerr
-	}
-	return slot, nil
-}
-
 // resizeVoiceArea makes the voice area hold exactly target slots,
 // moving the voice and audio boundary to suit. Wave pointers are
 // sample addresses into the audio area, so the audio moving with its
@@ -243,22 +226,6 @@ func voiceAreaBoundaryError(err error) *Error {
 	default:
 		return errf("invalid-image", "voice area could not be resized")
 	}
-}
-
-// slotIsPlaceholder reports whether a slot holds the silent
-// placeholder the format allows: no sound and no samples of its own,
-// so dropping it costs nothing.
-func slotIsPlaceholder(d *dumpState, slot int) bool {
-	off := disk.VoiceSlotOffset(d.header.VoiceAreaStart, slot)
-	if off+disk.VoiceHeaderUsed > len(d.fzf) {
-		return false
-	}
-	h := d.fzf[off : off+disk.VoiceHeaderUsed]
-	if binary.LittleEndian.Uint16(h[disk.VoiceLoopModeOffset:]) != disk.PlaybackModeNoSound {
-		return false
-	}
-	return binary.LittleEndian.Uint32(h[disk.VoiceWaveStartOffset:]) ==
-		binary.LittleEndian.Uint32(h[disk.VoiceWaveEndOffset:])
 }
 
 // patchDump extracts the document's full dump (stitched across a

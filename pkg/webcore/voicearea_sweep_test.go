@@ -197,14 +197,11 @@ func TestAddVoiceOverTheCorpus(t *testing.T) {
 		fzf := dump.data
 		before := dumpGeometryUnder(t, fzf, dump.vn)
 		out, outVN, cerr := patchDumpBytes(bytes.Clone(fzf), dump.vn, func(d *dumpState) ([]model.Patch, *Error) {
-			newSlot, jerr := appendVoiceToDump(d, voice)
-			if jerr != nil {
-				return nil, jerr
+			result, err := d.doc.AddVoice(voice)
+			if err != nil {
+				return nil, addVoiceDocumentError(err)
 			}
-			if sites := fzutil.FindBankSitesForVoice(d.fzf, d.header, newSlot); len(sites) > 0 {
-				return retuneAreaPatches(d, sites[0], newSlot, 36, 96, 60), nil
-			}
-			return joinAreaPatches(d, newSlot, 36, 96, 60)
+			return nil, applyDocumentOperation(d, result)
 		})
 		if cerr != nil {
 			refusedBy[cerr.Code]++

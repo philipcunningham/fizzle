@@ -9,6 +9,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
+	"github.com/philipcunningham/fizzle/pkg/internal/testutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
 )
 
@@ -80,6 +81,80 @@ func TestDiskFileDocumentRejectsInvalidDISCount(t *testing.T) {
 	data := fzfbuilder.MakeBanklessVoiceDump(t)
 	if _, err := fzf.NewDiskFile(data, 0); err == nil {
 		t.Fatal("disk-file document accepted a zero DIS voice count")
+	}
+}
+
+func TestAddVoiceReturnsOneAtomicStructuralOperation(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	doc, err := fzf.NewDiskFile(data, fzfbuilder.BanklessDumpVoices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	voice := testutil.MakeTestVoice("JOINED", 321)
+	before := doc.Bytes()
+
+	result, err := doc.AddVoice(voice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsStructural() {
+		t.Fatal("AddVoice returned a fixed-size operation")
+	}
+	if !bytes.Equal(doc.Bytes(), before) {
+		t.Fatal("AddVoice mutated its document")
+	}
+	stale := bytes.Clone(before)
+	stale[0] ^= 0xff
+	if _, err := result.Apply(stale); err == nil {
+		t.Fatal("AddVoice accepted a stale document")
+	}
+
+	updated, err := result.Apply(before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	voiceCount, audioStart, ok := result.VoiceGeometry()
+	if !ok || voiceCount != fzfbuilder.BanklessDumpVoices+1 {
+		t.Fatalf("geometry = %d voices at %d, %v", voiceCount, audioStart, ok)
+	}
+	reopened, err := fzf.NewDiskFile(updated, voiceCount)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined, err := reopened.Voice(voiceCount - 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if joined.Name() != "JOINED" {
+		t.Fatalf("joined voice = %q, want JOINED", joined.Name())
+	}
+	if got, want := len(updated)-audioStart, len(before)-doc.Layout().AudioStart()+len(voice)-disk.SectorSize; got != want {
+		t.Fatalf("audio bytes = %d, want %d", got, want)
+	}
+}
+
+func TestAddVoiceRejectsMalformedInputWithoutMutation(t *testing.T) {
+	doc, err := fzf.NewDiskFile(fzfbuilder.MakeBanklessVoiceDump(t), fzfbuilder.BanklessDumpVoices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := doc.Bytes()
+	for _, test := range []struct {
+		name string
+		data []byte
+		want error
+	}{
+		{name: "short", data: make([]byte, disk.SectorSize-1), want: fzf.ErrVoiceFileTooShort},
+		{name: "misaligned PCM", data: make([]byte, disk.SectorSize+1), want: fzf.ErrVoicePCMMisaligned},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := doc.AddVoice(test.data); !errors.Is(err, test.want) {
+				t.Fatalf("AddVoice error = %v, want %v", err, test.want)
+			}
+			if !bytes.Equal(doc.Bytes(), before) {
+				t.Fatal("rejected AddVoice mutated the document")
+			}
+		})
 	}
 }
 
