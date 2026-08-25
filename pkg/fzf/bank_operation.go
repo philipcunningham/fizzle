@@ -9,6 +9,13 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 )
 
+// instrumentOwnedBankRanges names the fields in bank sector zero that belong
+// to the whole instrument rather than to the bank sharing that sector. The
+// effect block is R19's complete surface, which the firmware mirrors to and
+// from its live RAM copy. The total-wave marker describes audio across a
+// two-disk set, which no single bank can own. An incoming FZB therefore has a
+// claim on neither field. The adjacent voice-count marker is omitted because
+// AddBank recomputes it from the operation's resulting geometry.
 var instrumentOwnedBankRanges = [][2]int{
 	{disk.BankTotalWaveOffset, 4},
 	{disk.BankEffectOffset, disk.EffectDataSize},
