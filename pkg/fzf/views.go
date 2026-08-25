@@ -106,6 +106,9 @@ func (v VoiceView) WaveEnd() uint32 {
 // RootKey returns the voice's raw key-center byte.
 func (v VoiceView) RootKey() byte { return v.data[disk.VoiceKeyCentOffset] }
 
+// HeaderBytes returns an owned copy of the voice's used header bytes.
+func (v VoiceView) HeaderBytes() []byte { return bytes.Clone(v.data) }
+
 // NamePatch returns a stale-safe patch that changes the voice's display name.
 // Applying it invalidates a standalone voice-count marker; re-stamp the marker
 // after applying the complete patch batch.

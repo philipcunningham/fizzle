@@ -28,10 +28,11 @@ import (
 // key-range fan-out included.
 func (s *Session) patchSlotVoice(slot int, build func(hdr []byte) ([]voiceedit.Edit, error)) (Snapshot, *Error) {
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
-		hdr, cerr := slotHeader(d, slot)
-		if cerr != nil {
-			return nil, cerr
+		voice, err := d.doc.Voice(slot)
+		if err != nil {
+			return nil, errf(codeInvalidValue, "voice slot %d out of range", slot)
 		}
+		hdr := voice.HeaderBytes()
 		patches, err := build(hdr)
 		if err != nil {
 			var known *Error
@@ -40,23 +41,12 @@ func (s *Session) patchSlotVoice(slot int, build func(hdr []byte) ([]voiceedit.E
 			}
 			return nil, errf(codeInvalidValue, "%v", err)
 		}
-		if err := voiceedit.ApplyToFZFSlotBytesWithHeader(d.fzf, d.header, slot, patches); err != nil {
+		result, err := d.doc.EditVoice(slot, patches)
+		if err != nil {
 			return nil, errf(codeInvalidValue, "%v", err)
 		}
-		return nil, nil
+		return nil, applyDocumentOperation(d, result)
 	})
-}
-
-// slotHeader bounds-checks slot and returns its header slice.
-func slotHeader(d *dumpState, slot int) ([]byte, *Error) {
-	if slot < 0 || slot >= d.header.NVoice {
-		return nil, errf(codeInvalidValue, "voice slot %d out of range", slot)
-	}
-	off := disk.VoiceSlotOffset(d.header.VoiceAreaStart, slot)
-	if off+disk.VoiceHeaderUsed > len(d.fzf) {
-		return nil, errf("invalid-image", "voice slot %d header extends past the dump", slot)
-	}
-	return d.fzf[off : off+disk.VoiceHeaderUsed], nil
 }
 
 // slotParams parses a slot header the way the loose-file path parses a

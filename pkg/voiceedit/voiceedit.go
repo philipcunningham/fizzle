@@ -4,7 +4,6 @@
 package voiceedit
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -18,24 +17,20 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/bitconv"
 	"github.com/philipcunningham/fizzle/pkg/model"
+	"github.com/philipcunningham/fizzle/pkg/voicepatch"
 )
 
 // Sentinel errors. Wrap with %w; match with errors.Is, not on message text.
 var (
 	ErrNotVoiceFile     = errors.New("voiceedit: file does not appear to be a voice file")
-	ErrUnsupportedPatch = errors.New("voiceedit: unsupported patch size")
+	ErrUnsupportedPatch = voicepatch.ErrUnsupportedSize
 	ErrFileTooSmall     = errors.New("voiceedit: file too small")
 )
 
 // Edit describes a modification to a voice header. When Bytes is non-nil it
 // is written verbatim at Offset and Size/Value are ignored. Otherwise Size
 // (1 or 2) bytes from Value are written as little-endian.
-type Edit struct {
-	Offset int
-	Size   int    // 1 or 2 (ignored when Bytes is set)
-	Value  uint16 // ignored when Bytes is set
-	Bytes  []byte // multi-byte payload; when non-nil takes precedence over Size/Value
-}
+type Edit = voicepatch.Edit
 
 // ApplyToFZVBytes applies edits to FZV voice file bytes in place:
 // the same validation and patching as ApplyToFZV with no filesystem.
@@ -46,7 +41,7 @@ func ApplyToFZVBytes(data []byte, patches []Edit) error {
 	if !disk.IsPrintableName(data[disk.VoiceNameOffset : disk.VoiceNameOffset+disk.LabelSize]) {
 		return ErrNotVoiceFile
 	}
-	resolved, err := resolvePatches(data, 0, patches)
+	resolved, err := voicepatch.ResolveHeader(data, 0, patches)
 	if err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}
@@ -108,7 +103,7 @@ func applyToFZFVoiceLocked(path string, voiceName string, patches []Edit) error 
 	if voiceOffset+disk.VoiceHeaderUsed > len(data) {
 		return fmt.Errorf("voiceedit: voice %d header extends beyond file", idx)
 	}
-	resolved, err := resolveFZFPatches(data, hdr, idx, voiceOffset, patches)
+	resolved, err := voicepatch.ResolveFZFSlotGeometry(data, hdr.NVoice, hdr.VoiceAreaStart, hdr.NBankSectors, idx, patches)
 	if err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}
@@ -137,14 +132,7 @@ func ApplyToFZFSlotBytes(data []byte, slot int, patches []Edit) error {
 // ApplyToFZFSlotBytesWithHeader is ApplyToFZFSlotBytes under a header
 // the caller already parsed.
 func ApplyToFZFSlotBytesWithHeader(data []byte, hdr *fzutil.FZFHeader, slot int, patches []Edit) error {
-	if slot < 0 || slot >= hdr.NVoice {
-		return fmt.Errorf("voiceedit: voice slot must be 0 to %d, got %d", hdr.NVoice-1, slot)
-	}
-	voiceOffset := disk.VoiceSlotOffset(hdr.VoiceAreaStart, slot)
-	if voiceOffset+disk.VoiceHeaderUsed > len(data) {
-		return fmt.Errorf("voiceedit: voice %d header extends beyond file", slot)
-	}
-	resolved, err := resolveFZFPatches(data, hdr, slot, voiceOffset, patches)
+	resolved, err := voicepatch.ResolveFZFSlotGeometry(data, hdr.NVoice, hdr.VoiceAreaStart, hdr.NBankSectors, slot, patches)
 	if err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}
@@ -154,130 +142,12 @@ func ApplyToFZFSlotBytesWithHeader(data []byte, hdr *fzutil.FZFHeader, slot int,
 	return nil
 }
 
-// resolveFZFPatches resolves a voice edit and any key-range fan-out into one
-// stale-safe batch, so the header and every referencing bank change atomically.
-//
-// Spec context: the voice-header fields at 0xae/0xaf/0xb0 (`hwid`/`lwid`/`cent`,
-// §2-1) are read only when the FZ-1 loads a voice standalone via the per-voice
-// disk path. Loaded as a bank (the normal case), the firmware reads the
-// per-split arrays in the bank sector (§2-2: `hwid[64]` @ 0x02, `lwid[64]`
-// @ 0x42, `cent[64]` @ 0x102), which the spec says "can be set independently
-// from those for voice data". So a `fizzle fzf edit --key-low/--key-high/--root`
-// touching only the voice header is a silent no-op on hardware playback. The
-// fan-out mirrors fzfmidi.Set and fzfoutput.Set.
-//
-// Non-key-range edits (filter, LFO, envelope, name, tune, playback mode)
-// have no bank counterpart and are skipped.
-func resolveFZFPatches(data []byte, hdr *fzutil.FZFHeader, idx int, voiceOffset int, patches []Edit) ([]model.Patch, error) {
-	resolved, err := resolvePatches(data, voiceOffset, patches)
-	if err != nil {
-		return nil, err
-	}
-	updatedHeader := append([]byte(nil), data[voiceOffset:voiceOffset+disk.VoiceHeaderUsed]...)
-	if err := model.Apply(updatedHeader, relativePatches(resolved, voiceOffset)); err != nil {
-		return nil, err
-	}
-
-	bankOffsetFor := func(voiceHdrOffset int) (int, bool) {
-		switch voiceHdrOffset {
-		case disk.VoiceKeyHighOffset:
-			return disk.BankKeyHighOffset, true
-		case disk.VoiceKeyLowOffset:
-			return disk.BankKeyLowOffset, true
-		case disk.VoiceKeyCentOffset:
-			return disk.BankKeyCentOffset, true
-		}
-		return 0, false
-	}
-
-	sites := fzutil.FindBankSitesForVoice(data, hdr, idx)
-	seen := make(map[int]struct{})
-	for _, p := range patches {
-		bankOff, ok := bankOffsetFor(p.Offset)
-		if !ok {
-			continue
-		}
-		newByte := updatedHeader[p.Offset]
-		for _, site := range sites {
-			off := site.BankIdx*disk.SectorSize + bankOff + site.SplitIdx
-			if off >= len(data) {
-				return nil, fmt.Errorf("bank site write at %d beyond data", off)
-			}
-			if _, ok := seen[off]; ok {
-				continue
-			}
-			seen[off] = struct{}{}
-			resolved = append(resolved, model.Patch{Offset: off, Old: []byte{data[off]}, New: []byte{newByte}})
-		}
-	}
-	return resolved, nil
-}
-
+// resolvePatches retains the package-local seam used by characterization
+// tests while the canonical resolver lives in voicepatch.
 func resolvePatches(data []byte, base int, patches []Edit) ([]model.Patch, error) {
-	if base < 0 || base+disk.VoiceHeaderUsed > len(data) {
-		return nil, fmt.Errorf("voice header at %d extends beyond data", base)
-	}
-	original := data[base : base+disk.VoiceHeaderUsed]
-	updated := append([]byte(nil), original...)
-	touched := make([]bool, len(updated))
-	for _, p := range patches {
-		size := p.Size
-		if p.Bytes != nil {
-			size = len(p.Bytes)
-		}
-		if p.Offset < 0 || p.Offset+size > disk.VoiceHeaderUsed {
-			return nil, fmt.Errorf("voiceedit: patch offset %d (size %d) out of voice header range", p.Offset, size)
-		}
-		if p.Bytes != nil {
-			copy(updated[p.Offset:p.Offset+size], p.Bytes)
-			for i := p.Offset; i < p.Offset+size; i++ {
-				touched[i] = true
-			}
-			continue
-		}
-		switch p.Size {
-		case 1:
-			updated[p.Offset] = byte(p.Value) //nolint:gosec // G115: value validated before patch creation
-		case 2:
-			binary.LittleEndian.PutUint16(updated[p.Offset:], p.Value)
-		default:
-			return nil, fmt.Errorf("%w: %d", ErrUnsupportedPatch, p.Size)
-		}
-		for i := p.Offset; i < p.Offset+size; i++ {
-			touched[i] = true
-		}
-	}
-
-	var resolved []model.Patch
-	for start := 0; start < len(touched); {
-		for start < len(touched) && (!touched[start] || original[start] == updated[start]) {
-			start++
-		}
-		if start == len(touched) {
-			break
-		}
-		end := start + 1
-		for end < len(touched) && touched[end] && original[end] != updated[end] {
-			end++
-		}
-		resolved = append(resolved, model.Patch{
-			Offset: base + start,
-			Old:    bytes.Clone(original[start:end]),
-			New:    bytes.Clone(updated[start:end]),
-		})
-		start = end
-	}
-	return resolved, nil
+	return voicepatch.ResolveHeader(data, base, patches)
 }
 
-func relativePatches(patches []model.Patch, base int) []model.Patch {
-	relative := make([]model.Patch, len(patches))
-	for i, patch := range patches {
-		relative[i] = patch
-		relative[i].Offset -= base
-	}
-	return relative
-}
 func findVoiceIndex(data []byte, hdr *fzutil.FZFHeader, name string) (int, error) {
 	target := strings.ToUpper(strings.TrimSpace(name))
 	for i := range hdr.NVoice {
