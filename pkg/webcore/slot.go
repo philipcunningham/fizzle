@@ -30,7 +30,7 @@ func (s *Session) patchSlotVoice(slot int, build func(hdr []byte) ([]voiceedit.E
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
 		voice, err := d.doc.Voice(slot)
 		if err != nil {
-			return nil, errf(codeInvalidValue, "voice slot %d out of range", slot)
+			return nil, slotVoiceBoundaryError(slot, err)
 		}
 		hdr := voice.HeaderBytes()
 		patches, err := build(hdr)
@@ -47,6 +47,16 @@ func (s *Session) patchSlotVoice(slot int, build func(hdr []byte) ([]voiceedit.E
 		}
 		return nil, applyDocumentOperation(d, result)
 	})
+}
+
+func slotVoiceBoundaryError(slot int, err error) *Error {
+	if errors.Is(err, fzfmodel.ErrVoiceIndexOutOfRange) {
+		return errf(codeInvalidValue, "voice slot %d out of range", slot)
+	}
+	if errors.Is(err, fzfmodel.ErrVoiceHeaderBounds) {
+		return errf(codeInvalidImage, "voice slot %d header extends past the dump", slot)
+	}
+	return errf(codeInvalidImage, "voice slot %d could not be read", slot)
 }
 
 // slotParams parses a slot header the way the loose-file path parses a
