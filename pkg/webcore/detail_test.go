@@ -151,7 +151,7 @@ func TestSetEnvelopeRoundTrips(t *testing.T) {
 		t.Fatalf("dcf rate 0 = %d, want clamped 99", d.Dcf.Rates[0])
 	}
 
-	if _, cerr := s.SetEnvelope(voice, "dcx", 0, 0, rates, stops); cerr == nil || cerr.Code != "invalid-field" {
+	if _, cerr := s.SetEnvelope(voice, "dcx", 0, 0, rates, stops); cerr == nil || cerr.Code != codeInvalidField {
 		t.Fatalf("dcx: %v, want invalid-field", cerr)
 	}
 	if _, cerr := s.SetEnvelope(voice, "dca", 0, 0, []int{1, 2}, stops); cerr == nil || cerr.Code != codeInvalidValue {

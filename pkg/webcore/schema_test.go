@@ -157,7 +157,6 @@ func TestSetParamInvalidLeavesStateUntouched(t *testing.T) {
 		t.Fatalf("ExportImage: %v", cerr)
 	}
 
-	const codeInvalidField = "invalid-field"
 	cases := []struct {
 		name string
 		run  func() *Error

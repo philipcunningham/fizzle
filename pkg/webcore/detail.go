@@ -168,7 +168,7 @@ const (
 // takes whichever header parse the caller owns (R16).
 func buildEnvelopePatches(which string, sustain, end int, rates, stops []int) (func(vp *fzvinfo.VoiceParams) ([]voiceedit.Edit, error), *Error) {
 	if which != envDCA && which != envDCF {
-		return nil, errf("invalid-field", "envelope must be dca or dcf, got %q", which)
+		return nil, errf(codeInvalidField, "envelope must be dca or dcf, got %q", which)
 	}
 	if len(rates) != disk.EnvelopeStages || len(stops) != disk.EnvelopeStages {
 		return nil, errf(codeInvalidValue, "envelopes carry %d stages", disk.EnvelopeStages)

@@ -53,6 +53,7 @@ func errItemf(code, item, format string, args ...any) *Error {
 // on them.
 const (
 	codeNoDisk       = "no-disk"
+	codeInvalidField = "invalid-field"
 	codeInvalidValue = "invalid-value"
 	codeNotFound     = "not-found"
 	// codePairMismatch covers every way two images fail to be disks 1
@@ -414,7 +415,7 @@ func voiceParams(vp *fzvinfo.VoiceParams, voiceBytes []byte) map[string]any {
 func clampNumberField(fieldID string, value int) (int, *Error) {
 	field, ok := schemaField(fieldID)
 	if !ok || field.Kind == kindSelect {
-		return 0, errItemf("invalid-field", fieldID, "%q is not a numeric schema field", fieldID)
+		return 0, errItemf(codeInvalidField, fieldID, "%q is not a numeric schema field", fieldID)
 	}
 	return clampInt(value, field.Min, field.Max), nil
 }
@@ -423,7 +424,7 @@ func clampNumberField(fieldID string, value int) (int, *Error) {
 func checkSelectField(fieldID string) *Error {
 	field, ok := schemaField(fieldID)
 	if !ok || field.Kind != kindSelect {
-		return errItemf("invalid-field", fieldID, "%q is not a select schema field", fieldID)
+		return errItemf(codeInvalidField, fieldID, "%q is not a select schema field", fieldID)
 	}
 	return nil
 }
