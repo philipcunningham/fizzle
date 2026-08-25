@@ -140,6 +140,12 @@ func (s *voiceAreaState) shrink(target int) error {
 			freed--
 		}
 	}
+	// Bytes belonging to surviving slots, including their unknown 64 byte
+	// tails, move verbatim. Capacity past target is different: a parser can
+	// reinterpret a plausible stale header there as a live voice when a later
+	// bank edit raises the walk bound. Clear only that retired capacity so the
+	// resolved voice count remains stable; bank bytes, live slots, and audio
+	// remain byte preserving.
 	if tail := disk.VoiceSlotOffset(s.params.VoiceStart, target); tail < s.audioStart {
 		clear(s.data[tail:s.audioStart])
 	}
