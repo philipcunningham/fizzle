@@ -2,13 +2,25 @@ package webcore
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/voiceedit"
 	"github.com/philipcunningham/fizzle/pkg/voiceunpack"
 )
+
+func TestSlotVoiceBoundaryErrorsRetainIndexAndImageDistinction(t *testing.T) {
+	if got := slotVoiceBoundaryError(9, fzfmodel.ErrVoiceIndexOutOfRange); got.Code != codeInvalidValue || got.Message != "voice slot 9 out of range" {
+		t.Fatalf("index error = %v", got)
+	}
+	wrapped := errors.Join(errors.New("corrupt document"), fzfmodel.ErrVoiceHeaderBounds)
+	if got := slotVoiceBoundaryError(2, wrapped); got.Code != codeInvalidImage || got.Message != "voice slot 2 header extends past the dump" {
+		t.Fatalf("header error = %v", got)
+	}
+}
 
 // unpackSlot extracts one voice slot from the session's dump as a
 // standalone .fzv, through the CLI's own unpack path.

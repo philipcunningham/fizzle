@@ -74,9 +74,12 @@ type VoiceView struct {
 // Voice returns the voice slot at index.
 func (d *Document) Voice(index int) (VoiceView, error) {
 	if index < 0 || index >= d.layout.VoiceCount() {
-		return VoiceView{}, fmt.Errorf("fzf: voice index %d outside 0..%d", index, d.layout.VoiceCount()-1)
+		return VoiceView{}, &IndexError{Err: ErrVoiceIndexOutOfRange, Index: index, Limit: d.layout.VoiceCount()}
 	}
 	offset := disk.VoiceSlotOffset(d.layout.VoiceStart(), index)
+	if offset < 0 || offset+disk.VoiceHeaderUsed > len(d.data) {
+		return VoiceView{}, fmt.Errorf("%w: slot %d", ErrVoiceHeaderBounds, index)
+	}
 	return VoiceView{data: d.data[offset : offset+disk.VoiceHeaderUsed], index: index, offset: offset}, nil
 }
 

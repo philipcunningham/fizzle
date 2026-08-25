@@ -53,6 +53,7 @@ func errItemf(code, item, format string, args ...any) *Error {
 // on them.
 const (
 	codeNoDisk       = "no-disk"
+	codeInvalidImage = "invalid-image"
 	codeInvalidField = "invalid-field"
 	codeInvalidValue = "invalid-value"
 	codeNotFound     = "not-found"
