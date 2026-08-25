@@ -774,7 +774,7 @@ func prepareDocument(img *disk.Image, img2 []byte, disMode bool) (preparedDocume
 	}
 	next := preparedDocument{
 		documentState: documentState{
-			image: bytes.Clone(img.Bytes()), image2: bytes.Clone(img2), authority: authorityFromDIS(disMode),
+			image: img.Bytes(), image2: img2, authority: authorityFromDIS(disMode),
 		},
 		label:       img.Label(),
 		used:        disk.ImageSize - img.FreeSectors()*disk.SectorSize,
