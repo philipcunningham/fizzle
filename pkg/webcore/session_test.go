@@ -183,14 +183,14 @@ func TestAdoptStateRejectsBadSecondImageWithoutChangingSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	beforeMode := s.disMode
+	beforeMode := s.usesDIS()
 	beforePast, beforeFuture := len(s.past), len(s.future)
 	img, err := disk.ReadImage(bytes.NewReader(s.image))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, cerr := s.adoptState(img, []byte{1}, s.disMode); cerr == nil {
+	if _, cerr := s.adoptState(img, []byte{1}, s.usesDIS()); cerr == nil {
 		t.Fatal("adoptState accepted an unreadable second image")
 	}
 	afterSnapshot, err := json.Marshal(s.Snapshot())
@@ -198,7 +198,7 @@ func TestAdoptStateRejectsBadSecondImageWithoutChangingSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(s.image, beforeImage) || !bytes.Equal(afterSnapshot, beforeSnapshot) ||
-		s.disMode != beforeMode || len(s.past) != beforePast || len(s.future) != beforeFuture {
+		s.usesDIS() != beforeMode || len(s.past) != beforePast || len(s.future) != beforeFuture {
 		t.Fatal("failed adoption changed session state")
 	}
 }
@@ -208,13 +208,13 @@ func TestUndoFailurePreservesDocumentAndHistory(t *testing.T) {
 	if _, cerr := s.OpenImage(fixture(t)); cerr != nil {
 		t.Fatalf("OpenImage: %v", cerr)
 	}
-	s.past = []imagePair{{img1: bytes.Clone(s.image), img2: []byte{1}, disMode: !s.disMode}}
+	s.past = []documentState{{image: bytes.Clone(s.image), image2: []byte{1}, authority: authorityFromDIS(!s.usesDIS())}}
 	before, err := json.Marshal(s.Snapshot())
 	if err != nil {
 		t.Fatal(err)
 	}
 	beforeImage := bytes.Clone(s.image)
-	beforeMode := s.disMode
+	beforeMode := s.usesDIS()
 
 	if _, cerr := s.Undo(); cerr == nil {
 		t.Fatal("Undo succeeded with an unreadable disk 2 history entry")
@@ -223,7 +223,7 @@ func TestUndoFailurePreservesDocumentAndHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(after, before) || !bytes.Equal(s.image, beforeImage) || s.disMode != beforeMode ||
+	if !bytes.Equal(after, before) || !bytes.Equal(s.image, beforeImage) || s.usesDIS() != beforeMode ||
 		len(s.past) != 1 || len(s.future) != 0 {
 		t.Fatal("failed Undo changed the document or history")
 	}
@@ -234,13 +234,13 @@ func TestRedoFailurePreservesDocumentAndHistory(t *testing.T) {
 	if _, cerr := s.OpenImage(fixture(t)); cerr != nil {
 		t.Fatalf("OpenImage: %v", cerr)
 	}
-	s.future = []imagePair{{img1: bytes.Clone(s.image), img2: []byte{1}, disMode: !s.disMode}}
+	s.future = []documentState{{image: bytes.Clone(s.image), image2: []byte{1}, authority: authorityFromDIS(!s.usesDIS())}}
 	before, err := json.Marshal(s.Snapshot())
 	if err != nil {
 		t.Fatal(err)
 	}
 	beforeImage := bytes.Clone(s.image)
-	beforeMode := s.disMode
+	beforeMode := s.usesDIS()
 
 	if _, cerr := s.Redo(); cerr == nil {
 		t.Fatal("Redo succeeded with an unreadable disk 2 history entry")
@@ -249,7 +249,7 @@ func TestRedoFailurePreservesDocumentAndHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(after, before) || !bytes.Equal(s.image, beforeImage) || s.disMode != beforeMode ||
+	if !bytes.Equal(after, before) || !bytes.Equal(s.image, beforeImage) || s.usesDIS() != beforeMode ||
 		len(s.past) != 0 || len(s.future) != 1 {
 		t.Fatal("failed Redo changed the document or history")
 	}
