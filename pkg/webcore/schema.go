@@ -180,7 +180,7 @@ func numberPatches(id string, n int, voiceBytes []byte) ([]voiceedit.Edit, error
 	case fieldLfoFilter:
 		return voiceedit.BuildLFOPatches(u, u, u, u, n, lfoNameByte(voiceBytes))
 	default:
-		return nil, errf("invalid-field", "%q is not a numeric field", id)
+		return nil, errf(codeInvalidField, "%q is not a numeric field", id)
 	}
 }
 
@@ -200,7 +200,7 @@ func optionPatches(id, option string, voiceBytes []byte) ([]voiceedit.Edit, erro
 	case fieldLfoSync:
 		return voiceedit.BuildLFOSyncPatch(option, lfoNameByte(voiceBytes))
 	default:
-		return nil, errf("invalid-field", "%q is not a select field", id)
+		return nil, errf(codeInvalidField, "%q is not a select field", id)
 	}
 }
 

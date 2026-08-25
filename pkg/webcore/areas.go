@@ -328,7 +328,7 @@ func (s *Session) SetAreaField(bank, area int, field string, value int) (Snapsho
 	return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
 		typedField, ok := areaFields[field]
 		if !ok {
-			return nil, errf("invalid-field", "%q is not an area field", field)
+			return nil, errf(codeInvalidField, "%q is not an area field", field)
 		}
 		result, err := d.doc.SetAreaField(bank, area, typedField, value)
 		if err == nil {

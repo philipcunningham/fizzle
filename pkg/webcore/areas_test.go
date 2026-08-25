@@ -445,8 +445,13 @@ func TestSetAreaFieldRoundTripsAndClamps(t *testing.T) {
 		t.Fatalf("area 0 = %+v, want slot 1 HIGH", got)
 	}
 
-	if _, cerr := s.SetAreaField(0, 0, "warp", 1); cerr == nil || cerr.Code != "invalid-field" {
+	if _, cerr := s.SetAreaField(0, 0, "warp", 1); cerr == nil || cerr.Code != codeInvalidField {
 		t.Fatalf("unknown field: %v", cerr)
+	}
+	// Field names are part of the boundary contract, so reject an unknown
+	// name before inspecting its target indices.
+	if _, cerr := s.SetAreaField(99, 99, "warp", 1); cerr == nil || cerr.Code != codeInvalidField {
+		t.Fatalf("unknown field with invalid target: %v", cerr)
 	}
 	if _, cerr := s.SetAreaField(0, 9, "keyLow", 1); cerr == nil || cerr.Code != codeInvalidValue {
 		t.Fatalf("area out of range: %v", cerr)
