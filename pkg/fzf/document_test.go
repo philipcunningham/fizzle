@@ -159,6 +159,108 @@ func TestAddVoiceRejectsMalformedInputWithoutMutation(t *testing.T) {
 	}
 }
 
+func TestAddBankReturnsAtomicStructuralOperationAndPreservesAudio(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
+	doc, err := fzf.NewStandalone(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := doc.Bytes()
+	wantAudio := bytes.Clone(before[doc.Layout().AudioStart():])
+	bank := bytes.Clone(before[:disk.SectorSize])
+	label := disk.PadLabel("APPENDED")
+	copy(bank[disk.BankNameOffset:], label[:])
+
+	result, err := doc.AddBank(bank, doc.Layout().BankCount())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsStructural() {
+		t.Fatal("AddBank returned a fixed-size operation")
+	}
+	if !bytes.Equal(doc.Bytes(), before) {
+		t.Fatal("AddBank mutated its document")
+	}
+	stale := bytes.Clone(before)
+	stale[0] ^= 0xff
+	if _, err := result.Apply(stale); err == nil {
+		t.Fatal("AddBank accepted a stale document")
+	}
+	updated, err := result.Apply(before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	voiceCount, audioStart, ok := result.VoiceGeometry()
+	if !ok {
+		t.Fatal("AddBank omitted updated voice geometry")
+	}
+	if got := updated[audioStart:]; !bytes.Equal(got, wantAudio) {
+		t.Fatal("AddBank changed the instrument audio")
+	}
+	reopened, err := fzf.NewStandalone(updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.Layout().BankCount() != doc.Layout().BankCount()+1 || reopened.Layout().VoiceCount() != voiceCount {
+		t.Fatalf("layout = %d banks, %d voices", reopened.Layout().BankCount(), reopened.Layout().VoiceCount())
+	}
+	if got := fzutil.MarkerVoiceCount(updated); got != voiceCount {
+		t.Fatalf("marker voice count = %d, want %d", got, voiceCount)
+	}
+}
+
+func TestAddBankAtZeroRetainsInstrumentOwnedFields(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	for i := 0; i < disk.EffectDataSize; i++ {
+		data[disk.BankEffectOffset+i] = byte(i + 1)
+	}
+	binary.LittleEndian.PutUint32(data[disk.BankTotalWaveOffset:], 4242)
+	doc, err := fzf.NewDiskFile(data, fzfbuilder.BanklessDumpVoices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bank := bytes.Clone(data[:disk.SectorSize])
+	clear(bank[disk.BankEffectOffset : disk.BankEffectOffset+disk.EffectDataSize])
+	clear(bank[disk.BankTotalWaveOffset : disk.BankTotalWaveOffset+4])
+	label := disk.PadLabel("REPLACED")
+	copy(bank[disk.BankNameOffset:], label[:])
+
+	result, err := doc.AddBank(bank, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := result.Apply(doc.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := binary.LittleEndian.Uint32(updated[disk.BankTotalWaveOffset:]); got != 4242 {
+		t.Fatalf("total wave marker = %d, want 4242", got)
+	}
+	if got, want := updated[disk.BankEffectOffset:disk.BankEffectOffset+disk.EffectDataSize], data[disk.BankEffectOffset:disk.BankEffectOffset+disk.EffectDataSize]; !bytes.Equal(got, want) {
+		t.Fatal("replacement changed instrument effect fields")
+	}
+}
+
+func TestAddBankRejectsInvalidSlotAndVoiceReferenceWithoutMutation(t *testing.T) {
+	doc, err := fzf.NewDiskFile(fzfbuilder.MakeBanklessVoiceDump(t), fzfbuilder.BanklessDumpVoices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := doc.Bytes()
+	bank := bytes.Clone(before[:disk.SectorSize])
+	if _, err := doc.AddBank(bank, doc.Layout().BankCount()+1); !errors.Is(err, fzf.ErrBankIndexOutOfRange) {
+		t.Fatalf("skipped slot error = %v", err)
+	}
+	binary.LittleEndian.PutUint16(bank[disk.BankVoiceNumOffset:], uint16(disk.MaxVoices))
+	if _, err := doc.AddBank(bank, 0); !errors.Is(err, fzf.ErrAreaVoiceOutOfRange) {
+		t.Fatalf("invalid voice error = %v", err)
+	}
+	if !bytes.Equal(doc.Bytes(), before) {
+		t.Fatal("rejected AddBank mutated the document")
+	}
+}
+
 func TestRenameVoiceReturnsAtomicOperationAndRetainsMarkerAuthority(t *testing.T) {
 	data := fzfbuilder.MakeBanklessVoiceDump(t)
 	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)

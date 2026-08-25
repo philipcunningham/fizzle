@@ -43,9 +43,9 @@ func areaOpsFor(t *testing.T, fzf []byte, hdr *fzutil.FZFHeader) []areaOp {
 		{"DuplicateArea", func(d *dumpState) ([]model.Patch, *Error) { return duplicateAreaPatches(d, 0, 0) }},
 		{"MapVoice", func(d *dumpState) ([]model.Patch, *Error) { return mapVoicePatches(d, 0) }},
 		{"AddBank append", func(d *dumpState) ([]model.Patch, *Error) {
-			return addBankPatches(d, oneArea, hdr.NBankSectors)
+			return addBankDocumentOperation(d, oneArea, hdr.NBankSectors)
 		}},
-		{"AddBank replace", func(d *dumpState) ([]model.Patch, *Error) { return addBankPatches(d, oneArea, 0) }},
+		{"AddBank replace", func(d *dumpState) ([]model.Patch, *Error) { return addBankDocumentOperation(d, oneArea, 0) }},
 	}
 }
 
@@ -323,7 +323,7 @@ func randomAreaOp(t *testing.T, fzf []byte, hdr *fzutil.FZFHeader, rng *rand.Ran
 		at := rng.IntN(hdr.NBankSectors + 1)
 		fzb := fzbPlaying(t, rng.IntN(hdr.NVoice))
 		return areaOp{fmt.Sprintf("AddBank(%d)", at),
-			func(d *dumpState) ([]model.Patch, *Error) { return addBankPatches(d, fzb, at) }}
+			func(d *dumpState) ([]model.Patch, *Error) { return addBankDocumentOperation(d, fzb, at) }}
 	}
 }
 

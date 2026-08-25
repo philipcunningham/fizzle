@@ -2,10 +2,8 @@ package webcore
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 
-	"github.com/philipcunningham/fizzle/pkg/container"
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
@@ -130,7 +128,7 @@ func (s *Session) AddBank(data []byte, slot int) (Snapshot, *Error) {
 	}
 	if s.image != nil && s.instrument != nil {
 		return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
-			return addBankPatches(d, data, slot)
+			return addBankDocumentOperation(d, data, slot)
 		})
 	}
 	img, cerr := s.imageOrNew()
@@ -143,93 +141,28 @@ func (s *Session) AddBank(data []byte, slot int) (Snapshot, *Error) {
 	return s.adoptPair(img, s.image2, modeDerive)
 }
 
-// instrumentOwnedRanges names the bytes of bank sector 0 that belong to
-// the instrument rather than to the bank that shares the sector, each
-// as an offset and a length. The effect block is R19's whole surface
-// (pitch bend range plus all 21 controller modulation cells) and the
-// firmware mirrors it to and from its live RAM copy, so it is the
-// instrument's; the total wave marker says how much audio the
-// instrument spans across a two disk set, which no single bank knows.
-// A .fzb carries a bank's mapping and has a claim on neither, so
-// dropping one on slot 0 keeps what it found there.
-var instrumentOwnedRanges = [][2]int{
-	{disk.BankTotalWaveOffset, 4},
-	{disk.BankEffectOffset, disk.EffectDataSize},
+func addBankDocumentOperation(d *dumpState, data []byte, slot int) ([]model.Patch, *Error) {
+	result, err := d.doc.AddBank(data, slot)
+	if err != nil {
+		return nil, addBankDocumentError(err, slot, d.doc.Layout().BankCount())
+	}
+	return nil, applyDocumentOperation(d, result)
 }
 
-// keepInstrumentFields copies the instrument's own fields out of the
-// sector being replaced and into the arriving one.
-func keepInstrumentFields(sector, replaced []byte) {
-	for _, field := range instrumentOwnedRanges {
-		off, size := field[0], field[1]
-		if off+size <= len(sector) && off+size <= len(replaced) {
-			copy(sector[off:off+size], replaced[off:off+size])
+func addBankDocumentError(err error, slot, bankCount int) *Error {
+	if errors.Is(err, fzfmodel.ErrBankIndexOutOfRange) {
+		if slot < 0 || slot >= disk.MaxBanks {
+			return errf(codeInvalidValue, "bank slot must be 0 to %d, got %d", disk.MaxBanks-1, slot)
 		}
+		return errf(codeInvalidValue, "bank slot %d skips past the %d existing banks", slot, bankCount)
 	}
-}
-
-func addBankPatches(d *dumpState, fzb []byte, slot int) ([]model.Patch, *Error) {
-	if slot < 0 || slot >= disk.MaxBanks {
-		return nil, errf(codeInvalidValue, "bank slot must be 0 to %d, got %d", disk.MaxBanks-1, slot)
+	var areaErr *fzfmodel.AreaVoiceError
+	if errors.As(err, &areaErr) {
+		return errf(codeInvalidValue,
+			"the bank's area %d plays voice slot %d, and this instrument holds %d slots",
+			areaErr.Area+1, areaErr.Voice, areaErr.VoiceCount)
 	}
-	if slot > d.header.NBankSectors {
-		return nil, errf(codeInvalidValue, "bank slot %d skips past the %d existing banks", slot, d.header.NBankSectors)
-	}
-	// The incoming sector brings its own areas, and the summed bstep
-	// values are what bound a reader's walk of the voice area. A bank
-	// that carries more areas than the one it replaces therefore needs a
-	// voice slot per extra area, or the walk runs past the last slot
-	// into the audio; a bank that carries fewer gives those slots back,
-	// or the walk stops short of the last one and the audio moves up
-	// under every voice.
-	incoming := int(binary.LittleEndian.Uint16(fzb[disk.BankVoiceCountOffset:]))
-	replaced := 0
-	if slot < d.header.NBankSectors {
-		replaced = bankBstep(d.fzf, slot)
-	}
-	// An area that plays a slot this instrument does not have is a
-	// broken area, so a bank lifted from a larger instrument is refused
-	// rather than spliced in half working. In DIS mode the voice area
-	// never resizes with bsteps, so the count itself is the bound.
-	slots := d.header.NVoice + incoming - replaced
-	if d.disVN > 0 {
-		slots = d.header.NVoice
-	}
-	for a := range incoming {
-		vp := int(binary.LittleEndian.Uint16(fzb[disk.BankVoiceNumOffset+a*disk.VPEntrySize:]))
-		if vp >= slots {
-			return nil, errf(codeInvalidValue,
-				"the bank's area %d plays voice slot %d, and this instrument holds %d slots",
-				a+1, vp, slots)
-		}
-	}
-	if slot == d.header.NBankSectors {
-		grown, growBytes := container.GrowBanks(d.fzf, d.header.NBankSectors, slot+1)
-		d.fzf = grown
-		// The banks took a sector, so everything past them moved with it.
-		d.header.NBankSectors = slot + 1
-		d.header.VoiceAreaStart += growBytes
-		d.audioStart += growBytes
-	}
-	off := slot * disk.SectorSize
-	old := make([]byte, disk.SectorSize)
-	copy(old, d.fzf[off:off+disk.SectorSize])
-	sector := make([]byte, disk.SectorSize)
-	copy(sector, fzb[:disk.SectorSize])
-	if slot == 0 {
-		keepInstrumentFields(sector, old)
-	}
-	// The new mapping goes in first, so the voice area is brought in
-	// step against the areas that end up playing rather than the ones
-	// the replaced bank held.
-	patch := []model.Patch{{Offset: off, Old: old, New: sector}}
-	if err := model.Apply(d.fzf, patch); err != nil {
-		return nil, errf("patch-failed", "%v", err)
-	}
-	if cerr := ensureVoiceSlots(d, 0, noFreedSlot); cerr != nil {
-		return nil, cerr
-	}
-	return nil, nil
+	return voiceAreaBoundaryError(err)
 }
 
 // wavRefusal turns a WAV read failure into words a musician reads:
