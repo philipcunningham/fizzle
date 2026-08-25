@@ -225,6 +225,43 @@ func TestAddVoiceOverTheCorpus(t *testing.T) {
 	t.Logf("%d dumps joined a voice, refusals by code: %v", len(dumps), refusedBy)
 }
 
+// CASIO066 carries bank pointers beyond the count its voice walk resolves.
+// Before AddVoice became one document operation, the join reported success
+// but left the new slot outside that walk and therefore unreachable. Pin the
+// intentional correction: the joined voice must advance the resolved count
+// and an area must reference its slot.
+func TestAddVoiceMakesJoinedSlotReachableOnCASIO066(t *testing.T) {
+	path := filepath.Join("..", "..", "testdata", "corpus",
+		"casio-fz-1-shareware-library-fzf-format", "CASIO066.FZF")
+	data, err := os.ReadFile(path) // #nosec G304 -- fixed test fixture path
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := dumpGeometryUnder(t, data, 0)
+	voice := testFZV(t, "JOINED", 1500)
+	out, outVN, cerr := patchDumpBytes(bytes.Clone(data), 0, func(d *dumpState) ([]model.Patch, *Error) {
+		result, addErr := d.doc.AddVoice(voice)
+		if addErr != nil {
+			return nil, addVoiceDocumentError(addErr)
+		}
+		return nil, applyDocumentOperation(d, result)
+	})
+	if cerr != nil {
+		t.Fatalf("AddVoice: %v", cerr)
+	}
+	after := dumpGeometryUnder(t, out, resolvedVN(out, outVN))
+	if after.walked != before.walked+1 {
+		t.Fatalf("resolved voice count = %d, want %d", after.walked, before.walked+1)
+	}
+	hdr, err := dumpHeaderFor(out, outVN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sites := fzutil.FindBankSitesForVoice(out, hdr, before.walked); len(sites) == 0 {
+		t.Fatalf("joined voice slot %d is not referenced by an area", before.walked)
+	}
+}
+
 // A random walk of area operations, checking after every step that the
 // audio has not moved since the sequence began. Single operations on a
 // fresh instrument are the easy case; the damage comes from the states
