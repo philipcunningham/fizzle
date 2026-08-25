@@ -113,17 +113,31 @@ type Snapshot struct {
 // of holding images rather than diffs.
 const historyCap = 100
 
-// imagePair is one document state: a single image, or two when a
-// split instrument spans a pair (img2 nil otherwise). History entries
-// snapshot whole pairs so undo restores both halves together.
-type imagePair struct {
-	img1 []byte
-	img2 []byte
-	// disMode is the parse mode the state was recorded under, restored
-	// with the bytes: re-deriving it from bytes an edit had already
-	// moved flips the mode.
-	disMode bool
+// documentState is the canonical state of one open document: a single image,
+// or two when a split instrument spans a pair, plus the parse provenance that
+// must travel with those bytes. The live session and every history entry use
+// this same representation so they cannot drift apart.
+type documentState struct {
+	image     []byte
+	image2    []byte
+	authority voiceCountAuthority
 }
+
+type voiceCountAuthority uint8
+
+const (
+	voiceCountWalk voiceCountAuthority = iota
+	voiceCountDIS
+)
+
+func authorityFromDIS(disMode bool) voiceCountAuthority {
+	if disMode {
+		return voiceCountDIS
+	}
+	return voiceCountWalk
+}
+
+func (s documentState) usesDIS() bool { return s.authority == voiceCountDIS }
 
 // Session holds one open disk set. Not safe for concurrent use; the
 // worker serialises calls.
@@ -133,21 +147,16 @@ type Session struct {
 	// memoryBytes is the sampler's sample memory as the user declared
 	// it. Zero means they haven't, so sampleMemory supplies the default.
 	memoryBytes int
-	past        []imagePair // undo stack, oldest first
-	future      []imagePair // redo stack
+	past        []documentState // undo stack, oldest first
+	future      []documentState // redo stack
 	inGesture   bool
-	gestureBase *imagePair // pre-gesture document; nil until the first edit
+	gestureBase *documentState // pre-gesture document; nil until the first edit
 }
 
 // preparedDocument is a fully parsed candidate state. Building one is
 // side-effect free; a Session installs it only after every derivation succeeds.
 type preparedDocument struct {
-	image  []byte
-	image2 []byte // disk 2 of a split pair; nil for one disk documents
-	// disMode marks a dump parsing under its DIS voice count. Decided
-	// at document boundaries and held through edits, so an edit that
-	// moves a bstep cannot flip it.
-	disMode bool
+	documentState
 	// audioBytes is the open instrument's audio area, measured when the
 	// document changes rather than on every snapshot.
 	audioBytes  int
@@ -492,7 +501,7 @@ func (s *Session) patchVoice(fileName string, build func([]byte) ([]voiceedit.Ed
 	return s.adopt(img)
 }
 
-func (s *Session) pushHistory(doc imagePair) {
+func (s *Session) pushHistory(doc documentState) {
 	s.past = append(s.past, doc)
 	if len(s.past) > historyCap {
 		s.past = s.past[1:]
@@ -554,12 +563,12 @@ func (s *Session) Undo() (Snapshot, *Error) {
 		return s.Snapshot(), errf("nothing-to-undo", "nothing to undo")
 	}
 	prev := s.past[len(s.past)-1]
-	img, err := disk.ReadImage(bytes.NewReader(prev.img1))
+	img, err := disk.ReadImage(bytes.NewReader(prev.image))
 	if err != nil {
 		return s.Snapshot(), errf("invalid-image", "history entry unreadable: %v", err)
 	}
-	current := imagePair{img1: s.image, img2: s.image2, disMode: s.disMode}
-	snap, cerr := s.adoptState(img, prev.img2, prev.disMode)
+	current := s.documentState
+	snap, cerr := s.adoptState(img, prev.image2, prev.usesDIS())
 	if cerr != nil {
 		return snap, cerr
 	}
@@ -575,12 +584,12 @@ func (s *Session) Redo() (Snapshot, *Error) {
 		return s.Snapshot(), errf("nothing-to-redo", "nothing to redo")
 	}
 	next := s.future[len(s.future)-1]
-	img, err := disk.ReadImage(bytes.NewReader(next.img1))
+	img, err := disk.ReadImage(bytes.NewReader(next.image))
 	if err != nil {
 		return s.Snapshot(), errf("invalid-image", "history entry unreadable: %v", err)
 	}
-	current := imagePair{img1: s.image, img2: s.image2, disMode: s.disMode}
-	snap, cerr := s.adoptState(img, next.img2, next.disMode)
+	current := s.documentState
+	snap, cerr := s.adoptState(img, next.image2, next.usesDIS())
 	if cerr != nil {
 		return snap, cerr
 	}
@@ -682,8 +691,8 @@ func (s *Session) adoptPair(img *disk.Image, img2 []byte, mode parseMode) (Snaps
 	if cerr := s.checkWholeDocument(); cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	prev := imagePair{img1: s.image, img2: s.image2, disMode: s.disMode}
-	nextMode := s.disMode
+	prev := s.documentState
+	nextMode := s.usesDIS()
 	if mode == modeDerive {
 		nextMode = documentDISMode(img)
 	}
@@ -691,7 +700,7 @@ func (s *Session) adoptPair(img *disk.Image, img2 []byte, mode parseMode) (Snaps
 	if cerr != nil {
 		return snap, cerr
 	}
-	if prev.img1 != nil {
+	if prev.image != nil {
 		if s.inGesture {
 			// The whole drag lands as one undo entry (R24): only the
 			// pre-gesture document is kept, on the first edit.
@@ -764,9 +773,9 @@ func prepareDocument(img *disk.Image, img2 []byte, disMode bool) (preparedDocume
 		}
 	}
 	next := preparedDocument{
-		image:       img.Bytes(),
-		image2:      img2,
-		disMode:     disMode,
+		documentState: documentState{
+			image: bytes.Clone(img.Bytes()), image2: bytes.Clone(img2), authority: authorityFromDIS(disMode),
+		},
 		label:       img.Label(),
 		used:        disk.ImageSize - img.FreeSectors()*disk.SectorSize,
 		files:       files,

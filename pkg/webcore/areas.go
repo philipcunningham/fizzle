@@ -247,7 +247,7 @@ func (s *Session) patchDump(build func(d *dumpState) ([]model.Patch, *Error)) (S
 		return s.Snapshot(), cerr
 	}
 	disVN := 0
-	if s.disMode {
+	if s.usesDIS() {
 		disVN = disVoiceCount(img)
 	}
 	out, outVN, cerr := patchDumpBytes(fzf, disVN, build)

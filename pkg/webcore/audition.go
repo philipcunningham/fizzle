@@ -76,7 +76,7 @@ func (s *Session) slotFZV(slot int) ([]byte, *Error) {
 	var slots []int
 	var uerr error
 	vn := 0
-	if s.disMode {
+	if s.usesDIS() {
 		vn = disVoiceCount(img)
 	}
 	if vn > 0 {

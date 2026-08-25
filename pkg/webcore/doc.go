@@ -88,7 +88,7 @@ func (s *Session) ExtractFile(name string) ([]byte, *Error) {
 	// re-derive rides out in the fizzle marker. A walk-mode extract
 	// clears any stale marker instead of shipping it.
 	if name == disk.FullDumpName {
-		if s.disMode {
+		if s.usesDIS() {
 			fzutil.StampVoiceCountMarker(data, disVoiceCount(img))
 		} else {
 			fzutil.ClearVoiceCountMarker(data)

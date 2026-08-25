@@ -203,7 +203,7 @@ func (s *Session) profileDocument() (*docProfile, *Error) {
 		return nil, cerr
 	}
 	disVN := 0
-	if s.disMode {
+	if s.usesDIS() {
 		disVN = disVoiceCount(img)
 	}
 	d, cerr := newDumpState(fzf, disVN)
