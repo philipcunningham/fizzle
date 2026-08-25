@@ -12,6 +12,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/bitconv"
 	"github.com/philipcunningham/fizzle/pkg/model"
+	"github.com/philipcunningham/fizzle/pkg/voicepatch"
 )
 
 // Voice rename errors let application boundaries provide stable user-facing
@@ -145,6 +146,24 @@ func (d *Document) RenameVoice(index int, name string) (OperationResult, error) 
 		return OperationResult{}, err
 	}
 	patches, err := d.withMarkerPatches([]model.Patch{patch})
+	if err != nil {
+		return OperationResult{}, err
+	}
+	return fixedOperation(patches), nil
+}
+
+// EditVoice resolves a batch of fixed-size voice-header edits against the
+// retained layout. Key-range edits fan out to every bank area that references
+// the slot, and marker authority is preserved in the same atomic operation.
+func (d *Document) EditVoice(index int, edits []voicepatch.Edit) (OperationResult, error) {
+	if index < 0 || index >= d.layout.VoiceCount() {
+		return OperationResult{}, &IndexError{Err: ErrVoiceIndexOutOfRange, Index: index, Limit: d.layout.VoiceCount()}
+	}
+	patches, err := voicepatch.ResolveFZFSlot(d.data, d.layout, index, edits)
+	if err != nil {
+		return OperationResult{}, err
+	}
+	patches, err = d.withMarkerPatches(patches)
 	if err != nil {
 		return OperationResult{}, err
 	}

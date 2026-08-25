@@ -11,6 +11,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
+	"github.com/philipcunningham/fizzle/pkg/voiceedit"
 )
 
 func TestStandaloneDocumentOwnsBytesAndLayout(t *testing.T) {
@@ -202,6 +203,76 @@ func TestRenameVoiceReturnsAtomicOperationAndRetainsMarkerAuthority(t *testing.T
 		reopened.Layout().VoiceCount() != doc.Layout().VoiceCount() {
 		t.Fatalf("reopened layout source/voices = %v/%d, want marker/%d",
 			reopened.Layout().VoiceCountSource(), reopened.Layout().VoiceCount(), doc.Layout().VoiceCount())
+	}
+}
+
+func TestEditVoiceReturnsAtomicOperationAndRetainsLayoutAuthority(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
+	doc, err := fzf.NewStandalone(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := doc.Bytes()
+	edits, err := voiceedit.BuildKeyRangePatch(41, voiceedit.Unchanged, voiceedit.Unchanged)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := doc.EditVoice(0, edits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsStructural() {
+		t.Fatal("EditVoice returned a structural operation")
+	}
+	if !bytes.Equal(doc.Bytes(), before) {
+		t.Fatal("EditVoice mutated its document")
+	}
+	stale := bytes.Clone(before)
+	stale[doc.Layout().VoiceStart()+disk.VoiceKeyLowOffset] ^= 0xff
+	staleBefore := bytes.Clone(stale)
+	if _, err := result.Apply(stale); err == nil {
+		t.Fatal("EditVoice accepted a stale voice header")
+	}
+	if !bytes.Equal(stale, staleBefore) {
+		t.Fatal("rejected EditVoice mutated the stale document")
+	}
+
+	updated, err := result.Apply(before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := updated[doc.Layout().VoiceStart()+disk.VoiceKeyLowOffset]; got != 41 {
+		t.Fatalf("voice key low = %d, want 41", got)
+	}
+	if got := updated[disk.BankKeyLowOffset]; got != 41 {
+		t.Fatalf("bank key low = %d, want 41", got)
+	}
+	reopened, err := fzf.NewStandalone(updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.Layout().VoiceCountSource() != fzutil.VoiceCountMarker {
+		t.Fatalf("authority = %v, want marker", reopened.Layout().VoiceCountSource())
+	}
+}
+
+func TestEditVoiceRejectsInvalidSlotAndEditWithoutMutation(t *testing.T) {
+	doc, err := fzf.NewDiskFile(fzfbuilder.MakeBanklessVoiceDump(t), fzfbuilder.BanklessDumpVoices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := doc.Bytes()
+	if _, err := doc.EditVoice(99, nil); !errors.Is(err, fzf.ErrVoiceIndexOutOfRange) {
+		t.Fatalf("bad slot error = %v, want ErrVoiceIndexOutOfRange", err)
+	}
+	bad := []voiceedit.Edit{{Offset: disk.VoiceHeaderUsed, Size: 1, Value: 1}}
+	if _, err := doc.EditVoice(0, bad); err == nil {
+		t.Fatal("EditVoice accepted an out-of-range edit")
+	}
+	if !bytes.Equal(doc.Bytes(), before) {
+		t.Fatal("rejected EditVoice mutated the document")
 	}
 }
 
