@@ -14,10 +14,8 @@ import (
 	"strings"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
-	"github.com/philipcunningham/fizzle/pkg/diskget"
-	"github.com/philipcunningham/fizzle/pkg/disklist"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/voiceedit"
@@ -108,12 +106,14 @@ type Snapshot struct {
 	CanRedo  bool          `json:"canRedo"`
 }
 
-// historyCap bounds the undo stack at the 100 deep R24 requires; Q-D
-// leaves open only the depth beyond that floor. Each entry is a whole
-// document, so the cap bounds memory too: at 1.25 MB an image, 100
-// entries is 125 MB for one disk and 250 MB for a split pair, the price
-// of holding images rather than diffs.
-const historyCap = 100
+// History has two bounds. R24 guarantees at least 100 whole-document states,
+// including split pairs. Beyond that floor, a byte budget prevents a long
+// editing session on one-disk documents from growing without limit.
+const (
+	historyMinDepth = 100
+	historyCap      = 200
+	historyByteCap  = 256 * 1024 * 1024
+)
 
 // documentState is the canonical state of one open document: a single image,
 // or two when a split instrument spans a pair, plus the parse provenance that
@@ -140,6 +140,8 @@ func authorityFromDIS(disMode bool) voiceCountAuthority {
 }
 
 func (s documentState) usesDIS() bool { return s.authority == voiceCountDIS }
+
+func (s documentState) sizeBytes() int { return len(s.image) + len(s.image2) }
 
 // Session holds one open disk set. Not safe for concurrent use; the
 // worker serialises calls.
@@ -271,7 +273,7 @@ func documentDISMode(img *disk.Image) bool {
 	if vn == 0 {
 		return false
 	}
-	fzf, err := diskget.FromImage(img, disk.FullDumpName)
+	fzf, err := diskfs.Extract(img, disk.FullDumpName)
 	if err != nil {
 		return false
 	}
@@ -347,7 +349,11 @@ func (s *Session) ImportWAV(filename string, wavData []byte, rate uint32, channe
 	if rerr != nil {
 		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: %v", rerr)
 	}
-	if err := diskadd.AddToImage(img, voice, 0); err != nil {
+	file, err := diskfs.Voice(voice, 0)
+	if err != nil {
+		return s.Snapshot(), addError(err)
+	}
+	if err := diskfs.Add(img, voice, file); err != nil {
 		return s.Snapshot(), addError(err)
 	}
 	return s.adopt(img)
@@ -482,7 +488,7 @@ func (s *Session) patchVoice(fileName string, build func([]byte) ([]voiceedit.Ed
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	voiceBytes, gerr := diskget.FromImage(img, fileName)
+	voiceBytes, gerr := diskfs.Extract(img, fileName)
 	if gerr != nil {
 		return s.Snapshot(), errf(codeNotFound, "%v", gerr)
 	}
@@ -497,7 +503,11 @@ func (s *Session) patchVoice(fileName string, build func([]byte) ([]voiceedit.Ed
 	if err := voiceedit.ApplyToFZVBytes(voiceBytes, patches); err != nil {
 		return s.Snapshot(), errf("not-a-voice", "%v", err)
 	}
-	if err := diskadd.ReplaceInMemory(img, fileName, voiceBytes, 0); err != nil {
+	file, err := diskfs.Voice(voiceBytes, 0)
+	if err != nil {
+		return s.Snapshot(), errf("replace-failed", "%v", err)
+	}
+	if err := diskfs.Replace(img, fileName, voiceBytes, file); err != nil {
 		return s.Snapshot(), errf("replace-failed", "%v", err)
 	}
 	return s.adopt(img)
@@ -505,9 +515,18 @@ func (s *Session) patchVoice(fileName string, build func([]byte) ([]voiceedit.Ed
 
 func (s *Session) pushHistory(doc documentState) {
 	s.past = append(s.past, doc)
-	if len(s.past) > historyCap {
+	for len(s.past) > historyMinDepth && (len(s.past) > historyCap || historyBytes(s.past) > historyByteCap) {
+		s.past[0] = documentState{}
 		s.past = s.past[1:]
 	}
+}
+
+func historyBytes(states []documentState) int {
+	total := 0
+	for _, state := range states {
+		total += state.sizeBytes()
+	}
+	return total
 }
 
 // BeginGesture opens an undo bracket: edits until CommitGesture
@@ -738,17 +757,21 @@ func prepareDocument(img *disk.Image, img2 []byte, disMode bool) (preparedDocume
 			return preparedDocument{}, errf("invalid-image", "disk 2 unreadable: %v", err)
 		}
 	}
-	listing, err := disklist.ParseImage(img)
+	listing, err := diskfs.List(img)
 	if err != nil {
 		return preparedDocument{}, errf("invalid-image", "not a readable FZ image: %v", err)
 	}
 	files := make([]FileSnapshot, 0, len(listing.Entries))
 	for _, e := range listing.Entries {
-		f := FileSnapshot{Name: e.Name, Type: typeCode(e.TypeName), SizeBytes: e.Size}
+		typeName := e.Type.String()
+		if e.Corrupt {
+			typeName = "(corrupt)"
+		}
+		f := FileSnapshot{Name: e.Name, Type: typeCode(typeName), SizeBytes: e.Size}
 		if f.Type == "voice" {
 			// A voice that fails to parse simply carries no params;
 			// the listing itself already validated the container.
-			if data, err := diskget.FromImage(img, e.Name); err == nil {
+			if data, err := diskfs.Extract(img, e.Name); err == nil {
 				if vp, err := fzvinfo.ParseBytes(data); err == nil {
 					f.Params = voiceParams(vp, data)
 					f.Voice = voiceDetailFrom(vp)
@@ -767,7 +790,7 @@ func prepareDocument(img *disk.Image, img2 []byte, disMode bool) (preparedDocume
 	}
 	for _, f := range files {
 		if f.Name == disk.FullDumpName && f.Type == "full" {
-			if data, err := diskget.FromImage(img, f.Name); err == nil {
+			if data, err := diskfs.Extract(img, f.Name); err == nil {
 				if parsed, err := instrumentFrom(f.Name, data, vn); err == nil {
 					inst = parsed
 				}

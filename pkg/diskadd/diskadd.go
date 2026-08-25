@@ -11,10 +11,10 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/fileutil"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
-	"github.com/philipcunningham/fizzle/pkg/render"
 	"github.com/rs/zerolog/log"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 )
 
 // AddBytes copies fileData onto the disk image at imagePath with explicit
@@ -123,62 +123,10 @@ func writeToImage(imagePath string, fileData []byte, name [disk.LabelSize]byte, 
 // The voice-count marker is strictly standalone: its count lands in the DIS
 // tail, and the record is scrubbed from a copy before touching the media.
 func addToImage(img *disk.Image, fileData []byte, name [disk.LabelSize]byte, fileType disk.FileType, diskNum uint8, nbank, nvoice, nwave int) error {
-	if fileType == disk.TypeFullDump {
-		scrubbed := append([]byte(nil), fileData...)
-		fzutil.ClearVoiceCountMarker(scrubbed)
-		fileData = scrubbed
-	}
-	entries, err := img.Directory()
-	if err != nil {
-		return fmt.Errorf("diskadd: reading directory: %w", err)
-	}
-	newName := disk.TrimPadded(name[:])
-	for _, e := range entries {
-		if strings.EqualFold(e.NameString(), newName) {
-			return fmt.Errorf("diskadd: file %q already exists on disk (rename with 'fzv edit --name' before adding, or create a new disk)", newName)
-		}
-	}
-
-	// Reserve the directory slot before allocating any sectors or mutating
-	// the CAT, so ErrDirFull leaves the in-memory image untouched. After
-	// AllocateSectors and SetSector, the CAT and data sectors would already
-	// be dirty with no directory entry to point at them.
-	dirOff, err := img.NextFreeDirSlot()
+	err := diskfs.Add(img, fileData, diskfs.File{Name: name, Type: fileType, DiskNumber: diskNum, Banks: nbank, Voices: nvoice, Waves: nwave})
 	if err != nil {
 		return fmt.Errorf("diskadd: %w", err)
 	}
-
-	dataSectorCount := disk.SectorsNeeded(len(fileData))
-
-	allocated, err := img.AllocateSectors(1 + dataSectorCount)
-	if err != nil {
-		return fmt.Errorf("diskadd: not enough space on disk (file is %s, usable disk capacity is %s): %w", render.FormatBytes(len(fileData)), render.FormatBytes(disk.UsableDataSize), err)
-	}
-	disSectorIdx := allocated[0]
-	dataSectors := allocated[1:]
-
-	dis := buildDIS(disSectorIdx, dataSectors, nbank, nvoice, nwave)
-	disBytes := disk.EncodeDisSector(dis)
-	if err := img.SetSector(disSectorIdx, disBytes); err != nil {
-		return fmt.Errorf("diskadd: writing sector: %w", err)
-	}
-
-	padded := make([]byte, dataSectorCount*disk.SectorSize)
-	copy(padded, fileData)
-	for i, sec := range dataSectors {
-		b := padded[i*disk.SectorSize : (i+1)*disk.SectorSize]
-		if err := img.SetSector(sec, b); err != nil {
-			return fmt.Errorf("diskadd: writing sector: %w", err)
-		}
-	}
-
-	entry := disk.DirEntry{
-		Name:      name,
-		FileType:  fileType,
-		DiskNum:   diskNum,
-		DisSector: uint16(disSectorIdx), //nolint:gosec // G115: sector index < 1280, fits uint16
-	}
-	copy(img.Bytes()[dirOff:dirOff+disk.DirEntrySize], disk.EncodeDirEntry(entry))
 	return nil
 }
 

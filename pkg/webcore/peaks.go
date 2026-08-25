@@ -1,7 +1,7 @@
 package webcore
 
 import (
-	"github.com/philipcunningham/fizzle/pkg/diskget"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/voiceextract"
 )
 
@@ -25,7 +25,7 @@ func (s *Session) Peaks(fileName string, startFrame, endFrame, buckets int) ([]i
 	if ierr != nil {
 		return nil, ierr
 	}
-	voiceBytes, gerr := diskget.FromImage(img, fileName)
+	voiceBytes, gerr := diskfs.Extract(img, fileName)
 	if gerr != nil {
 		return nil, errf(codeNotFound, "%v", gerr)
 	}
