@@ -5,11 +5,11 @@ package diskget
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/rs/zerolog/log"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/fileutil"
 )
 
@@ -44,42 +44,7 @@ func Get(imagePath, name, outputPath string) error {
 // FromImage extracts the named file's bytes from an in-memory disk
 // image: the same result as Get with no filesystem access.
 func FromImage(img *disk.Image, name string) ([]byte, error) {
-	entries, err := img.Directory()
-	if err != nil {
-		return nil, fmt.Errorf("diskget: %w", err)
-	}
-
-	var match *disk.DirEntry
-	for i := range entries {
-		// FZ labels are ASCII-only, so strings.EqualFold is sufficient.
-		if strings.EqualFold(entries[i].NameString(), name) {
-			match = &entries[i]
-			break
-		}
-	}
-	if match == nil {
-		return nil, fmt.Errorf("diskget: %q: %w", name, disk.ErrNotFound)
-	}
-
-	// Directory() never returns an out-of-range DIS pointer, so no
-	// range check remains here.
-	disSec, err := img.SectorRef(int(match.DisSector))
-	if err != nil {
-		return nil, fmt.Errorf("diskget: reading DIS sector: %w", err)
-	}
-	dis, err := disk.DecodeDisSector(disSec)
-	if err != nil {
-		return nil, fmt.Errorf("diskget: decoding DIS sector: %w", err)
-	}
-	if len(dis.Extents) == 0 {
-		return nil, fmt.Errorf("diskget: %q has no extents", name)
-	}
-
-	// FZ disks, whether written by the sampler or by diskadd.buildDIS, put
-	// the DIS sector itself at ss0 of the first extent, with the payload
-	// starting at ss0+1. On a disk that stores the DIS outside the first
-	// extent, extractFileBytes copies every extent byte and skips nothing.
-	raw, err := extractFileBytes(img, dis, int(match.DisSector))
+	raw, err := diskfs.Extract(img, name)
 	if err != nil {
 		return nil, fmt.Errorf("diskget: %w", err)
 	}

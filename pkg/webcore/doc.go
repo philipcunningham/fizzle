@@ -5,8 +5,7 @@ import (
 	"encoding/binary"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/diskadd"
-	"github.com/philipcunningham/fizzle/pkg/diskget"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/voiceextract"
@@ -78,7 +77,7 @@ func (s *Session) ExtractFile(name string) ([]byte, *Error) {
 		}
 		data = stitched
 	} else {
-		got, gerr := diskget.FromImage(img, name)
+		got, gerr := diskfs.Extract(img, name)
 		if gerr != nil {
 			return nil, errf(codeNotFound, "%v", gerr)
 		}
@@ -161,7 +160,12 @@ func (s *Session) NewInstrument(name string) (Snapshot, *Error) {
 	if hasFile(img, disk.FullDumpName) {
 		return s.Snapshot(), errf("instrument-exists", "the disk already has a full dump")
 	}
-	if err := diskadd.AddToImage(img, emptyInstrumentDump(name), 0); err != nil {
+	dump := emptyInstrumentDump(name)
+	file, err := diskfs.FullDump(dump, 0, 0)
+	if err != nil {
+		return s.Snapshot(), addError(err)
+	}
+	if err := diskfs.Add(img, dump, file); err != nil {
 		return s.Snapshot(), addError(err)
 	}
 	return s.adoptPair(img, s.image2, modeDerive)

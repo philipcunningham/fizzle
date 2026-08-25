@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"testing"
+
+	"github.com/philipcunningham/fizzle/pkg/disk"
 )
 
 func imageHash(t *testing.T, s *Session) [32]byte {
@@ -165,6 +167,20 @@ func TestHistoryIsCapped(t *testing.T) {
 	}
 	if undos != historyCap {
 		t.Fatalf("undo depth = %d, want the cap %d", undos, historyCap)
+	}
+}
+
+func TestHistoryByteBudgetPreservesRequiredDepth(t *testing.T) {
+	state := documentState{image: make([]byte, disk.ImageSize), image2: make([]byte, disk.ImageSize)}
+	s := &Session{}
+	for range historyCap {
+		s.pushHistory(state)
+	}
+	if got := len(s.past); got < historyMinDepth || got >= historyCap {
+		t.Fatalf("split-pair history depth = %d, want budgeted depth in [%d,%d)", got, historyMinDepth, historyCap)
+	}
+	if got := historyBytes(s.past); got > historyByteCap {
+		t.Fatalf("budgeted history = %d bytes, want at most %d", got, historyByteCap)
 	}
 }
 

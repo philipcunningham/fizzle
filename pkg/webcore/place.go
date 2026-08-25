@@ -5,8 +5,8 @@ import (
 	"errors"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
@@ -135,7 +135,11 @@ func (s *Session) AddBank(data []byte, slot int) (Snapshot, *Error) {
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	if err := diskadd.AddToImage(img, data, 0); err != nil {
+	file, err := diskfs.FullDump(data, 0, 0)
+	if err != nil {
+		return s.Snapshot(), addError(err)
+	}
+	if err := diskfs.Add(img, data, file); err != nil {
 		return s.Snapshot(), addError(err)
 	}
 	return s.adoptPair(img, s.image2, modeDerive)

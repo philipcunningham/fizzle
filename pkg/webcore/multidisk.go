@@ -6,9 +6,8 @@ import (
 	"errors"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
-	"github.com/philipcunningham/fizzle/pkg/diskget"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 )
@@ -48,7 +47,7 @@ func (s *Session) OpenImagePair(a, b []byte) (Snapshot, *Error) {
 
 	// The stitched dump must parse as one instrument; a mismatched pair
 	// fails here rather than corrupting later edits.
-	fzf, gerr := diskget.FromImage(img1, disk.FullDumpName)
+	fzf, gerr := diskfs.Extract(img1, disk.FullDumpName)
 	if gerr != nil {
 		return s.Snapshot(), errf(codePairMismatch, "%v", gerr)
 	}
@@ -62,7 +61,7 @@ func (s *Session) OpenImagePair(a, b []byte) (Snapshot, *Error) {
 		return s.Snapshot(), errf(codePairMismatch,
 			"disk 1 holds a complete instrument and needs no continuation, so these are not disks 1 and 2 of one set; open it on its own")
 	}
-	cont, gerr := diskget.FromImage(img2, disk.FullDumpName)
+	cont, gerr := diskfs.Extract(img2, disk.FullDumpName)
 	if gerr != nil {
 		return s.Snapshot(), errf(codePairMismatch, "%v", gerr)
 	}
@@ -180,7 +179,7 @@ func (s *Session) stitchedDump(img *disk.Image) ([]byte, *Error) {
 // split document it appends disk 2's audio continuation, the same stitch the
 // CLI's voice unpack performs on a pair.
 func stitchedDumpPair(img *disk.Image, image2 []byte) ([]byte, *Error) {
-	fzf, gerr := diskget.FromImage(img, disk.FullDumpName)
+	fzf, gerr := diskfs.Extract(img, disk.FullDumpName)
 	if gerr != nil {
 		return nil, errf(codeNotFound, "%v", gerr)
 	}
@@ -191,7 +190,7 @@ func stitchedDumpPair(img *disk.Image, image2 []byte) ([]byte, *Error) {
 	if rerr != nil {
 		return nil, errf("invalid-image", "disk 2 unreadable: %v", rerr)
 	}
-	cont, gerr := diskget.FromImage(img2, disk.FullDumpName)
+	cont, gerr := diskfs.Extract(img2, disk.FullDumpName)
 	if gerr != nil {
 		return nil, errf(codeNotFound, "disk 2: %v", gerr)
 	}
@@ -261,38 +260,23 @@ func freshImage(label string) (*disk.Image, *Error) {
 // spans both disks); otherwise vn (when non-zero) or content
 // detection supplies the voice count.
 func putDump(img *disk.Image, data []byte, diskNum uint8, split *voicebuild.MultiDiskResult, vn int) *Error {
-	if hasFile(img, disk.FullDumpName) {
-		if split == nil {
-			var err error
-			if vn > 0 {
-				err = diskadd.ReplaceInMemoryWithVoiceCount(img, disk.FullDumpName, data, diskNum, vn)
-			} else {
-				err = diskadd.ReplaceInMemory(img, disk.FullDumpName, data, diskNum)
-			}
-			if err != nil {
-				return addError(err)
-			}
-			return nil
-		}
-		if err := img.RemoveFile(disk.FullDumpName); err != nil {
-			return errf("replace-failed", "%v", err)
-		}
-	}
+	var file diskfs.File
+	var err error
 	if split == nil {
-		var err error
-		if vn > 0 {
-			err = diskadd.AddToImageWithVoiceCount(img, data, diskNum, vn)
-		} else {
-			err = diskadd.AddToImage(img, data, diskNum)
-		}
-		if err != nil {
-			return addError(err)
-		}
-		return nil
+		file, err = diskfs.FullDump(data, diskNum, vn)
+	} else {
+		file = diskfs.File{Name: disk.PadLabel(disk.FullDumpName), Type: disk.TypeFullDump,
+			DiskNumber: diskNum, Banks: split.BankCount, Voices: split.VoiceCount, Waves: split.WaveCount}
 	}
-	name := disk.PadLabel(disk.FullDumpName)
-	if err := diskadd.AddBytesToImage(img, data, name, disk.TypeFullDump, diskNum,
-		split.BankCount, split.VoiceCount, split.WaveCount); err != nil {
+	if err != nil {
+		return addError(err)
+	}
+	if hasFile(img, disk.FullDumpName) {
+		err = diskfs.Replace(img, disk.FullDumpName, data, file)
+	} else {
+		err = diskfs.Add(img, data, file)
+	}
+	if err != nil {
 		return addError(err)
 	}
 	return nil
@@ -373,7 +357,7 @@ func missingDiskOf(img *disk.Image, img2 []byte) int {
 	if num == 1 {
 		return 1
 	}
-	fzf, err := diskget.FromImage(img, disk.FullDumpName)
+	fzf, err := diskfs.Extract(img, disk.FullDumpName)
 	if err == nil && isSplitDisk1(fzf) {
 		return 2
 	}
