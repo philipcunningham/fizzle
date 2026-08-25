@@ -23,10 +23,6 @@ const (
 // placeholder area is seeded with the same note.
 const defaultRootKey = 60
 
-// noFreedSlot marks a voice-area change with no slot of its own to give
-// back first.
-const noFreedSlot = -1
-
 // codeVoiceWalk refuses a change that a reader would walk differently
 // from the way the operation built it, which is the same thing as
 // saying the audio would move.
@@ -152,52 +148,6 @@ func bstepSum(fzf []byte, nBanks int) int {
 		total += bankBstep(fzf, b)
 	}
 	return total
-}
-
-// ensureVoiceSlots brings the voice area back in step with the banks
-// whenever an operation moves a bstep (see bstepSum). It is the one
-// place that does so.
-//
-// delta is the change to the summed bstep values that d.fzf does not
-// carry yet, so an operation that raises a bstep through a patch
-// passes 1 and one that has already written its change passes 0. An
-// operation that lowers a bstep writes first and passes 0 on purpose:
-// which slots are still played is read off the areas that survive.
-// freed names the slot the caller's own area gave up, or noFreedSlot.
-//
-// Where the summed bsteps already run above the walked count (hardware
-// dumps share voices through vp[], so the bound stops nothing and the
-// walk ends on the audio's own bytes) one more area changes neither
-// and there is nothing to do.
-func ensureVoiceSlots(d *dumpState, delta, freed int) *Error {
-	return resizeVoiceArea(d, delta, freed, 0)
-}
-
-// resizeVoiceArea makes the voice area hold exactly target slots,
-// moving the voice and audio boundary to suit. Wave pointers are
-// sample addresses into the audio area, so the audio moving with its
-// own start leaves every voice playing the same samples.
-func resizeVoiceArea(d *dumpState, delta, freed, target int) *Error {
-	params := container.VoiceAreaResizeParams{
-		BankCount: d.header.NBankSectors, VoiceCount: d.header.NVoice,
-		VoiceStart: d.header.VoiceAreaStart, AudioStart: d.audioStart,
-		WalkBound: d.walkBound, BStepDelta: delta, FreedSlot: freed,
-		DiskMode: d.disVN > 0,
-	}
-	var (
-		resized container.VoiceAreaResize
-		err     error
-	)
-	if target > 0 {
-		resized, err = container.ResizeVoiceAreaToOwned(d.fzf, params, target)
-	} else {
-		resized, err = container.ResizeVoiceAreaOwned(d.fzf, params)
-	}
-	if err != nil {
-		return voiceAreaBoundaryError(err)
-	}
-	d.fzf, d.header.NVoice, d.audioStart = resized.Data, resized.VoiceCount, resized.AudioStart
-	return nil
 }
 
 func voiceAreaBoundaryError(err error) *Error {

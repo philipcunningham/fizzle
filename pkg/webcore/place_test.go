@@ -416,10 +416,10 @@ func TestAddBankAtSlotZeroKeepsTheTotalWaveMarker(t *testing.T) {
 	binary.LittleEndian.PutUint32(fzf[disk.BankTotalWaveOffset:], marker)
 
 	out, _, cerr := patchDumpBytes(bytes.Clone(fzf), 0, func(d *dumpState) ([]model.Patch, *Error) {
-		return addBankPatches(d, fzbPlaying(t, 0), 0)
+		return addBankDocumentOperation(d, fzbPlaying(t, 0), 0)
 	})
 	if cerr != nil {
-		t.Fatalf("addBankPatches: %v", cerr)
+		t.Fatalf("addBankDocumentOperation: %v", cerr)
 	}
 	if got := binary.LittleEndian.Uint32(out[disk.BankTotalWaveOffset:]); got != marker {
 		t.Errorf("total wave marker = %d, want the instrument's %d", got, marker)
