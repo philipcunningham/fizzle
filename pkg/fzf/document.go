@@ -27,6 +27,8 @@ var (
 	ErrAreaIndexOutOfRange  = errors.New("fzf: area index out of range")
 	ErrBankFull             = errors.New("fzf: bank is full")
 	ErrLastArea             = errors.New("fzf: bank must retain one area")
+	ErrAreaVoiceOutOfRange  = errors.New("fzf: area voice is out of range")
+	ErrVoiceHeaderBounds    = errors.New("fzf: voice header is out of bounds")
 )
 
 // NameError identifies the invalid character in a printable-ASCII name.
@@ -57,6 +59,18 @@ func (e *IndexError) Error() string {
 
 // Unwrap supports errors.Is against the exported index sentinel.
 func (e *IndexError) Unwrap() error { return e.Err }
+
+// AreaVoiceError identifies a bank area whose voice pointer is outside the
+// resolved document voice count.
+type AreaVoiceError struct {
+	Area, Voice, VoiceCount int
+}
+
+func (e *AreaVoiceError) Error() string {
+	return fmt.Sprintf("%v: area %d points to voice %d of %d", ErrAreaVoiceOutOfRange, e.Area, e.Voice, e.VoiceCount)
+}
+
+func (e *AreaVoiceError) Unwrap() error { return ErrAreaVoiceOutOfRange }
 
 // Document owns an FZF dump and the layout resolved for its source context.
 // Construction copies the input, and Bytes returns a fresh copy, so callers
@@ -256,6 +270,51 @@ func (d *Document) DeleteArea(bankIndex, areaIndex int) (OperationResult, error)
 	resized, err := container.ResizeVoiceAreaOwned(working, d.resizeParams(0, freed))
 	if err != nil {
 		return OperationResult{}, err
+	}
+	d.stampMarker(resized.Data, resized.VoiceCount)
+	return structuralAreaOperation(d.data, resized.Data, resized.VoiceCount, resized.AudioStart), nil
+}
+
+// DuplicateArea returns a structural operation that appends a copy of one
+// area and its voice header. The new slot shares the source voice's audio.
+func (d *Document) DuplicateArea(bankIndex, areaIndex int) (OperationResult, error) {
+	bank, err := d.Bank(bankIndex)
+	if err != nil {
+		return OperationResult{}, &IndexError{Err: ErrBankIndexOutOfRange, Index: bankIndex, Limit: d.layout.BankCount()}
+	}
+	if areaIndex < 0 || areaIndex >= bank.AreaCount() {
+		return OperationResult{}, &IndexError{Err: ErrAreaIndexOutOfRange, Index: areaIndex, Limit: bank.AreaCount()}
+	}
+	if bank.AreaCount() >= disk.MaxVoices {
+		return OperationResult{}, fmt.Errorf("%w: bank %d", ErrBankFull, bankIndex)
+	}
+	sourceSlot, err := bank.VoiceSlot(areaIndex)
+	if err != nil {
+		base := bankIndex*disk.SectorSize + disk.BankVoiceNumOffset + areaIndex*disk.VPEntrySize
+		voice := int(binary.LittleEndian.Uint16(d.data[base : base+disk.VPEntrySize]))
+		return OperationResult{}, &AreaVoiceError{Area: areaIndex, Voice: voice, VoiceCount: d.layout.VoiceCount()}
+	}
+	sourceOffset := disk.VoiceSlotOffset(d.layout.VoiceStart(), sourceSlot)
+	if sourceOffset+disk.VoicePackSize > len(d.data) {
+		return OperationResult{}, fmt.Errorf("%w: slot %d", ErrVoiceHeaderBounds, sourceSlot)
+	}
+	sourceHeader := bytes.Clone(d.data[sourceOffset : sourceOffset+disk.VoicePackSize])
+	newSlot := d.layout.VoiceCount()
+	working := bytes.Clone(d.data)
+	resized, err := container.ResizeVoiceAreaToOwned(working, d.resizeParams(0, -1), newSlot+1)
+	if err != nil {
+		return OperationResult{}, err
+	}
+	patches := container.DuplicateAreaPatches(resized.Data, container.DuplicateAreaParams{
+		Base:       bankIndex * disk.SectorSize,
+		NewOff:     disk.VoiceSlotOffset(d.layout.VoiceStart(), newSlot),
+		SrcAreaIdx: areaIndex,
+		Bstep:      bank.AreaCount(),
+		NewSlot:    newSlot,
+		SrcHeader:  sourceHeader,
+	})
+	if err := model.Apply(resized.Data, patches); err != nil {
+		return OperationResult{}, fmt.Errorf("fzf: duplicating area: %w", err)
 	}
 	d.stampMarker(resized.Data, resized.VoiceCount)
 	return structuralAreaOperation(d.data, resized.Data, resized.VoiceCount, resized.AudioStart), nil

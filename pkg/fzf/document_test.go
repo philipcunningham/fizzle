@@ -2,6 +2,7 @@ package fzf_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"testing"
 
@@ -305,7 +306,7 @@ func TestDiskAreaAddRetainsExplicitVoiceGeometry(t *testing.T) {
 }
 
 func TestAddThenDeleteAreaUsesStructuralReplacementAndPreservesAudio(t *testing.T) {
-	data, _ := fzfbuilder.MakeTestFZF(t, []string{"ONE", "TWO", "THREE", "FOUR"})
+	data, _ := fzfbuilder.MakeTestFZF(t, []string{"ALPHA", "BETA", "GAMMA", "DELTA"})
 	doc, err := fzf.NewStandalone(data)
 	if err != nil {
 		t.Fatal(err)
@@ -358,5 +359,89 @@ func TestAddThenDeleteAreaUsesStructuralReplacementAndPreservesAudio(t *testing.
 	}
 	if !bytes.Equal(restoredBytes[restored.Layout().AudioStart():], originalAudio) {
 		t.Fatal("area delete changed audio bytes")
+	}
+}
+
+func TestDuplicateAreaClonesVoiceAndPreservesAudioAcrossSectorGrowth(t *testing.T) {
+	data, _ := fzfbuilder.MakeTestFZF(t, []string{"ONE", "TWO", "THREE", "FOUR"})
+	doc, err := fzf.NewStandalone(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalAudio := bytes.Clone(data[doc.Layout().AudioStart():])
+	sourceOffset := disk.VoiceSlotOffset(doc.Layout().VoiceStart(), 0)
+	sourceHeader := bytes.Clone(data[sourceOffset : sourceOffset+disk.VoicePackSize])
+
+	result, err := doc.DuplicateArea(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsStructural() {
+		t.Fatal("duplicate did not return a structural operation")
+	}
+	updated, err := result.Apply(doc.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := fzf.NewStandalone(updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.Layout().VoiceCount() != 5 {
+		t.Fatalf("voice count = %d, want 5", reopened.Layout().VoiceCount())
+	}
+	bank, _ := reopened.Bank(0)
+	if bank.AreaCount() != 5 {
+		t.Fatalf("area count = %d, want 5", bank.AreaCount())
+	}
+	newSlot, err := bank.VoiceSlot(4)
+	if err != nil || newSlot != 4 {
+		t.Fatalf("new area voice = %d, %v; want slot 4", newSlot, err)
+	}
+	cloneOffset := disk.VoiceSlotOffset(reopened.Layout().VoiceStart(), newSlot)
+	if !bytes.Equal(updated[cloneOffset:cloneOffset+disk.VoicePackSize], sourceHeader) {
+		t.Fatal("new voice slot differs from the source header")
+	}
+	if !bytes.Equal(updated[reopened.Layout().AudioStart():], originalAudio) {
+		t.Fatal("duplicate changed audio bytes")
+	}
+}
+
+func TestDuplicateAreaRestampsMarkerAuthority(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
+	doc, err := fzf.NewStandalone(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := doc.DuplicateArea(1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := result.Apply(doc.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := fzf.NewStandalone(updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.Layout().VoiceCountSource() != fzutil.VoiceCountMarker ||
+		reopened.Layout().VoiceCount() != fzfbuilder.BanklessDumpVoices+1 {
+		t.Fatalf("source/count = %v/%d, want marker/%d", reopened.Layout().VoiceCountSource(), reopened.Layout().VoiceCount(), fzfbuilder.BanklessDumpVoices+1)
+	}
+}
+
+func TestDuplicateAreaReturnsTypedInvalidVoiceReference(t *testing.T) {
+	data, _ := fzfbuilder.MakeTestFZF(t, []string{"BADREF", "SECOND"})
+	binary.LittleEndian.PutUint16(data[disk.BankVoiceNumOffset:], 99)
+	doc, err := fzf.NewStandalone(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = doc.DuplicateArea(0, 0)
+	var voiceErr *fzf.AreaVoiceError
+	if !errors.As(err, &voiceErr) || voiceErr.Area != 0 || voiceErr.Voice != 99 || voiceErr.VoiceCount != 2 {
+		t.Fatalf("voice reference error = %#v (%v)", voiceErr, err)
 	}
 }
