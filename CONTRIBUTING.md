@@ -19,18 +19,19 @@ If your issue includes a patch, please make sure that:
 
 ## Prerequisites
 
-- **Go 1.26+**: https://go.dev/dl/
-- **golangci-lint**: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest` (or see https://golangci-lint.run/welcome/install/)
+- **Go 1.26.5**: https://go.dev/dl/
+- **golangci-lint 2.12.2**: installed by `make tools`
 - **make**: included on macOS and Linux; on Windows, use `make` from Git for Windows or run the Go commands directly
-- **Node 22+ and npm**: https://nodejs.org. `make check` builds and checks the browser editor, so run `npm install` in `web/app` once before your first run
-- **vale**: `brew install vale`. `make check` lints the markdown prose
+- **Node 22 and npm**: https://nodejs.org. `make check` builds and checks the browser editor, so run `npm install` in `web/app` once before your first run
+- **vale 3.15.1**: https://vale.sh. `make check` lints the markdown prose
 
 ## Building
 
 ```sh
 git clone https://github.com/philipcunningham/fizzle
 cd fizzle
-make tools   # one-off: installs go-licenses at a pinned version
+make tools        # one-off: installs pinned Go tools
+make tools-check  # verifies the complete local toolchain
 make build
 ```
 
@@ -58,6 +59,11 @@ make check
 
 Formatting, vet, lint, unit tests, CLI integration tests, fuzz seed
 validation, and the browser checks run in sequence.
+
+For a shorter, non-mutating development gate, run `make check-fast`.
+`make check-full` is the explicit name of the complete gate, and `make
+check` aliases it. Run `make fmt` only when you intend to rewrite source;
+both validation tiers use `make fmt-check`.
 
 Run tests with race detection:
 

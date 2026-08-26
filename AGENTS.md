@@ -2,7 +2,7 @@
 
 ## Validation
 
-Run the full check suite before submitting changes:
+Run the full, non-mutating check suite before submitting changes:
 
 ```sh
 make check
@@ -14,7 +14,7 @@ seed validation, and the browser checks below.
 `make check` also runs the browser editor's three targets:
 
 - `make wasm` builds the browser core into the front end's assets
-- `make wasm-check` builds the browser target, catching a broken `js/wasm` build
+- `make wasm-check` builds the real browser module and the dependencies that ship in it
 - `make web-check` runs the front end chain: format, lint, types, unit tests, build, and the payload budget
 
 Two front end gates sit outside `make check`. Run them from `web/app`:
@@ -31,7 +31,8 @@ needs running by hand before a UI change ships.
 - `make lint` runs `lint-go` and `lint-docs`
 - `make lint-go` runs golangci-lint
 - `make lint-docs` runs vale over markdown (install vale with `brew install vale`)
-- `make fmt` formats code
+- `make fmt-check` checks formatting without changing files
+- `make fmt` formats code when explicitly requested
 - `make vet` runs go vet
 - `make integration-test` runs CLI integration tests (builds binary automatically)
 - `make build` builds the binary (regenerates `internal/licenses/THIRD_PARTY_LICENSES.txt` first, with `-tags release` so the attribution is embedded)
@@ -51,7 +52,7 @@ needs running by hand before a UI change ships.
 - `pkg/container/` contains pure FZF/disk container byte surgery: compaction, bank grow, and area swap/delete/duplicate patches. Functions take container bytes and return new bytes or `model.Patch` lists, unit-testable without a UI.
 - `pkg/model/` holds `Patch`, the byte-range mutation type `pkg/container` produces and `pkg/webcore` applies.
 - `pkg/webcore/` is the session facade the browser talks to. It owns the open document, validation, capacity, undo history, and the parameter schema the voice editor renders its controls from. A document is one disk image, or the pair a split instrument spans. Every mutating call is atomic: it returns either a fresh snapshot or a structured error envelope carrying a stable machine code. Canonical state lives here, never in the layers above.
-- `web/wasm/` is the `js/wasm` entry point that exposes the facade to JavaScript. `module/` registers `fizzleCore` on the JS global and wraps each result in an `{ok, value}` or `{ok, error}` envelope. A Go panic is recovered into an envelope rather than crossing the boundary raw. `surface_js.go` pins the import surface the browser build needs, so `make wasm-check` catches a broken `js/wasm` build.
+- `web/wasm/` is the `js/wasm` entry point that exposes the facade to JavaScript. `module/` registers `fizzleCore` on the JS global and wraps each result in an `{ok, value}` or `{ok, error}` envelope. A Go panic is recovered into an envelope rather than crossing the boundary raw. `make wasm-check` compiles this real module and its shipping dependency graph.
 - `web/app/` is the React and TypeScript front end. `src/boundary/contract.ts` is the typed boundary both sides agree on. `src/core/worker.ts` runs the core in a Web Worker and serialises calls onto it. `src/core/fake.ts` is the hermetic fake the unit tests drive, and `src/shell/` holds the shell and its view state. Screens, controls, and dialogs live in `src/screens/`, `src/ui/`, and `src/dialogs/`. The front end owns view state only; no FZ format logic lives outside the core.
 - `pkg/fzf*/` contains full dump operations (info, midi, output, effects). Note: `fzf build` dispatches to `pkg/voicebuild/`, `fzf unpack` to `pkg/voiceunpack/`, and `fzf edit` to `pkg/voiceedit/`.
 - `pkg/fzb*/` contains bank dump operations (info)
