@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Core, CoreError, CoreResult, Snapshot } from "../boundary/contract";
 import { isCoreCrash } from "../boundary/contract";
 import { queryKeys } from "../queries/client";
@@ -22,6 +22,12 @@ export function useDocumentSession(
   const [fatal, setFatal] = useState<CoreError | null>(null);
   const [memoryBytes, setMemoryBytes] = useState(MEMORY_CHOICES[0]?.bytes ?? 1024 * 1024);
   const queryClient = useQueryClient();
+  // Shell messages are render callbacks, not session dependencies. Keeping the
+  // latest callbacks in refs preserves boot-once behavior for inline functions.
+  const onFailureRef = useRef(onFailure);
+  const onSuccessRef = useRef(onSuccess);
+  onFailureRef.current = onFailure;
+  onSuccessRef.current = onSuccess;
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("debug") === "1") {
@@ -36,23 +42,20 @@ export function useDocumentSession(
   });
   const schemaQuery = useQuery({ queryKey: queryKeys.schema(), queryFn: () => core.schema() });
 
-  const report = useCallback(
-    (error: CoreError) => {
-      if (isCoreCrash(error)) setFatal(error);
-      else onFailure(error.message);
-    },
-    [onFailure],
-  );
+  const report = useCallback((error: CoreError) => {
+    if (isCoreCrash(error)) setFatal(error);
+    else onFailureRef.current(error.message);
+  }, []);
 
   const apply = useCallback(
     (result: CoreResult<Snapshot>) => {
       if (result.ok) {
-        onSuccess();
+        onSuccessRef.current();
         setRevision(result.value.revision);
       } else report(result.error);
       return result.ok;
     },
-    [onSuccess, report],
+    [report],
   );
 
   const applyEdit = useCallback(
@@ -65,6 +68,9 @@ export function useDocumentSession(
 
   const setMemory = useCallback(
     (bytes: number) => {
+      // Sampler memory is a machine fact, not a document edit. It outlives the
+      // session in local storage; a cookie would ride every asset request.
+      // Storage refusal only means the choice is not remembered.
       setMemoryBytes(bytes);
       try {
         localStorage.setItem(MEMORY_KEY, String(bytes));
@@ -90,6 +96,8 @@ export function useDocumentSession(
 
   useEffect(() => {
     if (!dirty) return;
+    // Chromium acts on preventDefault alone and supplies its own wording; the
+    // legacy returnValue string is deprecated.
     const onUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
     };
@@ -110,6 +118,8 @@ export function useDocumentSession(
   };
   const gestureCommit = () => {
     void core.commitGesture().then((result) => {
+      // A press and release with no intervening edit lands no history entry,
+      // so it must not raise the unsaved dot.
       if (result.ok && result.value.gestureLanded === false) apply(result);
       else applyEdit(result);
     });

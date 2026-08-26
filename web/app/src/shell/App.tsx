@@ -89,12 +89,6 @@ function isSupportedBrowser(): boolean {
   return "showSaveFilePicker" in window;
 }
 
-/**
- * The boundary's last resort export (E5). It reads the core alone, so
- * it answers even when the shell that owns the normal export path is
- * what crashed. A split document writes both images. Nothing renders
- * here to carry a message, so a refusal or failed write stays silent.
- */
 export function App({ core }: { core: Core }) {
   const client = useMemo(() => createQueryClient(), []);
   // Above the whole shell, so a throw in the topbar, a dialog, the bar,
