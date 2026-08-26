@@ -73,7 +73,7 @@ func download(url, path string) error {
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected HTTP status %s", response.Status)
 	}
@@ -98,7 +98,7 @@ func verifyFile(path, expected string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	digest := sha256.New()
 	if _, err := io.Copy(digest, file); err != nil {
 		return err
@@ -115,12 +115,12 @@ func extractFile(path, destination string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	gz, err := gzip.NewReader(file)
 	if err != nil {
 		return err
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 	return extractTar(tar.NewReader(gz), destination)
 }
 

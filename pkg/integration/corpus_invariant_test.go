@@ -17,7 +17,7 @@ import (
 func TestCorpusDocumentInvariants(t *testing.T) {
 	skipShort(t)
 	requireFullCorpus(t)
-	walkCorpus(t, []string{".fzf"}, func(t *testing.T, rel, path string) {
+	walkCorpus(t, []string{".fzf"}, func(t *testing.T, rel, path string) { //nolint:goconst // The extension is clearer at each independent corpus entry point.
 		data, err := os.ReadFile(path) //nolint:gosec // path belongs to the verified fixture tree.
 		if err != nil {
 			t.Fatal(err)

@@ -2,7 +2,7 @@
 
 Fizzle keeps binary-format decisions in a small domain core and treats the CLI,
 WASM layer, and React application as adapters. One validated document owns both
-bytes and the evidence used to interpret them. Callers do not independently
+bytes and the evidence used to interpret them. Callers don't independently
 guess bank, voice, or audio boundaries.
 
 ```text
@@ -45,10 +45,10 @@ end-to-end document behavior.
 
 ## Executable boundaries
 
-The architecture test prevents application and domain packages from importing
-retired command packages, prevents migrated projections from returning to raw
-binary parsing, rejects retired layout-count APIs, and caps `session.go` at 500
-lines. Protocol parity checks compare Go registration, worker dispatch, and the
+The architecture test rejects imports of retired command packages and raw
+binary parsing in migrated projections. It also rejects retired layout-count
+APIs and caps `session.go` at 500 lines. Protocol parity checks compare Go
+registration, worker dispatch, and the
 TypeScript contract. CLI reference generation walks the same command tree the
 binary executes and fails when checked-in documentation drifts.
 

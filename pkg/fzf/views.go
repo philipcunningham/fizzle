@@ -106,18 +106,35 @@ type AreaView struct {
 	voiceSlot int
 }
 
-func (v AreaView) Index() int     { return v.index }
+// Index returns the zero-based area index.
+func (v AreaView) Index() int { return v.index }
+
+// VoiceSlot returns the file-level voice slot played by this area.
 func (v AreaView) VoiceSlot() int { return v.voiceSlot }
-func (v AreaView) KeyLow() byte   { return min(v.bank[disk.BankKeyLowOffset+v.index], disk.MaxMIDINote) }
+
+// KeyLow returns the lowest MIDI note played by this area.
+func (v AreaView) KeyLow() byte { return min(v.bank[disk.BankKeyLowOffset+v.index], disk.MaxMIDINote) }
+
+// KeyHigh returns the highest MIDI note played by this area.
 func (v AreaView) KeyHigh() byte {
 	return min(v.bank[disk.BankKeyHighOffset+v.index], disk.MaxMIDINote)
 }
+
+// RootKey returns the area's MIDI root note.
 func (v AreaView) RootKey() byte {
 	return min(v.bank[disk.BankKeyCentOffset+v.index], disk.MaxMIDINote)
 }
-func (v AreaView) VelocityLow() byte  { return v.bank[disk.BankVelLowOffset+v.index] }
+
+// VelocityLow returns the lowest velocity played by this area.
+func (v AreaView) VelocityLow() byte { return v.bank[disk.BankVelLowOffset+v.index] }
+
+// VelocityHigh returns the highest velocity played by this area.
 func (v AreaView) VelocityHigh() byte { return v.bank[disk.BankVelHighOffset+v.index] }
-func (v AreaView) MIDIChannel() int   { return int(v.bank[disk.BankMIDIRecvChanOffset+v.index]) + 1 }
+
+// MIDIChannel returns the one-based receive channel.
+func (v AreaView) MIDIChannel() int { return int(v.bank[disk.BankMIDIRecvChanOffset+v.index]) + 1 }
+
+// Output returns the display label for the stored audio-output mask.
 func (v AreaView) Output() string {
 	return disk.FormatAudioOut(v.bank[disk.BankAudioOutOffset+v.index])
 }
@@ -126,6 +143,8 @@ func (v AreaView) Output() string {
 func (v AreaView) OutputValue() int {
 	return int(v.bank[disk.BankAudioOutOffset+v.index])
 }
+
+// Volume returns the area's bank-level volume.
 func (v AreaView) Volume() byte { return v.bank[disk.BankVolumeOffset+v.index] }
 
 // NamePatch returns a stale-safe patch that changes the bank's display name.

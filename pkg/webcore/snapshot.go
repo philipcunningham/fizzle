@@ -34,12 +34,12 @@ func voiceParams(vp *fzvinfo.VoiceParams, voiceBytes []byte) map[string]any {
 		fieldPlaybackMode: mode, fieldTune: disk.TuneWordToDisplay(int16(tune)),
 		fieldRootKey: int(vp.KeyCentre), fieldKeyLow: int(vp.KeyLow), fieldKeyHigh: int(vp.KeyHigh),
 		fieldCutoff: int(vp.FilterCutoff), fieldResonance: int(vp.FilterQ),
-		fieldDcaLevelKF: disk.KFByteToDisplay(uint8(vp.DCALevelKF)),
-		fieldDcaRateKF:  disk.KFByteToDisplay(uint8(vp.DCARateKF)),
-		fieldDcfLevelKF: disk.KFByteToDisplay(uint8(vp.DCFLevelKF)),
-		fieldDcfRateKF:  disk.KFByteToDisplay(uint8(vp.DCFRateKF)),
+		fieldDcaLevelKF: disk.KFByteToDisplay(uint8(vp.DCALevelKF)), //nolint:gosec // Signed storage is intentionally reinterpreted as its format byte.
+		fieldDcaRateKF:  disk.KFByteToDisplay(uint8(vp.DCARateKF)),  //nolint:gosec // Signed storage is intentionally reinterpreted as its format byte.
+		fieldDcfLevelKF: disk.KFByteToDisplay(uint8(vp.DCFLevelKF)), //nolint:gosec // Signed storage is intentionally reinterpreted as its format byte.
+		fieldDcfRateKF:  disk.KFByteToDisplay(uint8(vp.DCFRateKF)),  //nolint:gosec // Signed storage is intentionally reinterpreted as its format byte.
 		fieldVelDcaKF:   int(vp.VelDCAKF), fieldVelDcfKF: int(vp.VelDCFKF),
-		fieldVelDcqKF: disk.VelDCQByteToDisplay(uint8(vp.VelDCQKF)),
+		fieldVelDcqKF: disk.VelDCQByteToDisplay(uint8(vp.VelDCQKF)), //nolint:gosec // Signed storage is intentionally reinterpreted as its format byte.
 		fieldVelDcaRS: int(vp.VelDCARS), fieldVelDcfRS: int(vp.VelDCFRS),
 		fieldLfoWave: wave, fieldLfoRate: int(vp.LFORate),
 		fieldLfoDelay: disk.LFODelayWordToDisplay(vp.LFODelay),

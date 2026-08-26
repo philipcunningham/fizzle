@@ -32,7 +32,7 @@ func main() {
 
 func unformatted(root string) ([]string, error) {
 	var files []string
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error { //nolint:gosec // The explicit CLI root is intentionally traversed.
 		if err != nil {
 			return err
 		}
@@ -42,7 +42,7 @@ func unformatted(root string) ([]string, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
 			return nil
 		}
-		source, err := os.ReadFile(path)
+		source, err := os.ReadFile(path) //nolint:gosec // path comes from the bounded repository walk above.
 		if err != nil {
 			return err
 		}

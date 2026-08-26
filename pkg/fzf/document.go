@@ -20,8 +20,11 @@ import (
 type VoiceCountSource = fzutil.VoiceCountSource
 
 const (
-	VoiceCountWalk   = fzutil.VoiceCountWalk
-	VoiceCountDIS    = fzutil.VoiceCountDIS
+	// VoiceCountWalk means the count came from the bounded standalone walk.
+	VoiceCountWalk = fzutil.VoiceCountWalk
+	// VoiceCountDIS means the count came from a disk directory entry.
+	VoiceCountDIS = fzutil.VoiceCountDIS
+	// VoiceCountMarker means the count came from a valid standalone marker.
 	VoiceCountMarker = fzutil.VoiceCountMarker
 )
 

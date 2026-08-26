@@ -87,7 +87,9 @@ func (s *Session) Snapshot() Snapshot {
 }
 
 const (
+	// SampleMemoryMin is the smallest supported sampler memory size.
 	SampleMemoryMin = 1 << 20
+	// SampleMemoryMax is the largest supported sampler memory size.
 	SampleMemoryMax = 2 << 20
 )
 
