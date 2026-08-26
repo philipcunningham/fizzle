@@ -12,6 +12,10 @@ LDFLAGS = -ldflags "-X $(MODULE).Version=$(VERSION) -X $(MODULE).Commit=$(COMMIT
 # `go install` itself; a missing tool surfaces as a clear error from
 # `make licenses`.
 GO_LICENSES_VERSION := v1.6.0
+GOLANGCI_LINT_VERSION := 2.12.2
+GO_VERSION := 1.26.5
+NODE_MAJOR := 22
+VALE_VERSION := 3.15.1
 
 LICENSES_DIR  := internal/licenses
 LICENSES_FILE := $(LICENSES_DIR)/THIRD_PARTY_LICENSES.txt
@@ -29,8 +33,21 @@ GO_BUILD_RELEASE = CGO_ENABLED=0 go build $(LDFLAGS) $(RELEASE_TAGS)
 build: licenses
 	$(GO_BUILD_RELEASE) -o fizzle ./cmd/fizzle
 
-tools:
+license-tools:
 	go install github.com/google/go-licenses@$(GO_LICENSES_VERSION)
+
+tools: license-tools
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$(GOLANGCI_LINT_VERSION)
+
+tools-check:
+	@go version | grep -q 'go$(GO_VERSION)' || \
+	  (echo "Go $(GO_VERSION) required" >&2; exit 1)
+	@node --version | grep -Eq '^v$(NODE_MAJOR)\\.' || \
+	  (echo "Node $(NODE_MAJOR).x required" >&2; exit 1)
+	@golangci-lint --version | grep -q 'version $(GOLANGCI_LINT_VERSION)' || \
+	  (echo "golangci-lint $(GOLANGCI_LINT_VERSION) required" >&2; exit 1)
+	@vale --version | grep -q '$(VALE_VERSION)' || \
+	  (echo "vale $(VALE_VERSION) required" >&2; exit 1)
 
 licenses: $(LICENSES_FILE) $(PROJECT_LICENSE_EMBED)
 
@@ -54,6 +71,10 @@ integration-test:
 
 fmt:
 	go fmt ./...
+
+# Check formatting without changing the working tree.
+fmt-check:
+	go run ./scripts/fmtcheck .
 
 vet:
 	go vet ./...
@@ -96,7 +117,18 @@ web-check: wasm
 	  (echo "npm not found on PATH. Install Node 22+ to run web checks." >&2; exit 1)
 	cd web/app && npm run check
 
-check: fmt vet lint test integration-test fuzz-seed wasm-check web-check
+web-fast:
+	@command -v npm >/dev/null 2>&1 || \
+	  (echo "npm not found on PATH. Install Node $(NODE_MAJOR)+ to run web checks." >&2; exit 1)
+	cd web/app && npm run check:fast
+
+check-fast: fmt-check vet lint
+	go test -short -race ./...
+	$(MAKE) wasm-check web-fast
+
+check-full: fmt-check vet lint test integration-test fuzz-seed wasm-check web-check
+
+check: check-full
 
 coverage:
 	go test -race -coverpkg=./... -coverprofile=coverage.out ./...
@@ -168,4 +200,4 @@ asm-tools:
 	  (echo "Homebrew required (see https://brew.sh)" >&2; exit 1)
 	brew install nasm
 
-.PHONY: build tools licenses test integration-test fuzz-seed fmt vet lint lint-go lint-docs check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools
+.PHONY: build license-tools tools tools-check licenses test integration-test fuzz-seed fmt fmt-check vet lint lint-go lint-docs wasm wasm-check web-fast web-check check-fast check-full check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools
