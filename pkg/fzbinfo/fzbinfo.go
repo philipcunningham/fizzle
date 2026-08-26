@@ -5,7 +5,6 @@
 package fzbinfo
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,8 +14,8 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
-	"github.com/philipcunningham/fizzle/pkg/logger"
 	"github.com/philipcunningham/fizzle/pkg/render"
 )
 
@@ -48,105 +47,50 @@ func Parse(path string) (*BankDump, error) {
 		}
 		return nil, fmt.Errorf("fzbinfo: %w", err)
 	}
-	if len(data) < disk.SectorSize {
-		return nil, fmt.Errorf("fzbinfo: %q: file too small (%d bytes, need at least %d)", path, len(data), disk.SectorSize)
+	doc, err := fzfmodel.NewBankDump(data)
+	if err != nil {
+		return nil, fmt.Errorf("fzbinfo: %q: %w", path, err)
 	}
-
-	bank := data[:disk.SectorSize]
-	// bstep is the bank sector's stored voice count. The spec sizes the
-	// voice area from a separate file-level vn field, which FZBs
-	// (single-bank by spec §1-5) lose during extraction. fzutil recovers
-	// vn for FZF by walking the voice area, so do the same here and a
-	// stale bstep from a buggy tool can't skew the reported count.
-	bstep := int(binary.LittleEndian.Uint16(bank[disk.BankVoiceCountOffset : disk.BankVoiceCountOffset+2]))
-	voiceAreaStart := disk.SectorSize
-
-	// InferVoiceCount takes bstep as an upper bound on the walk. An
-	// implausible bstep (0 or above MaxVoices) falls back to MaxVoices so
-	// the walk itself decides where the voice area ends.
-	upper := bstep
-	if upper <= 0 || upper > disk.MaxVoices {
-		upper = disk.MaxVoices
-	}
-	inferred := fzutil.InferVoiceCount(data, voiceAreaStart, upper)
-
-	var nvoice int
-	switch {
-	case inferred == 0:
-		return nil, fmt.Errorf("fzbinfo: %q: no valid voice headers found (bstep=%d)", path, bstep)
-	case bstep >= 1 && bstep <= disk.MaxVoices && bstep == inferred:
-		nvoice = bstep
-	default:
-		// bstep disagrees with the voice area or is out of range. Trust
-		// the walk, and log so the divergence surfaces under --debug
-		// without disturbing normal use.
-		logger.Debug().
-			Str("path", path).
-			Int("bstep", bstep).
-			Int("inferred", inferred).
-			Msg("fzbinfo: bstep disagrees with voice-area walk; using inferred count")
-		nvoice = inferred
-	}
-
-	bankName := disk.TrimPadded(bank[disk.BankNameOffset : disk.BankNameOffset+disk.LabelSize])
-
-	voiceSectors := disk.VoiceAreaSectors(nvoice)
-	voiceAreaEnd := voiceAreaStart + voiceSectors*disk.SectorSize
-	if len(data) < voiceAreaEnd {
-		return nil, fmt.Errorf("fzbinfo: %q: file truncated (need %d bytes for voice headers, have %d)", path, voiceAreaEnd, len(data))
-	}
-	voiceArea := data[voiceAreaStart:voiceAreaEnd]
+	layout := doc.Layout()
+	nvoice := layout.VoiceCount()
+	bank := doc.Bank()
 
 	info := &BankDump{
 		Filename:   filepath.Base(path),
 		VoiceCount: nvoice,
-		BankName:   bankName,
+		BankName:   bank.Name(),
 	}
-
-	// FZB is single-bank by spec §1-5: one bank sector, no multi-bank
-	// fan-out over key splits. The (bank, split) and voice-slot indices
-	// coincide for every entry, so a synthesised one-bank FZFHeader lets
-	// the shared show-* helpers work unforked.
-	hdr := &fzutil.FZFHeader{
-		NVoice:         nvoice,
-		BStep0:         nvoice,
-		NBankSectors:   1,
-		VoiceAreaStart: voiceAreaStart,
-	}
-	info.ShowVelocity = fzutil.BankSectorShowsVelocity(data, hdr)
-	info.ShowVolume = fzutil.BankSectorShowsVolume(data, hdr)
+	info.ShowVelocity = bank.ShowsVelocity()
+	info.ShowVolume = bank.ShowsVolume()
 
 	for i := range nvoice {
-		// ParseBankVoiceEntry returns false for NoSound placeholders and
-		// truncated input. Mirror fzfinfo and emit a placeholder, keeping
+		// MappedVoice returns false for NoSound placeholders. Mirror fzfinfo
+		// and emit a placeholder, keeping
 		// len(info.Voices) == VoiceCount; drop them instead and every
 		// later voice's slot index shifts left out of step with vp[].
-		voff := disk.VoiceSlotOffset(0, i)
-		var mode uint16
-		if voff+disk.VoiceLoopModeOffset+2 <= len(voiceArea) {
-			mode = binary.LittleEndian.Uint16(voiceArea[voff+disk.VoiceLoopModeOffset : voff+disk.VoiceLoopModeOffset+2])
+		base, ok, err := doc.MappedVoice(i)
+		if err != nil {
+			return nil, fmt.Errorf("fzbinfo: %q: voice %d: %w", path, i+1, err)
 		}
-		// FZB is single-bank: bank slot index == voice slot index.
-		base, ok := fzutil.ParseBankVoiceEntry(bank, voiceArea, i, i)
 		if !ok {
 			info.Voices = append(info.Voices, VoiceEntry{
 				Index:        i + 1,
-				PlaybackMode: disk.PlaybackModeName(mode),
+				PlaybackMode: disk.PlaybackModeName(base.PlaybackMode),
 			})
 			continue
 		}
 		info.Voices = append(info.Voices, VoiceEntry{
 			Index:        base.Index,
 			Name:         base.Name,
-			PlaybackMode: disk.PlaybackModeName(mode),
+			PlaybackMode: disk.PlaybackModeName(base.PlaybackMode),
 			KeyLow:       base.KeyLow,
 			KeyHigh:      base.KeyHigh,
-			RootNote:     base.RootNote,
+			RootNote:     base.RootKey,
 			MIDIChannel:  base.MIDIChannel,
 			Output:       base.Output,
-			BankVolume:   base.BankVolume,
-			VelLow:       base.VelLow,
-			VelHigh:      base.VelHigh,
+			BankVolume:   base.Volume,
+			VelLow:       base.VelocityLow,
+			VelHigh:      base.VelocityHigh,
 		})
 	}
 
