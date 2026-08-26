@@ -37,8 +37,8 @@ type Params struct {
 	ModLFA int // mod wheel to LFO amp depth
 	ModLFF int // mod wheel to LFO filter depth
 	ModLFQ int // mod wheel to LFO resonance depth
-	ModDCF int // mod wheel to filter offset
 	ModDCA int // mod wheel to amp offset
+	ModDCF int // mod wheel to filter offset
 	ModDCQ int // mod wheel to resonance offset
 
 	FotLFP int // foot pedal to LFO pitch depth
@@ -78,8 +78,8 @@ func parseBlock(data []byte) *Params {
 		ModLFA: int(data[base+disk.EffectModLFAOffset]),
 		ModLFF: int(data[base+disk.EffectModLFFOffset]),
 		ModLFQ: int(data[base+disk.EffectModLFQOffset]),
-		ModDCF: int(data[base+disk.EffectModDCFOffset]),
 		ModDCA: int(data[base+disk.EffectModDCAOffset]),
+		ModDCF: int(data[base+disk.EffectModDCFOffset]),
 		ModDCQ: int(data[base+disk.EffectModDCQOffset]),
 
 		FotLFP: int(data[base+disk.EffectFotLFPOffset]),
@@ -113,8 +113,8 @@ type SetParams struct {
 	ModLFA int
 	ModLFF int
 	ModLFQ int
-	ModDCF int
 	ModDCA int
+	ModDCF int
 	ModDCQ int
 
 	FotLFP int
@@ -145,8 +145,8 @@ func Unchanged() SetParams {
 		ModLFA: unchanged,
 		ModLFF: unchanged,
 		ModLFQ: unchanged,
-		ModDCF: unchanged,
 		ModDCA: unchanged,
+		ModDCF: unchanged,
 		ModDCQ: unchanged,
 
 		FotLFP: unchanged,
@@ -198,8 +198,8 @@ func effectFieldSpecs(p *SetParams) []effectFieldSpec {
 		{"mod-lfa", disk.EffectModLFAOffset, 127, &p.ModLFA},
 		{"mod-lff", disk.EffectModLFFOffset, 127, &p.ModLFF},
 		{"mod-lfq", disk.EffectModLFQOffset, 127, &p.ModLFQ},
-		{"mod-dcf", disk.EffectModDCFOffset, 127, &p.ModDCF},
 		{"mod-dca", disk.EffectModDCAOffset, 127, &p.ModDCA},
+		{"mod-dcf", disk.EffectModDCFOffset, 127, &p.ModDCF},
 		{"mod-dcq", disk.EffectModDCQOffset, 127, &p.ModDCQ},
 
 		{"foot-lfp", disk.EffectFotLFPOffset, 127, &p.FotLFP},
