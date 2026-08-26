@@ -2,6 +2,8 @@
 
 ## Unreleased (last updated 2026-08-26)
 
+## v0.7.0 (2026-08-26)
+
 - The browser core's filename now carries a content hash, so a deploy is picked up on the next visit instead of a cached core lingering.
 
 - The mod wheel's amp and filter depths were labelled the wrong way round. A bank with `DCF LEVEL` set on the machine read back as `DCA LEVEL`. Only the labels were wrong, so saved files are unaffected.
