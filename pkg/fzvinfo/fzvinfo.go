@@ -8,10 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
+	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/render"
 )
@@ -161,26 +164,29 @@ type LoopEntry struct {
 // without extracting audio. This is used for voices whose audio is on a
 // different disk in a multi-disk full dump.
 func ParseVoiceInFZF(fzfData []byte, voiceName string) (*VoiceParams, error) {
-	hdr, err := fzutil.ParseFZFHeader(fzfData)
+	doc, err := fzfmodel.NewStandalone(fzfData)
 	if err != nil {
 		return nil, fmt.Errorf("fzvinfo: %w", err)
 	}
-	voiceSectors := disk.VoiceAreaSectors(hdr.NVoice)
-	voiceAreaEnd := hdr.VoiceAreaStart + voiceSectors*disk.SectorSize
-	if len(fzfData) < voiceAreaEnd {
-		return nil, fmt.Errorf("fzvinfo: FZF too small for voice area")
+	available := make([]string, 0, doc.Layout().VoiceCount())
+	for index := range doc.Layout().VoiceCount() {
+		voice, err := doc.Voice(index)
+		if err != nil {
+			return nil, fmt.Errorf("fzvinfo: %w", err)
+		}
+		name := voice.Name()
+		if name != "" {
+			available = append(available, name)
+		}
+		if !strings.EqualFold(name, voiceName) {
+			continue
+		}
+		header := make([]byte, disk.SectorSize)
+		copy(header, voice.HeaderBytes())
+		return parseHeader(header, voiceName)
 	}
-	targets, _, err := fzutil.ResolveVoiceTargets(fzfData, hdr, []string{voiceName}, false)
-	if err != nil {
-		return nil, fmt.Errorf("fzvinfo: %w", err)
-	}
-	off := disk.VoiceSlotOffset(hdr.VoiceAreaStart, targets[0])
-	if off+disk.VoiceHeaderUsed > len(fzfData) {
-		return nil, fmt.Errorf("fzvinfo: voice %q header truncated", voiceName)
-	}
-	voiceHdr := make([]byte, disk.SectorSize)
-	copy(voiceHdr, fzfData[off:off+disk.VoiceHeaderUsed])
-	return parseHeader(voiceHdr, voiceName)
+	sort.Strings(available)
+	return nil, fmt.Errorf("fzvinfo: voice %q not found\navailable voices: %s", voiceName, strings.Join(available, ", "))
 }
 
 // Parse reads the FZV file at path and returns its parameters as structured data.
