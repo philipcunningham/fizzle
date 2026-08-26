@@ -11,7 +11,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/diskfs"
-	"github.com/philipcunningham/fizzle/pkg/fzutil"
+	"github.com/philipcunningham/fizzle/pkg/fzf"
 )
 
 func image(t *testing.T) *disk.Image {
@@ -82,7 +82,11 @@ func TestFullDumpStoresWalkedVoiceCount(t *testing.T) {
 		t.Fatalf("walked voice count = %d, want 32", file.Voices)
 	}
 	bstepSum := 0
-	for bank := range fzutil.CountBankSectors(dump) {
+	doc, err := fzf.NewStandalone(dump)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for bank := range doc.Layout().BankCount() {
 		off := bank*disk.SectorSize + disk.BankVoiceCountOffset
 		bstepSum += int(binary.LittleEndian.Uint16(dump[off : off+2]))
 	}

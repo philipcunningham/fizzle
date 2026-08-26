@@ -285,7 +285,7 @@ func TestCountBankSectorsOne(t *testing.T) {
 	data[0] = 4 // nvoice=4
 	copy(data[0x282:], "All Voices  ")
 	// Second sector is garbage, so detection should stop at 1.
-	if n := CountBankSectors(data); n != 1 {
+	if n := countBankSectors(data); n != 1 {
 		t.Errorf("expected 1 bank sector, got %d", n)
 	}
 }
@@ -299,7 +299,7 @@ func TestCountBankSectorsMultiple(t *testing.T) {
 		data[off] = 4 // nvoice=4
 		copy(data[off+0x282:], "Bank Name   ")
 	}
-	if n := CountBankSectors(data); n != 3 {
+	if n := countBankSectors(data); n != 3 {
 		t.Errorf("expected 3 bank sectors, got %d", n)
 	}
 }
@@ -311,7 +311,7 @@ func TestCountBankSectorsStopsAtInvalidVoiceCount(t *testing.T) {
 	copy(data[0x282:], "Valid Bank  ")
 	// Second sector: voice count = 0 (invalid)
 	data[1024] = 0
-	if n := CountBankSectors(data); n != 1 {
+	if n := countBankSectors(data); n != 1 {
 		t.Errorf("expected 1, got %d", n)
 	}
 }
@@ -325,7 +325,7 @@ func TestCountBankSectorsMax8(t *testing.T) {
 		data[off] = 4
 		copy(data[off+0x282:], "Bank Name   ")
 	}
-	if n := CountBankSectors(data); n != 8 {
+	if n := countBankSectors(data); n != 8 {
 		t.Errorf("expected max 8 bank sectors, got %d", n)
 	}
 }
@@ -588,7 +588,7 @@ func TestInferVoiceCountSpansNoSoundSlots(t *testing.T) {
 		binary.LittleEndian.PutUint16(data[off+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
 	}
 
-	got := InferVoiceCount(data, voiceArea, bstep)
+	got := inferVoiceCount(data, voiceArea, bstep)
 	if got != total {
 		t.Errorf("InferVoiceCount = %d, want %d (must span NoSound slots before real voices)", got, total)
 	}
@@ -601,7 +601,7 @@ func TestCountBankSectors(t *testing.T) {
 		data := make([]byte, disk.SectorSize)
 		data[0] = 4
 		copy(data[disk.BankNameOffset:], "Bank Name   ")
-		if n := CountBankSectors(data); n != 1 {
+		if n := countBankSectors(data); n != 1 {
 			t.Errorf("expected 1, got %d", n)
 		}
 	})
@@ -610,7 +610,7 @@ func TestCountBankSectors(t *testing.T) {
 		data := make([]byte, disk.SectorSize+100)
 		data[0] = 4
 		copy(data[disk.BankNameOffset:], "Bank Name   ")
-		if n := CountBankSectors(data); n != 1 {
+		if n := countBankSectors(data); n != 1 {
 			t.Errorf("expected 1, got %d", n)
 		}
 	})
