@@ -41,3 +41,16 @@ that the manifest, public `Core`, raw WASM surface, and worker dispatch are
 complete. The Go parity test proves that the module registers exactly the
 same methods. Payload conversion remains explicit in the worker because it
 owns structured-clone and transferable behavior.
+
+## Shell boundaries
+
+`useDocumentSession` owns revision-driven snapshots, dirty state, history
+gestures, fatal core errors, sampler-memory persistence, and unload protection.
+`fileio` owns browser reads, saves, and emergency export. `App` composes those
+workflows with selection, dialogs, audition, and rendering.
+
+Component tests that only need staged boundary answers should use
+`createCoreStub`. An unstaged call returns an `unstaged-call` error, so tests do
+not acquire new disk or instrument rules accidentally. The behavioral fake is
+reserved for integration-style editor workflows that exercise a long sequence
+of document changes.

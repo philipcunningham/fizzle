@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import type { Core, Snapshot } from "../src/boundary/contract";
 import { IMAGE_SIZE, err } from "../src/boundary/contract";
 import { createFakeCore } from "../src/core/fake";
+import { createCoreStub } from "../src/core/stub";
 import { App } from "../src/shell/App";
 import { openInstrumentDisk, pickFiles } from "./helpers";
 
@@ -22,17 +23,10 @@ async function dirtyEdit() {
 
 describe("a refused dialog action (E1)", () => {
   it("closes the new disk dialog and shows why", async () => {
-    // The real core refuses a label that isn't ASCII (B9a). The fake
-    // checks the length alone, so the refusal is staged here rather
-    // than asserted against a fake that disagrees with the core.
-    const inner = createFakeCore();
-    const core: Core = {
-      ...inner,
-      newDisk: (label) =>
-        /^[ -~]*$/u.test(label)
-          ? inner.newDisk(label)
-          : Promise.resolve(err<Snapshot>("invalid-label", "an FZ disk label is ASCII only")),
-    };
+    const core = createCoreStub({
+      newDisk: () =>
+        Promise.resolve(err<Snapshot>("invalid-label", "an FZ disk label is ASCII only")),
+    });
     render(<App core={core} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "New disk" }));

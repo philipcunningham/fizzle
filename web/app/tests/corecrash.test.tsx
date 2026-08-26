@@ -8,16 +8,15 @@ import { describe, expect, it } from "vitest";
 import type { Core, Snapshot } from "../src/boundary/contract";
 import { CORE_CRASH_MESSAGE, CORE_UNAVAILABLE, coreCrash } from "../src/boundary/contract";
 import { createFakeCore } from "../src/core/fake";
+import { createCoreStub } from "../src/core/stub";
 import { App } from "../src/shell/App";
 import { openInstrumentDisk, pickFiles } from "./helpers";
 
 describe("a fatal envelope (E5)", () => {
   it("shows the plain sentence and a reload, never the code", async () => {
-    const inner = createFakeCore();
-    const core: Core = {
-      ...inner,
+    const core = createCoreStub({
       newDisk: () => Promise.resolve(coreCrash<Snapshot>("the worker exited")),
-    };
+    });
     render(<App core={core} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "New disk" }));
