@@ -31,7 +31,7 @@ authorities.
 | DCA / DCF envelopes | 2-1 | `pkg/voiceedit`, `pkg/disk/voice.go` | [envelope-timing](topics/envelope-timing.md) |
 | Velocity response | 2-1 | `pkg/voiceimport`, `pkg/sfzconvert` | [vel-dca-kf](findings/vel-dca-kf.md) |
 | Outputs, polyphony, mute groups | 2-2 (`gchn`) | `pkg/sfzconvert`, `pkg/sfzexport` | [gchn-polyphony](findings/gchn-polyphony.md) |
-| Effect data (`effectdata`) | 2-3 List C | `pkg/fzfeffects` | [voice-authoring-defaults](topics/voice-authoring-defaults.md) |
+| Effect data (`effectdata`) | 2-3 List C | `pkg/fzfeffects` | [voice-authoring-defaults](topics/voice-authoring-defaults.md), [mod-wheel-dca-dcf-order](findings/mod-wheel-dca-dcf-order.md) |
 | MIDI, Area mode | 2-2, 3 | `pkg/fzfmidi`, `pkg/fzfoutput` | |
 | Front-panel display scales | (undocumented) | `pkg/disk/voice.go` (`KFByteToDisplay`) | [display-scales](topics/display-scales.md) |
 | Program files (Type 5) | 4 | `pkg/diskadd`, `testdata/assembly/` | [corpus](sources/corpus.md) |

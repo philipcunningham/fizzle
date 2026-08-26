@@ -333,8 +333,11 @@ const (
 	EffectModLFAOffset = 0x04 // mod wheel -> LFO amp depth
 	EffectModLFFOffset = 0x05 // mod wheel -> LFO filter depth
 	EffectModLFQOffset = 0x06 // mod wheel -> LFO resonance depth
-	EffectModDCFOffset = 0x07 // mod wheel -> filter offset
-	EffectModDCAOffset = 0x08 // mod wheel -> amp offset
+	// The spec swaps these two. An FZ-1 and effectdata_edit_screen at
+	// F000:6B98 both put amp first, as fot and aft do. See
+	// llm-wiki/findings/mod-wheel-dca-dcf-order.md.
+	EffectModDCAOffset = 0x07 // mod wheel -> amp offset (panel: DCA LEVEL)
+	EffectModDCFOffset = 0x08 // mod wheel -> filter offset (panel: DCF LEVEL)
 	EffectModDCQOffset = 0x09 // mod wheel -> resonance offset
 	EffectFotLFPOffset = 0x0A // foot pedal -> LFO pitch depth
 	EffectFotLFAOffset = 0x0B // foot pedal -> LFO amp depth
