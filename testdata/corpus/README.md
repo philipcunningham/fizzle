@@ -1,11 +1,9 @@
 # Casio FZ-1 corpus
 
-The full 251 MiB corpus is distributed as the versioned
-[`corpus-v1`](https://github.com/philipcunningham/fizzle/releases/tag/corpus-v1)
-archive instead of being stored in every Git clone. Run `make corpus` to
-download it into the user cache, verify its pinned SHA-256 digest, and install
-it here. `make check-full` does this automatically; `make check-fast` remains
-offline and exercises the curated real-hardware regression images under
+The full hardware corpus is optional and is not stored in Git, downloaded by
+the build, or packaged with fizzle. Developers with access to the fixtures can
+place them here to enable the corpus tests. The normal test suite remains
+self-contained and exercises the curated regression images under
 `testdata/synthetic`.
 
 Real-world FZ-1 sampler files used as test fixtures, downloaded from

@@ -16,7 +16,6 @@ GOLANGCI_LINT_VERSION := 2.12.2
 GO_VERSION := 1.26.5
 NODE_MAJOR := 22
 VALE_VERSION := 3.15.1
-CORPUS_CACHE ?= $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/fizzle
 
 LICENSES_DIR  := internal/licenses
 LICENSES_FILE := $(LICENSES_DIR)/THIRD_PARTY_LICENSES.txt
@@ -69,10 +68,6 @@ test:
 
 integration-test:
 	go test -race -tags integration -count=1 -v ./pkg/integration/
-
-# Fetch and verify the separately versioned real-hardware fixture archive.
-corpus:
-	go run ./scripts/corpus -cache "$(CORPUS_CACHE)"
 
 fmt:
 	go fmt ./...
@@ -135,7 +130,7 @@ check-fast: fmt-check vet lint
 	go test -short -race ./...
 	$(MAKE) wasm-check web-fast
 
-check-full: corpus fmt-check vet lint test integration-test fuzz-seed wasm-check web-check web-smoke
+check-full: fmt-check vet lint test integration-test fuzz-seed wasm-check web-check web-smoke
 
 check: check-full
 

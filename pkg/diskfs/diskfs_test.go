@@ -71,6 +71,9 @@ func TestFullDumpStoresWalkedVoiceCount(t *testing.T) {
 		"casio-fz1-soundwaves", "accompaniment", "harpsichord",
 		"Harpsichord.fzf")
 	dump, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		t.Skip("full hardware corpus is not installed")
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
