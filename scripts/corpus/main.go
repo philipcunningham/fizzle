@@ -141,6 +141,11 @@ func extractTar(reader *tar.Reader, destination string) error {
 		if target != root && !strings.HasPrefix(target, root+string(filepath.Separator)) {
 			return fmt.Errorf("archive path %q escapes destination", header.Name)
 		}
+		// The repository owns the installation instructions. Older archives
+		// may contain a README, but installing fixtures must not rewrite it.
+		if filepath.ToSlash(header.Name) == "corpus/README.md" {
+			continue
+		}
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, 0o755); err != nil {
