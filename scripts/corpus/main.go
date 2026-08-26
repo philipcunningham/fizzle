@@ -41,7 +41,8 @@ func defaultCache() string {
 }
 
 func run(destination, cache, url, expected string) error {
-	if corpusReady(filepath.Join(destination, "corpus")) {
+	root := filepath.Join(destination, "corpus")
+	if corpusReady(root, expected) {
 		return nil
 	}
 	if err := os.MkdirAll(cache, 0o755); err != nil {
@@ -56,12 +57,15 @@ func run(destination, cache, url, expected string) error {
 			return err
 		}
 	}
-	return extractFile(archive, destination)
+	if err := extractFile(archive, destination); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(root, ".archive-sha256"), []byte(expected+"\n"), 0o644)
 }
 
-func corpusReady(root string) bool {
-	entries, err := os.ReadDir(root)
-	return err == nil && len(entries) >= 3
+func corpusReady(root, expected string) bool {
+	marker, err := os.ReadFile(filepath.Join(root, ".archive-sha256")) //nolint:gosec // fixed file below caller-selected root.
+	return err == nil && strings.TrimSpace(string(marker)) == expected
 }
 
 func download(url, path string) error {

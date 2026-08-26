@@ -47,6 +47,25 @@ func TestVerifiedArchiveExtracts(t *testing.T) {
 	}
 }
 
+func TestCorpusReadyRequiresMatchingVersionMarker(t *testing.T) {
+	root := t.TempDir()
+	if corpusReady(root, "wanted") {
+		t.Fatal("missing marker accepted")
+	}
+	if err := os.WriteFile(filepath.Join(root, ".archive-sha256"), []byte("different\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if corpusReady(root, "wanted") {
+		t.Fatal("wrong marker accepted")
+	}
+	if err := os.WriteFile(filepath.Join(root, ".archive-sha256"), []byte("wanted\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !corpusReady(root, "wanted") {
+		t.Fatal("matching marker rejected")
+	}
+}
+
 func TestArchiveCannotEscapeDestination(t *testing.T) {
 	archive := testArchive(t, "../escape", []byte("bad"))
 	gz, err := gzip.NewReader(bytes.NewReader(archive))
