@@ -6,9 +6,8 @@ import (
 	"errors"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/diskfs"
-	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
+	documentmodel "github.com/philipcunningham/fizzle/pkg/document"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 )
@@ -204,28 +203,23 @@ func stitchedDumpPair(img *disk.Image, image2 []byte) ([]byte, *Error) {
 // on error the session state is untouched. vn is the voice count the
 // DIS tail must carry, 0 to let content detection derive it.
 func (s *Session) replaceDump(img *disk.Image, fzf []byte, vn int, mode parseMode) (Snapshot, *Error) {
-	if len(fzf) <= voicebuild.MaxDiskFileBytes {
-		if cerr := putDump(img, fzf, 0, nil, vn); cerr != nil {
-			return s.Snapshot(), cerr
-		}
-		return s.adoptPair(img, nil, mode)
+	usesDIS := s.state.UsesDIS()
+	if mode == modeDerive {
+		usesDIS = documentDISMode(img)
 	}
-
-	var doc *fzfmodel.Document
-	var serr error
-	if vn > 0 {
-		doc, serr = fzfmodel.NewDiskFile(fzf, vn)
-	} else {
-		doc, serr = fzfmodel.NewStandalone(fzf)
+	working, err := documentmodel.NewState(img.Bytes(), s.state.Image2(), authorityFromDIS(usesDIS))
+	if err != nil {
+		return s.Snapshot(), errf("invalid-image", "%v", err)
 	}
-	if serr != nil {
-		return s.Snapshot(), splitError(serr)
+	next, err := working.ReplaceFullDump(fzf, vn, authorityFromDIS(usesDIS))
+	if err != nil {
+		return s.Snapshot(), documentMutationError(err)
 	}
-	result, serr := voicebuild.SplitDocument(doc)
-	if serr != nil {
-		return s.Snapshot(), splitError(serr)
+	nextImage, err := disk.ReadImage(bytes.NewReader(next.Image1()))
+	if err != nil {
+		return s.Snapshot(), errf("invalid-image", "%v", err)
 	}
-	return s.placeSplitResult(img, result, mode)
+	return s.adoptPair(nextImage, next.Image2(), mode)
 }
 
 // looseFileCount counts directory entries other than the full dump.
@@ -243,80 +237,15 @@ func looseFileCount(img *disk.Image) int {
 	return n
 }
 
-// freshImage formats a blank image, falling back to the default label
-// when the source label does not survive validation.
-func freshImage(label string) (*disk.Image, *Error) {
-	data, err := diskformat.BuildImage(label)
-	if err != nil {
-		data, err = diskformat.BuildImage(defaultLabel)
-		if err != nil {
-			return nil, errf("invalid-label", "%v", err)
-		}
+func documentMutationError(err error) *Error {
+	var occupied *documentmodel.ErrSplitNeedsEmptyDisk
+	if errors.As(err, &occupied) {
+		return errf("no-space", "a two disk instrument fills disk 1 completely; extract the disk's %d other files first", occupied.Files)
 	}
-	img, rerr := disk.ReadImage(bytes.NewReader(data))
-	if rerr != nil {
-		return nil, errf("invalid-image", "%v", rerr)
-	}
-	return img, nil
-}
-
-// putDump replaces an image's FULL-DATA-FZ payload. With a split
-// result the DIS tail counts are the split's (disk 1's wave count
-// spans both disks); otherwise vn (when non-zero) or content
-// detection supplies the voice count.
-func putDump(img *disk.Image, data []byte, diskNum uint8, split *voicebuild.MultiDiskResult, vn int) *Error {
-	var file diskfs.File
-	var err error
-	if split == nil {
-		file, err = diskfs.FullDump(data, diskNum, vn)
-	} else {
-		file = diskfs.File{Name: disk.PadLabel(disk.FullDumpName), Type: disk.TypeFullDump,
-			DiskNumber: diskNum, Banks: split.BankCount, Voices: split.VoiceCount, Waves: split.WaveCount}
-	}
-	if err != nil {
+	if errors.Is(err, disk.ErrNoSpace) {
 		return addError(err)
 	}
-	if hasFile(img, disk.FullDumpName) {
-		err = diskfs.Replace(img, disk.FullDumpName, data, file)
-	} else {
-		err = diskfs.Add(img, data, file)
-	}
-	if err != nil {
-		return addError(err)
-	}
-	return nil
-}
-
-// disk2Image returns the document's disk 2 as a scratch image, or a
-// fresh formatted one (labelled after disk 1) the first time a
-// document outgrows one disk.
-func (s *Session) disk2Image() (*disk.Image, *Error) {
-	if s.state.HasSecondDisk() {
-		img2, rerr := disk.ReadImage(bytes.NewReader(s.state.Image2()))
-		if rerr != nil {
-			return nil, errf("invalid-image", "disk 2 unreadable: %v", rerr)
-		}
-		return img2, nil
-	}
-	label := s.label
-	if len(label)+2 > disk.LabelSize {
-		label = label[:disk.LabelSize-2]
-	}
-	label += " 2"
-	data, err := diskformat.BuildImage(label)
-	if err != nil {
-		// The session's own label may end in a space; fall back to a
-		// plain valid label rather than failing the split.
-		data, err = diskformat.BuildImage(defaultLabel + " 2")
-		if err != nil {
-			return nil, errf("invalid-label", "%v", err)
-		}
-	}
-	img2, rerr := disk.ReadImage(bytes.NewReader(data))
-	if rerr != nil {
-		return nil, errf("invalid-image", "%v", rerr)
-	}
-	return img2, nil
+	return splitError(err)
 }
 
 // splitError maps the split's failure modes onto boundary codes (R10:
