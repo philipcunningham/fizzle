@@ -122,6 +122,10 @@ web-check: wasm
 	  (echo "npm not found on PATH. Install Node 22+ to run web checks." >&2; exit 1)
 	cd web/app && npm run check
 
+# Exercise the production React bundle against the real WASM core.
+web-smoke: wasm
+	cd web/app && npm run smoke
+
 web-fast:
 	@command -v npm >/dev/null 2>&1 || \
 	  (echo "npm not found on PATH. Install Node $(NODE_MAJOR)+ to run web checks." >&2; exit 1)
@@ -131,7 +135,7 @@ check-fast: fmt-check vet lint
 	go test -short -race ./...
 	$(MAKE) wasm-check web-fast
 
-check-full: corpus fmt-check vet lint test integration-test fuzz-seed wasm-check web-check
+check-full: corpus fmt-check vet lint test integration-test fuzz-seed wasm-check web-check web-smoke
 
 check: check-full
 
@@ -205,4 +209,4 @@ asm-tools:
 	  (echo "Homebrew required (see https://brew.sh)" >&2; exit 1)
 	brew install nasm
 
-.PHONY: build license-tools tools tools-check licenses test integration-test corpus fuzz-seed fmt fmt-check vet lint lint-go lint-docs wasm wasm-check web-fast web-check check-fast check-full check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools
+.PHONY: build license-tools tools tools-check licenses test integration-test corpus fuzz-seed fmt fmt-check vet lint lint-go lint-docs wasm wasm-check web-fast web-check web-smoke check-fast check-full check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools
