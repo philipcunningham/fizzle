@@ -30,6 +30,46 @@ func TestUnformattedReportsWithoutChangingSource(t *testing.T) {
 	}
 }
 
+func TestUnformattedAcceptsFormattedCRLFCheckout(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "windows.go")
+	source := []byte("package example\r\n\r\nfunc good() {}\r\n")
+	if err := os.WriteFile(path, source, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := unformatted(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Fatalf("formatted CRLF checkout reported as unformatted: %v", files)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(source) {
+		t.Fatalf("fmtcheck changed CRLF source to %q", after)
+	}
+}
+
+func TestUnformattedStillReportsBadCRLFSource(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "windows.go")
+	if err := os.WriteFile(path, []byte("package example\r\nfunc bad( ){ }\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := unformatted(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != path {
+		t.Fatalf("unformatted CRLF source = %v, want [%s]", files, path)
+	}
+}
+
 func TestUnformattedIgnoresDependencyTrees(t *testing.T) {
 	dir := t.TempDir()
 	dependency := filepath.Join(dir, "node_modules", "dependency")
