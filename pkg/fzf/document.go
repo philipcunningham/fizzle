@@ -15,6 +15,16 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/voicepatch"
 )
 
+// VoiceCountSource identifies the evidence that fixed a document's voice
+// boundary. Re-exporting it keeps format consumers on the canonical package.
+type VoiceCountSource = fzutil.VoiceCountSource
+
+const (
+	VoiceCountWalk   = fzutil.VoiceCountWalk
+	VoiceCountDIS    = fzutil.VoiceCountDIS
+	VoiceCountMarker = fzutil.VoiceCountMarker
+)
+
 // Voice rename errors let application boundaries provide stable user-facing
 // messages without matching domain error text.
 var (

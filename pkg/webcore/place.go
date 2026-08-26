@@ -26,7 +26,8 @@ const defaultLabel = "FIZZLE"
 // splits into a two disk document (R25). The UI owns the replace
 // prompt; the core just places.
 func (s *Session) LoadFZF(data []byte) (Snapshot, *Error) {
-	if _, err := fzutil.ParseFZFHeader(data); err != nil {
+	doc, err := fzfmodel.NewStandalone(data)
+	if err != nil {
 		return s.Snapshot(), errf("invalid-fzf", "%v", err)
 	}
 	img, cerr := s.imageOrNew()
@@ -36,7 +37,7 @@ func (s *Session) LoadFZF(data []byte) (Snapshot, *Error) {
 	// A stamped export reloads under its carried count; the DIS the
 	// write-back produces is what the adopted mode derives from.
 	vn := 0
-	if layout, err := fzutil.ResolveStandaloneFZFLayout(data); err == nil && layout.VoiceCountSource() == fzutil.VoiceCountMarker {
+	if layout := doc.Layout(); layout.VoiceCountSource() == fzfmodel.VoiceCountMarker {
 		vn = layout.VoiceCount()
 	}
 	return s.replaceDump(img, data, vn, modeDerive)
@@ -123,7 +124,7 @@ func (s *Session) AddBank(data []byte, slot int) (Snapshot, *Error) {
 	if len(data) < disk.SectorSize {
 		return s.Snapshot(), errf("invalid-fzb", "a bank dump is at least one %d byte sector", disk.SectorSize)
 	}
-	if _, err := fzutil.ParseFZFHeader(data); err != nil {
+	if _, err := fzfmodel.NewBankDump(data); err != nil {
 		return s.Snapshot(), errf("invalid-fzb", "%v", err)
 	}
 	if s.state.IsOpen() && s.instrument != nil {
