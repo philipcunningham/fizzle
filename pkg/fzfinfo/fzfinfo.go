@@ -58,14 +58,15 @@ func Parse(path string) (*FullDump, error) {
 	if disk.IsPlausibleVoiceHeader(data) {
 		return nil, fmt.Errorf("fzfinfo: %q looks like a voice file, not a full dump. Try 'fzv info' instead", path)
 	}
-	hdr, _, err := fzutil.ResolveStandaloneFZF(data)
+	layout, err := fzutil.ResolveStandaloneFZFLayout(data)
 	if err != nil {
 		return nil, fmt.Errorf("fzfinfo: %w", err)
 	}
 
 	bank := data[:disk.SectorSize]
-	nvoice := hdr.NVoice
-	voiceAreaStart := hdr.VoiceAreaStart
+	nvoice := layout.VoiceCount()
+	voiceAreaStart := layout.VoiceStart()
+	hdr := &fzutil.FZFHeader{NVoice: nvoice, BStep0: layout.BStep0(), NBankSectors: layout.BankCount(), VoiceAreaStart: voiceAreaStart}
 
 	voiceSectors := disk.VoiceAreaSectors(nvoice)
 	voiceAreaEnd := voiceAreaStart + voiceSectors*disk.SectorSize

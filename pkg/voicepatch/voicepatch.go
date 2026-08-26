@@ -81,16 +81,10 @@ func ResolveHeader(data []byte, base int, edits []Edit) ([]model.Patch, error) {
 // ResolveFZFSlot resolves edits for one slot and mirrors key-range changes to
 // every bank area that references it, using the caller's retained layout.
 func ResolveFZFSlot(data []byte, layout fzutil.FZFLayout, slot int, edits []Edit) ([]model.Patch, error) {
-	return ResolveFZFSlotGeometry(data, layout.VoiceCount(), layout.VoiceStart(), layout.BankCount(), slot, edits)
-}
-
-// ResolveFZFSlotGeometry is the compatibility form for callers that still
-// retain parsed header fields instead of an FZFLayout.
-func ResolveFZFSlotGeometry(data []byte, voiceCount, voiceStart, bankCount, slot int, edits []Edit) ([]model.Patch, error) {
-	if slot < 0 || slot >= voiceCount {
-		return nil, fmt.Errorf("voice slot must be 0 to %d, got %d", voiceCount-1, slot)
+	if slot < 0 || slot >= layout.VoiceCount() {
+		return nil, fmt.Errorf("voice slot must be 0 to %d, got %d", layout.VoiceCount()-1, slot)
 	}
-	voiceOffset := disk.VoiceSlotOffset(voiceStart, slot)
+	voiceOffset := disk.VoiceSlotOffset(layout.VoiceStart(), slot)
 	resolved, err := ResolveHeader(data, voiceOffset, edits)
 	if err != nil {
 		return nil, err
@@ -100,7 +94,7 @@ func ResolveFZFSlotGeometry(data []byte, voiceCount, voiceStart, bankCount, slot
 		return nil, err
 	}
 	header := &fzutil.FZFHeader{
-		NVoice: voiceCount, NBankSectors: bankCount, VoiceAreaStart: voiceStart,
+		NVoice: layout.VoiceCount(), NBankSectors: layout.BankCount(), VoiceAreaStart: layout.VoiceStart(),
 	}
 	sites := fzutil.FindBankSitesForVoice(data, header, slot)
 	seen := make(map[int]struct{})

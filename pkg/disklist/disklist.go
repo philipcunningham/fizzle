@@ -9,9 +9,9 @@ import (
 	"io"
 
 	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/rs/zerolog/log"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/render"
 )
 
@@ -53,97 +53,18 @@ func Parse(path string) (*Listing, error) {
 // ParseImage returns the listing for an in-memory disk image: the same
 // result as Parse with no filesystem access.
 func ParseImage(img *disk.Image) (*Listing, error) {
-	listing := &Listing{
-		Label:   img.Label(),
-		Entries: []FileEntry{},
+	parsed, err := diskfs.List(img)
+	if err != nil {
+		return nil, fmt.Errorf("disklist: %w", err)
 	}
-
-	// Rows come out in slot order: entries plus corrupt rows for
-	// damaged named slots. Rubbish without a printable name is old
-	// media's noise and stays out. See CorruptTypeName.
-	type row struct {
-		e       disk.DirEntry
-		corrupt bool
-		slot    *int
+	listing := &Listing{Label: parsed.Label, Entries: make([]FileEntry, len(parsed.Entries)), FreeBytes: parsed.FreeBytes, TotalBytes: parsed.TotalBytes, UsedPct: parsed.UsedPct}
+	for i, entry := range parsed.Entries {
+		typeName := entry.Type.String()
+		if entry.Corrupt {
+			typeName = CorruptTypeName
+		}
+		listing.Entries[i] = FileEntry{Index: entry.Index, Name: entry.Name, TypeName: typeName, Size: entry.Size, SlotIndex: entry.SlotIndex}
 	}
-	rows := make([]row, 0, disk.MaxDirEntries)
-	for slot, ds := range img.DirectorySlots() {
-		e, kind := ds.Entry, ds.Kind
-		switch kind {
-		case disk.DirSlotEntry:
-			rows = append(rows, row{e: e})
-		case disk.DirSlotRubbish:
-			if disk.IsPrintableName(e.Name[:]) {
-				log.Warn().
-					Str("name", e.NameString()).
-					Int("slot", slot).
-					Uint16("dis_sector", e.DisSector).
-					Msg("disklist: named directory slot points outside the data sectors; marking as corrupt")
-				slotIndex := slot
-				rows = append(rows, row{e: e, corrupt: true, slot: &slotIndex})
-			}
-		case disk.DirSlotBlank:
-		}
-	}
-
-	for i, r := range rows {
-		e := r.e
-		if r.corrupt {
-			listing.Entries = append(listing.Entries, FileEntry{
-				Index:     i + 1,
-				Name:      e.NameString(),
-				TypeName:  CorruptTypeName,
-				Size:      0,
-				SlotIndex: r.slot,
-			})
-			continue
-		}
-		// DIS sectors are decoded into a typed value and never mutated, so a
-		// no-copy view is safe.
-		disSec, err := img.SectorRef(int(e.DisSector))
-		if err != nil {
-			log.Warn().
-				Err(err).
-				Str("name", e.NameString()).
-				Int("entry", i+1).
-				Msg("disklist: failed to read DIS sector; marking entry as corrupt")
-			listing.Entries = append(listing.Entries, FileEntry{
-				Index:    i + 1,
-				Name:     e.NameString(),
-				TypeName: CorruptTypeName,
-				Size:     0,
-			})
-			continue
-		}
-		dis, err := disk.DecodeDisSector(disSec)
-		if err != nil {
-			log.Warn().
-				Err(err).
-				Str("name", e.NameString()).
-				Int("entry", i+1).
-				Msg("disklist: failed to decode DIS sector; marking entry as corrupt")
-			listing.Entries = append(listing.Entries, FileEntry{
-				Index:    i + 1,
-				Name:     e.NameString(),
-				TypeName: CorruptTypeName,
-				Size:     0,
-			})
-			continue
-		}
-		listing.Entries = append(listing.Entries, FileEntry{
-			Index:    i + 1,
-			Name:     e.NameString(),
-			TypeName: e.FileType.String(),
-			Size:     dis.PayloadSize(),
-		})
-	}
-
-	free := img.FreeSectors()
-	total := disk.SectorCount - disk.ReservedSectors
-	listing.FreeBytes = free * disk.SectorSize
-	listing.TotalBytes = total * disk.SectorSize
-	listing.UsedPct = 100 * (total - free) / total
-
 	return listing, nil
 }
 

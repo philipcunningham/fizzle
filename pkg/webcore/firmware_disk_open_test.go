@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
 )
 
@@ -31,10 +31,19 @@ func banklessDiskImage(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	dump := fzfbuilder.MakeBanklessVoiceDump(t)
-	if err := diskadd.AddToImageWithVoiceCount(img, dump, 0, fzfbuilder.BanklessDumpVoices); err != nil {
+	storeFullDump(t, img, dump, fzfbuilder.BanklessDumpVoices)
+	return img.Bytes()
+}
+
+func storeFullDump(t *testing.T, img *disk.Image, dump []byte, voices int) {
+	t.Helper()
+	file, err := diskfs.FullDump(dump, 0, voices)
+	if err != nil {
 		t.Fatal(err)
 	}
-	return img.Bytes()
+	if err := diskfs.Add(img, dump, file); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func openBanklessDisk(t *testing.T) (*Session, Snapshot) {

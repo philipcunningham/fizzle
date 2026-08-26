@@ -94,61 +94,6 @@ func TestGetCaseInsensitive(t *testing.T) {
 	}
 }
 
-func TestExtractFileBytesSkipsDIS(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	imgPath := filepath.Join(dir, "test.img")
-	if err := diskformat.Format(imgPath, "TEST"); err != nil {
-		t.Fatal(err)
-	}
-
-	data := make([]byte, 3*disk.SectorSize)
-	for i := range data {
-		data[i] = byte(i % 199)
-	}
-	name := disk.PadLabel("TESTFILE")
-	if err := diskadd.AddBytes(imgPath, data, name, disk.TypeVoice, 0, 0, 1, 2); err != nil {
-		t.Fatal(err)
-	}
-
-	img, err := disk.OpenImage(imgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	entries, _ := img.Directory()
-	disSec, _ := img.Sector(int(entries[0].DisSector))
-	dis, _ := disk.DecodeDisSector(disSec)
-
-	got, err := extractFileBytes(img, dis, int(entries[0].DisSector))
-	if err != nil {
-		t.Fatalf("extractFileBytes: %v", err)
-	}
-	if !bytes.Equal(got, data) {
-		t.Error("extracted bytes do not match original data")
-	}
-}
-
-func TestExtractFileBytesEmptyExtents(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	imgPath := filepath.Join(dir, "test.img")
-	if err := diskformat.Format(imgPath, "EMPTY"); err != nil {
-		t.Fatal(err)
-	}
-	img, err := disk.OpenImage(imgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dis := disk.DisSector{}
-	got, err := extractFileBytes(img, dis, 2)
-	if err != nil {
-		t.Fatalf("extractFileBytes: %v", err)
-	}
-	if len(got) != 0 {
-		t.Errorf("expected empty result for no extents, got %d bytes", len(got))
-	}
-}
-
 // TestGetRejectsCorruptDIS covers two corruption modes:
 //  1. The directory entry's DIS sector pointer points at sector 0 (reserved
 //     for the disk label). Get must refuse before touching the sector:

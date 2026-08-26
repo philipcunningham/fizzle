@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzfeffects"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
@@ -91,17 +92,18 @@ type InstrumentSnapshot struct {
 // the same per-area reader as fzfinfo and fzbinfo, so the Web UI and
 // the CLI agree on every field. disVN is the DIS-mode count, 0 walks.
 func instrumentFrom(fileName string, fzfData []byte, disVN int) (*InstrumentSnapshot, error) {
-	// The mode is the session's, already decided; only a count the
-	// bytes cannot back falls to the walk, as in newDumpState.
+	var doc *fzfmodel.Document
+	var err error
 	if disVN > 0 {
-		if _, err := fzutil.ParseFZFHeaderWithVoiceCount(fzfData, disVN); err != nil {
-			disVN = 0
-		}
+		doc, err = fzfmodel.NewDiskFile(fzfData, disVN)
+	} else {
+		doc, err = fzfmodel.NewStandalone(fzfData)
 	}
-	hdr, err := dumpHeaderFor(fzfData, disVN)
 	if err != nil {
 		return nil, fmt.Errorf("webcore: %w", err)
 	}
+	layout := doc.Layout()
+	hdr := &fzutil.FZFHeader{NVoice: layout.VoiceCount(), BStep0: layout.BStep0(), NBankSectors: layout.BankCount(), VoiceAreaStart: layout.VoiceStart()}
 	if hdr.VoiceAreaStart > len(fzfData) {
 		return nil, fmt.Errorf("webcore: voice area starts past the dump")
 	}

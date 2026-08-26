@@ -662,7 +662,7 @@ func TestApplyToFZFSlotBytesRejectsHeaderAndBankBatchAtomically(t *testing.T) {
 		{Offset: disk.VoiceHeaderUsed, Size: 1, Value: 7},
 	}
 
-	if err := ApplyToFZFSlotBytesWithHeader(data, hdr, slot, edits); err == nil {
+	if err := ApplyToFZFSlotBytes(data, slot, edits); err == nil {
 		t.Fatal("expected out-of-range edit to reject the batch")
 	}
 	if !bytes.Equal(data, before) {

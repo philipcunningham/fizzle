@@ -50,36 +50,3 @@ func FromImage(img *disk.Image, name string) ([]byte, error) {
 	}
 	return raw, nil
 }
-
-func extractFileBytes(img *disk.Image, dis disk.DisSector, disSectorLoc int) ([]byte, error) {
-	// Walk the extents once for the exact final byte count so raw is
-	// allocated once, then copy through SectorRef to avoid a temporary
-	// 1024-byte allocation per sector.
-	total := 0
-	for i, ext := range dis.Extents {
-		start := int(ext[0])
-		end := int(ext[1])
-		if i == 0 && start == disSectorLoc {
-			start++
-		}
-		if end >= start {
-			total += (end - start + 1) * disk.SectorSize
-		}
-	}
-	raw := make([]byte, 0, total)
-	for i, ext := range dis.Extents {
-		start := int(ext[0])
-		end := int(ext[1])
-		if i == 0 && start == disSectorLoc {
-			start++
-		}
-		for sec := start; sec <= end; sec++ {
-			b, err := img.SectorRef(sec)
-			if err != nil {
-				return nil, fmt.Errorf("reading sector %d: %w", sec, err)
-			}
-			raw = append(raw, b...)
-		}
-	}
-	return raw, nil
-}

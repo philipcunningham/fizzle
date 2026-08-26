@@ -47,7 +47,7 @@ func resolveFZFLayout(data []byte, candidate int, source VoiceCountSource) (FZFL
 	header, walkErr := ParseFZFHeader(data)
 	resolvedSource := VoiceCountWalk
 	if candidate > 0 && (walkErr != nil || header.NVoice < candidate) {
-		if candidateHeader, err := ParseFZFHeaderWithVoiceCount(data, candidate); err == nil {
+		if candidateHeader, err := parseFZFHeaderWithVoiceCount(data, candidate); err == nil {
 			header = candidateHeader
 			resolvedSource = source
 			walkErr = nil
@@ -64,13 +64,4 @@ func resolveFZFLayout(data []byte, candidate int, source VoiceCountSource) (FZFL
 		audioStart:       header.VoiceAreaStart + disk.VoiceAreaSectors(header.NVoice)*disk.SectorSize,
 		voiceCountSource: resolvedSource,
 	}, nil
-}
-
-func (l FZFLayout) compatibilityHeader() *FZFHeader {
-	return &FZFHeader{
-		NVoice:         l.voiceCount,
-		BStep0:         l.bstep0,
-		NBankSectors:   l.bankCount,
-		VoiceAreaStart: l.voiceStart,
-	}
 }

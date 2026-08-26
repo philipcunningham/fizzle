@@ -75,10 +75,9 @@ lint-docs:
 fuzz-seed:
 	go test -run 'Fuzz' ./...
 
-# Browser target build check: web/wasm pins the core import surface, so
-# a change that breaks the js/wasm build fails here, not in slice work.
+# Compile the real browser module and its transitive dependency graph.
 wasm-check:
-	GOOS=js GOARCH=wasm go build ./web/wasm/...
+	GOOS=js GOARCH=wasm go build -o /dev/null ./web/wasm/module
 
 # Build the browser core: the WASM module into the app's public assets
 # and the Go runtime shim into the generated sources. Both outputs are

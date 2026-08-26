@@ -8,6 +8,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/diskfs"
+	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 )
@@ -210,13 +211,17 @@ func (s *Session) replaceDump(img *disk.Image, fzf []byte, vn int, mode parseMod
 		return s.adoptPair(img, nil, mode)
 	}
 
-	var result voicebuild.MultiDiskResult
+	var doc *fzfmodel.Document
 	var serr error
 	if vn > 0 {
-		result, serr = voicebuild.SplitDumpWithVoiceCount(fzf, vn)
+		doc, serr = fzfmodel.NewDiskFile(fzf, vn)
 	} else {
-		result, serr = voicebuild.SplitDump(fzf)
+		doc, serr = fzfmodel.NewStandalone(fzf)
 	}
+	if serr != nil {
+		return s.Snapshot(), splitError(serr)
+	}
+	result, serr := voicebuild.SplitDocument(doc)
 	if serr != nil {
 		return s.Snapshot(), splitError(serr)
 	}

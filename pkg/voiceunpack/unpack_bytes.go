@@ -3,9 +3,7 @@ package voiceunpack
 import (
 	"fmt"
 
-	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/fzf"
-	"github.com/philipcunningham/fizzle/pkg/fzutil"
 )
 
 // UnpackDataFromBytes is the in-memory twin of UnpackData. It takes a raw FZF
@@ -24,16 +22,10 @@ func UnpackDataFromBytes(data []byte) ([][]byte, []int, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("voiceunpack: %w", err)
 	}
-	return unpack(doc.Bytes(), doc.Layout())
+	return UnpackDocument(doc)
 }
 
-// UnpackDataFromBytesWithVoiceCount is UnpackDataFromBytes with a
-// known voice count.
-func UnpackDataFromBytesWithVoiceCount(data []byte, vn int) ([][]byte, []int, error) {
-	hdr, err := fzutil.ParseFZFHeaderWithVoiceCount(data, vn)
-	if err != nil {
-		return nil, nil, fmt.Errorf("voiceunpack: %w", err)
-	}
-	audioStart := hdr.VoiceAreaStart + disk.VoiceAreaSectors(hdr.NVoice)*disk.SectorSize
-	return unpackAt(data, hdr.NVoice, hdr.VoiceAreaStart, audioStart)
+// UnpackDocument extracts voices using the layout authority retained by doc.
+func UnpackDocument(doc *fzf.Document) ([][]byte, []int, error) {
+	return unpack(doc.Bytes(), doc.Layout())
 }

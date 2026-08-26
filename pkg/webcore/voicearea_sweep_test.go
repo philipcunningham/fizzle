@@ -52,11 +52,11 @@ func areaOpsFor(t *testing.T, fzf []byte, hdr *fzutil.FZFHeader) []areaOp {
 // resolvedVN is the count a dump's geometry reads under: the resolved
 // explicit count, or 0 where the walk decides.
 func resolvedVN(data []byte, candidate int) int {
-	hdr, src, err := fzutil.ResolveDiskFZF(data, candidate)
-	if err != nil || src == fzutil.VoiceCountWalk {
+	layout, err := fzutil.ResolveDiskFZFLayout(data, candidate)
+	if err != nil || layout.VoiceCountSource() == fzutil.VoiceCountWalk {
 		return 0
 	}
-	return hdr.NVoice
+	return layout.VoiceCount()
 }
 
 // sweptDump is one corpus dump plus its DIS-mode voice count, 0 for
@@ -157,10 +157,7 @@ func TestAreaOpsOverTheCorpus(t *testing.T) {
 	refusedBy := map[string]int{}
 	for path, d := range dumps {
 		fzf := d.data
-		hdr, err := dumpHeaderFor(fzf, d.vn)
-		if err != nil {
-			t.Fatalf("%s: %v", path, err)
-		}
+		hdr := resolvedHeaderFor(t, fzf, d.vn)
 		before := dumpGeometryUnder(t, fzf, d.vn)
 		if before.bstepSum > before.walked {
 			shared++
@@ -253,10 +250,7 @@ func TestAddVoiceMakesJoinedSlotReachableOnCASIO066(t *testing.T) {
 	if after.walked != before.walked+1 {
 		t.Fatalf("resolved voice count = %d, want %d", after.walked, before.walked+1)
 	}
-	hdr, err := dumpHeaderFor(out, outVN)
-	if err != nil {
-		t.Fatal(err)
-	}
+	hdr := resolvedHeaderFor(t, out, outVN)
 	if sites := fzutil.FindBankSitesForVoice(out, hdr, before.walked); len(sites) == 0 {
 		t.Fatalf("joined voice slot %d is not referenced by an area", before.walked)
 	}
@@ -342,10 +336,7 @@ func TestAreaOpSequencesHoldTheAudioInDISMode(t *testing.T) {
 			// The count tracks what the write-back stamps, the way the
 			// session's sticky mode does.
 			for step := range steps {
-				hdr, err := dumpHeaderFor(fzf, vn)
-				if err != nil {
-					t.Fatalf("step %d: %v", step, err)
-				}
+				hdr := resolvedHeaderFor(t, fzf, vn)
 				op := randomAreaOp(t, fzf, hdr, rng)
 				out, outVN, cerr := patchDumpBytes(bytes.Clone(fzf), vn, op.build)
 				if cerr != nil {

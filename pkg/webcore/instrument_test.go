@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/diskget"
 	"github.com/philipcunningham/fizzle/pkg/fzfeffects"
@@ -44,9 +43,7 @@ func assembledSession(t *testing.T, names []string, groups []voicebuild.Keygroup
 	if err != nil {
 		t.Fatalf("ReadImage: %v", err)
 	}
-	if err := diskadd.AddToImage(img, fzf, 0); err != nil {
-		t.Fatalf("AddToImage: %v", err)
-	}
+	storeFullDump(t, img, fzf, len(voices))
 	s := NewSession()
 	if _, cerr := s.OpenImage(img.Bytes()); cerr != nil {
 		t.Fatalf("OpenImage: %v", cerr)

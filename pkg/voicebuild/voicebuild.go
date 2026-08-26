@@ -14,6 +14,7 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/fileutil"
+	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/bitconv"
 	"github.com/philipcunningham/fizzle/pkg/render"
@@ -189,20 +190,18 @@ var MaxDiskFileBytes = (disk.UsableDataSize - disk.SectorSize) / disk.SectorSize
 // so disk 1's DIS wn value tells the sampler more audio follows on disk 2.
 // A dump that fits one disk is an error: write it whole instead.
 func SplitDump(fzf []byte) (MultiDiskResult, error) {
-	hdr, err := fzutil.ParseFZFHeader(fzf)
+	doc, err := fzfmodel.NewStandalone(fzf)
 	if err != nil {
 		return MultiDiskResult{}, fmt.Errorf("voicebuild: %w", err)
 	}
-	return splitDump(fzf, hdr)
+	return SplitDocument(doc)
 }
 
-// SplitDumpWithVoiceCount is SplitDump with a known voice count.
-func SplitDumpWithVoiceCount(fzf []byte, vn int) (MultiDiskResult, error) {
-	hdr, err := fzutil.ParseFZFHeaderWithVoiceCount(fzf, vn)
-	if err != nil {
-		return MultiDiskResult{}, fmt.Errorf("voicebuild: %w", err)
-	}
-	return splitDump(fzf, hdr)
+// SplitDocument splits using the source authority retained by doc.
+func SplitDocument(doc *fzfmodel.Document) (MultiDiskResult, error) {
+	layout := doc.Layout()
+	hdr := &fzutil.FZFHeader{NVoice: layout.VoiceCount(), BStep0: layout.BStep0(), NBankSectors: layout.BankCount(), VoiceAreaStart: layout.VoiceStart()}
+	return splitDump(doc.Bytes(), hdr)
 }
 
 func splitDump(fzf []byte, hdr *fzutil.FZFHeader) (MultiDiskResult, error) {

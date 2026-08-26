@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )
@@ -53,10 +54,7 @@ func dumpGeometryOf(t *testing.T, fzf []byte) dumpGeometry {
 // walk when vn is 0.
 func dumpGeometryUnder(t *testing.T, fzf []byte, vn int) dumpGeometry {
 	t.Helper()
-	hdr, err := dumpHeaderFor(fzf, vn)
-	if err != nil {
-		t.Fatalf("dumpHeaderFor: %v", err)
-	}
+	hdr := resolvedHeaderFor(t, fzf, vn)
 	g := dumpGeometry{walked: hdr.NVoice, voices: map[string][]byte{}, extents: map[[2]int]bool{}}
 	for b := 0; b < hdr.NBankSectors; b++ {
 		g.bstepSum += bankBstep(fzf, b)
@@ -96,6 +94,15 @@ func dumpGeometryUnder(t *testing.T, fzf []byte, vn int) dumpGeometry {
 		g.voices[name] = g.audio[start:end]
 	}
 	return g
+}
+
+func resolvedHeaderFor(t *testing.T, fzf []byte, vn int) *fzutil.FZFHeader {
+	t.Helper()
+	state, cerr := newDumpState(fzf, vn)
+	if cerr != nil {
+		t.Fatal(cerr)
+	}
+	return state.header
 }
 
 // assertVoiceAreaInvariant pins the invariant every area operation has

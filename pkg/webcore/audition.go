@@ -2,6 +2,7 @@ package webcore
 
 import (
 	"github.com/philipcunningham/fizzle/pkg/diskfs"
+	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/voiceextract"
 	"github.com/philipcunningham/fizzle/pkg/voiceunpack"
@@ -72,18 +73,21 @@ func (s *Session) slotFZV(slot int) ([]byte, *Error) {
 	if cerr != nil {
 		return nil, cerr
 	}
-	var voices [][]byte
-	var slots []int
+	var doc *fzfmodel.Document
 	var uerr error
 	vn := 0
 	if s.usesDIS() {
 		vn = disVoiceCount(img)
 	}
 	if vn > 0 {
-		voices, slots, uerr = voiceunpack.UnpackDataFromBytesWithVoiceCount(fzf, vn)
+		doc, uerr = fzfmodel.NewDiskFile(fzf, vn)
 	} else {
-		voices, slots, uerr = voiceunpack.UnpackDataFromBytes(fzf)
+		doc, uerr = fzfmodel.NewStandalone(fzf)
 	}
+	if uerr != nil {
+		return nil, errf("invalid-image", "%v", uerr)
+	}
+	voices, slots, uerr := voiceunpack.UnpackDocument(doc)
 	if uerr != nil {
 		return nil, errf("invalid-image", "%v", uerr)
 	}
