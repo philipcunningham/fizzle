@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/rs/zerolog/log"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskfs"
@@ -62,6 +63,10 @@ func ParseImage(img *disk.Image) (*Listing, error) {
 		typeName := entry.Type.String()
 		if entry.Corrupt {
 			typeName = CorruptTypeName
+			log.Warn().
+				Str("name", entry.Name).
+				Int("entry", entry.Index).
+				Msg("disklist: " + entry.CorruptReason + "; marking entry as corrupt")
 		}
 		listing.Entries[i] = FileEntry{Index: entry.Index, Name: entry.Name, TypeName: typeName, Size: entry.Size, SlotIndex: entry.SlotIndex}
 	}

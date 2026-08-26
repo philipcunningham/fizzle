@@ -75,7 +75,8 @@ lint-docs:
 fuzz-seed:
 	go test -run 'Fuzz' ./...
 
-# Compile the real browser module and its transitive dependency graph.
+# Compile the real browser module and the dependencies that actually ship in
+# it. CLI-only packages intentionally remain covered by their native builds.
 wasm-check:
 	GOOS=js GOARCH=wasm go build -o /dev/null ./web/wasm/module
 

@@ -25,12 +25,13 @@ type File struct {
 // Entry describes one directory row. Corrupt entries retain their physical
 // slot so a caller can offer repair without exposing disk parsing details.
 type Entry struct {
-	Index     int
-	Name      string
-	Type      disk.FileType
-	Size      int
-	Corrupt   bool
-	SlotIndex *int
+	Index         int
+	Name          string
+	Type          disk.FileType
+	Size          int
+	Corrupt       bool
+	CorruptReason string
+	SlotIndex     *int
 }
 
 // Listing is an in-memory disk directory and its capacity summary.
@@ -189,16 +190,21 @@ func List(img *disk.Image) (*Listing, error) {
 				continue
 			}
 			slotIndex := slot
-			listing.Entries = append(listing.Entries, Entry{Name: e.NameString(), Corrupt: true, SlotIndex: &slotIndex})
+			listing.Entries = append(listing.Entries, Entry{
+				Name:          e.NameString(),
+				Corrupt:       true,
+				CorruptReason: fmt.Sprintf("named directory slot points outside the data sectors (DIS sector %d)", e.DisSector),
+				SlotIndex:     &slotIndex,
+			})
 		case disk.DirSlotEntry:
 			disBytes, err := img.SectorRef(int(e.DisSector))
 			if err != nil {
-				listing.Entries = append(listing.Entries, Entry{Name: e.NameString(), Corrupt: true})
+				listing.Entries = append(listing.Entries, Entry{Name: e.NameString(), Corrupt: true, CorruptReason: fmt.Sprintf("failed to read DIS sector %d: %v", e.DisSector, err)})
 				continue
 			}
 			dis, err := disk.DecodeDisSector(disBytes)
 			if err != nil {
-				listing.Entries = append(listing.Entries, Entry{Name: e.NameString(), Corrupt: true})
+				listing.Entries = append(listing.Entries, Entry{Name: e.NameString(), Corrupt: true, CorruptReason: fmt.Sprintf("failed to decode DIS sector %d: %v", e.DisSector, err)})
 				continue
 			}
 			listing.Entries = append(listing.Entries, Entry{Name: e.NameString(), Type: e.FileType, Size: dis.PayloadSize()})
@@ -218,7 +224,7 @@ func List(img *disk.Image) (*Listing, error) {
 func buildDIS(disSector int, sectors []int, banks, voices, waves int) disk.DisSector {
 	var dis disk.DisSector
 	all := append([]int{disSector}, sectors...)
-	if len(all) == 1 && len(sectors) == 0 {
+	if len(sectors) == 0 {
 		return dis
 	}
 	start, end := all[0], all[0]
