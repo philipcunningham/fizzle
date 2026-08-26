@@ -64,6 +64,35 @@ func TestDocumentVoiceViewIsBounded(t *testing.T) {
 	}
 }
 
+func TestFormatViewsOwnProjectionFields(t *testing.T) {
+	doc := banklessDocument(t)
+	bank, err := doc.Bank(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantWaves := int(binary.LittleEndian.Uint32(doc.Bytes()[disk.BankTotalWaveOffset:]))
+	if bank.TotalWaveSectors() != wantWaves {
+		t.Fatalf("total-wave marker = %d, want %d", bank.TotalWaveSectors(), wantWaves)
+	}
+	area, err := bank.Area(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if area.Output() != disk.FormatAudioOut(byte(area.OutputValue())) {
+		t.Fatalf("area output = %d/%q", area.OutputValue(), area.Output())
+	}
+	voice, err := doc.Voice(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int(voice.SampleRateIndex()) >= disk.NumSampleRates() {
+		t.Fatalf("sample-rate index = %d", voice.SampleRateIndex())
+	}
+	if voice.HasActiveLoop() {
+		t.Fatal("fixture voice unexpectedly reports an active loop")
+	}
+}
+
 func TestViewNamePatchesAreAbsoluteAndStaleSafe(t *testing.T) {
 	doc := banklessDocument(t)
 	bank, _ := doc.Bank(0)
