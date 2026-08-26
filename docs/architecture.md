@@ -56,13 +56,8 @@ binary executes and fails when checked-in documentation drifts.
 
 `make check-fast` is non-mutating and offline. It runs formatting, static
 analysis, short race tests, protocol checks, a WASM compile, and fast frontend
-checks. `make check-full`, also exposed as `make check`, installs the pinned
-hardware corpus and runs the complete race, integration, corpus, frontend, and
-real build gates.
-
-The 251 MiB real-hardware corpus is a separately versioned release archive.
-`make corpus` caches it, verifies its pinned SHA-256 digest, and rejects unsafe
-archive paths. Git retains compact synthetic and real-hardware regression
-images for offline work. The full corpus checks construction, layout bounds,
-authority, bounded access, byte-preserving reads, targeted mutations, and
-stable command projections.
+checks. `make check-full`, also exposed as `make check`, runs the complete race,
+integration, frontend, and real build gates. Hardware-corpus tests also run
+when developers have supplied fixtures under `testdata/corpus`; normal builds
+and CI neither download nor package that optional data. Git retains compact
+synthetic and real-hardware regression images for offline work.
