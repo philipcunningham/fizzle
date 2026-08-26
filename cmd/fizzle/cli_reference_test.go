@@ -26,9 +26,24 @@ func TestCLIReferenceIsCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Git may materialise the tracked Markdown with CRLF on Windows while
+	// the generator intentionally emits canonical LF. Compare content, not
+	// the checkout's platform line endings.
+	got = canonicalLF(got)
 	if !bytes.Equal(got, want) {
 		t.Fatalf("%s is stale; regenerate with UPDATE_CLI_REFERENCE=true go test ./cmd/fizzle -run TestCLIReferenceIsCurrent", filepath.ToSlash(cliReferencePath))
 	}
+}
+
+func TestCanonicalLFPreservesContentWhileNormalisingWindowsLines(t *testing.T) {
+	got := canonicalLF([]byte("first\r\nsecond\r\n"))
+	if string(got) != "first\nsecond\n" {
+		t.Fatalf("canonical LF = %q", got)
+	}
+}
+
+func canonicalLF(source []byte) []byte {
+	return bytes.ReplaceAll(source, []byte("\r\n"), []byte("\n"))
 }
 
 func TestCLIReferenceCoversCommandTree(t *testing.T) {
