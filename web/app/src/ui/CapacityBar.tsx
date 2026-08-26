@@ -68,7 +68,7 @@ function Meter({
         {tick && <div className="tick" title="disk 1 to disk 2 boundary" />}
       </div>
       <span className="label">
-        {formatBytes(used)} · {free}% {what} free{note}
+        {formatBytes(used)} used · {free}% {what} free{note}
       </span>
     </div>
   );

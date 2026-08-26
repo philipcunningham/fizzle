@@ -2,6 +2,7 @@ package webcore
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 )
@@ -17,7 +18,20 @@ type Error struct {
 func (e *Error) Error() string { return e.Code + ": " + e.Message }
 
 func errf(code, format string, args ...any) *Error {
-	return &Error{Code: code, Message: fmt.Sprintf(format, args...)}
+	return &Error{Code: code, Message: publicMessage(fmt.Sprintf(format, args...))}
+}
+
+// publicMessage removes Go package context from errors crossing the product
+// boundary. The stable error code already identifies the failing operation;
+// package names are implementation details a browser user cannot act on.
+func publicMessage(message string) string {
+	for {
+		prefix, rest, found := strings.Cut(message, ": ")
+		if !found || prefix == "" || strings.ContainsAny(prefix, " /\\") {
+			return message
+		}
+		message = rest
+	}
 }
 
 func errItemf(code, item, format string, args ...any) *Error {

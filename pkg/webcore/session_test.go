@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
@@ -70,10 +72,20 @@ func TestNewDiskRejectsBadLabel(t *testing.T) {
 			if cerr.Message == "" {
 				t.Fatal("error message is empty")
 			}
+			if strings.Contains(cerr.Message, "diskformat:") {
+				t.Fatalf("message exposes an internal package: %q", cerr.Message)
+			}
 		})
 	}
 	if snap := s.Snapshot(); snap.Revision != 0 || snap.Disk != nil {
 		t.Fatalf("rejected ops mutated state: %+v", snap)
+	}
+}
+
+func TestErrorEnvelopeRemovesNestedPackagePrefixes(t *testing.T) {
+	err := errf("invalid-value", "%v", errors.New("adapter: parser: choose another value"))
+	if err.Message != "choose another value" {
+		t.Fatalf("message = %q", err.Message)
 	}
 }
 

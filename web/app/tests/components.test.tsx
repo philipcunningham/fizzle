@@ -80,6 +80,7 @@ describe("CapacityBar", () => {
     render(<CapacityBar usedBytes={655_360} disks={1} audioBytes={0} memoryBytes={MB} />);
     const bar = screen.getByRole("status", { name: "disk free" });
     expect(bar.textContent).toContain("50%");
+    expect(bar.textContent).toContain("640.0 KB used · 50% disk free");
     expect(bar.textContent).not.toContain("two disk");
 
     render(<CapacityBar usedBytes={1_500_000} disks={2} audioBytes={0} memoryBytes={MB} />);
@@ -140,6 +141,11 @@ describe("CapacityBar", () => {
 });
 
 describe("MatrixGrid", () => {
+  it("names the effects table for assistive technology", () => {
+    render(<MatrixGrid matrix={[]} onChange={() => undefined} />);
+    expect(screen.getByRole("table", { name: "effects modulation matrix" })).toBeTruthy();
+  });
+
   it("edits cells by arrow key and zeroes on double click", () => {
     const calls: [number, number, number][] = [];
     const matrix = Array.from({ length: 3 }, () => new Array<number>(7).fill(0));

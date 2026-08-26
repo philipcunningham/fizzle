@@ -1136,7 +1136,13 @@ export function EditorShell({ core }: { core: Core }) {
         {disk && (
           <>
             {dirty && (
-              <span title="Unexported changes" className="dirtydot">
+              <span
+                title="Unexported changes"
+                aria-label="Unexported changes"
+                aria-live="polite"
+                role="status"
+                className="dirtydot"
+              >
                 ●
               </span>
             )}
