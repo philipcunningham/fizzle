@@ -57,6 +57,65 @@ func (v BankView) VoiceSlot(area int) (int, error) {
 	return slot, nil
 }
 
+// Area returns a bounded view of one bank key area.
+func (v BankView) Area(index int) (AreaView, error) {
+	if index < 0 || index >= v.AreaCount() {
+		return AreaView{}, &IndexError{Err: ErrAreaIndexOutOfRange, Index: index, Limit: v.AreaCount()}
+	}
+	voice, err := v.VoiceSlot(index)
+	if err != nil {
+		return AreaView{}, err
+	}
+	return AreaView{bank: v.data, index: index, voiceSlot: voice}, nil
+}
+
+// ShowsVelocity reports whether any area carries a non-default velocity
+// range, including the unreachable zero-to-zero range.
+func (v BankView) ShowsVelocity() bool {
+	for area := range v.AreaCount() {
+		low := v.data[disk.BankVelLowOffset+area]
+		high := v.data[disk.BankVelHighOffset+area]
+		if low != disk.DefaultVelLow || high != disk.DefaultVelHigh {
+			return true
+		}
+	}
+	return false
+}
+
+// ShowsVolume reports whether any area carries a non-default bank volume.
+func (v BankView) ShowsVolume() bool {
+	for area := range v.AreaCount() {
+		if v.data[disk.BankVolumeOffset+area] != disk.DefaultBankVolume {
+			return true
+		}
+	}
+	return false
+}
+
+// AreaView is a bounded, zero-copy view of one bank key area.
+type AreaView struct {
+	bank      []byte
+	index     int
+	voiceSlot int
+}
+
+func (v AreaView) Index() int     { return v.index }
+func (v AreaView) VoiceSlot() int { return v.voiceSlot }
+func (v AreaView) KeyLow() byte   { return min(v.bank[disk.BankKeyLowOffset+v.index], disk.MaxMIDINote) }
+func (v AreaView) KeyHigh() byte {
+	return min(v.bank[disk.BankKeyHighOffset+v.index], disk.MaxMIDINote)
+}
+func (v AreaView) RootKey() byte {
+	return min(v.bank[disk.BankKeyCentOffset+v.index], disk.MaxMIDINote)
+}
+func (v AreaView) VelocityLow() byte  { return v.bank[disk.BankVelLowOffset+v.index] }
+func (v AreaView) VelocityHigh() byte { return v.bank[disk.BankVelHighOffset+v.index] }
+func (v AreaView) MIDIChannel() int   { return int(v.bank[disk.BankMIDIRecvChanOffset+v.index]) + 1 }
+func (v AreaView) Output() string {
+	return disk.FormatAudioOut(v.bank[disk.BankAudioOutOffset+v.index])
+}
+func (v AreaView) Volume() byte { return v.bank[disk.BankVolumeOffset+v.index] }
+
 // NamePatch returns a stale-safe patch that changes the bank's display name.
 // Applying it invalidates a standalone voice-count marker; re-stamp the marker
 // after applying the complete patch batch.
