@@ -17,7 +17,7 @@ func bankDumpBytes(t *testing.T, names []string) []byte {
 
 func TestBankDumpRetainsResolvedLayout(t *testing.T) {
 	t.Parallel()
-	doc, err := fzf.NewBankDump(bankDumpBytes(t, []string{"ONE", "TWO"}))
+	doc, err := fzf.NewBankDump(bankDumpBytes(t, []string{"ONE", "TWO"})) //nolint:goconst // Repeated fixture names improve local test readability.
 	if err != nil {
 		t.Fatal(err)
 	}

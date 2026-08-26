@@ -90,7 +90,7 @@ func normaliseTestdataPaths(payload []byte) []byte {
 
 func TestCorpusFZFInfoSnapshots(t *testing.T) {
 	skipShort(t)
-	walkCorpus(t, []string{".fzf"}, func(t *testing.T, rel, abs string) {
+	walkCorpus(t, []string{".fzf"}, func(t *testing.T, rel, abs string) { //nolint:goconst // The extension is clearer at each independent corpus entry point.
 		info, err := fzfinfo.Parse(abs)
 		if err != nil {
 			t.Fatalf("fzfinfo.Parse(%s): %v", rel, err)

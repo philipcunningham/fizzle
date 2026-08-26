@@ -688,7 +688,7 @@ func TestAddThenDeleteAreaUsesStructuralReplacementAndPreservesAudio(t *testing.
 }
 
 func TestDuplicateAreaClonesVoiceAndPreservesAudioAcrossSectorGrowth(t *testing.T) {
-	data, _ := fzfbuilder.MakeTestFZF(t, []string{"ONE", "TWO", "THREE", "FOUR"})
+	data, _ := fzfbuilder.MakeTestFZF(t, []string{"ONE", "TWO", "THREE", "FOUR"}) //nolint:goconst // Repeated fixture names improve local test readability.
 	doc, err := fzf.NewStandalone(data)
 	if err != nil {
 		t.Fatal(err)

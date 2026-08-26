@@ -16,9 +16,16 @@ type BankDumpLayout struct {
 	countFromWalk bool
 }
 
-func (l BankDumpLayout) VoiceCount() int     { return l.voiceCount }
-func (l BankDumpLayout) VoiceStart() int     { return l.voiceStart }
-func (l BankDumpLayout) VoiceAreaEnd() int   { return l.voiceAreaEnd }
+// VoiceCount returns the number of bounded voice slots.
+func (l BankDumpLayout) VoiceCount() int { return l.voiceCount }
+
+// VoiceStart returns the first voice-header byte offset.
+func (l BankDumpLayout) VoiceStart() int { return l.voiceStart }
+
+// VoiceAreaEnd returns the exclusive end of the packed voice area.
+func (l BankDumpLayout) VoiceAreaEnd() int { return l.voiceAreaEnd }
+
+// CountFromWalk reports whether the bounded slot walk supplied the count.
 func (l BankDumpLayout) CountFromWalk() bool { return l.countFromWalk }
 
 // BankDump owns an FZB's bytes and resolved layout.
@@ -86,11 +93,18 @@ func inferVoiceCount(data []byte, voiceStart, upper int) int {
 	return upper
 }
 
-func (d *BankDump) Bytes() []byte          { return bytes.Clone(d.data) }
+// Bytes returns an owned copy of the bank dump.
+func (d *BankDump) Bytes() []byte { return bytes.Clone(d.data) }
+
+// Layout returns the resolved immutable bank-dump layout.
 func (d *BankDump) Layout() BankDumpLayout { return d.layout }
+
+// Bank returns the bounded bank-sector view.
 func (d *BankDump) Bank() BankView {
 	return BankView{data: d.data[:disk.SectorSize], voiceCount: d.layout.voiceCount}
 }
+
+// Voice returns the bounded voice view at index.
 func (d *BankDump) Voice(index int) (VoiceView, error) {
 	if index < 0 || index >= d.layout.voiceCount {
 		return VoiceView{}, &IndexError{Err: ErrVoiceIndexOutOfRange, Index: index, Limit: d.layout.voiceCount}

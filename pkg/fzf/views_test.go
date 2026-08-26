@@ -78,7 +78,7 @@ func TestFormatViewsOwnProjectionFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if area.Output() != disk.FormatAudioOut(byte(area.OutputValue())) {
+	if area.Output() != disk.FormatAudioOut(byte(area.OutputValue())) { //nolint:gosec // Stored output is one bounded byte.
 		t.Fatalf("area output = %d/%q", area.OutputValue(), area.Output())
 	}
 	voice, err := doc.Voice(0)
