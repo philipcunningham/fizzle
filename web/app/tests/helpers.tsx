@@ -5,12 +5,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect } from "vitest";
 import type { Core } from "../src/boundary/contract";
 import { IMAGE_SIZE } from "../src/boundary/contract";
-import { createFakeCore } from "../src/core/fake";
+import { createScenarioCore } from "./support/scenarioCore";
 import { App } from "../src/shell/App";
 
 // Both openers take a core, so a test can stage a refusal the fake
 // has no way to produce and still drive the real shell.
-export async function openDisk(core: Core = createFakeCore()) {
+export async function openDisk(core: Core = createScenarioCore()) {
   render(<App core={core} />);
   fireEvent.click(await screen.findByRole("button", { name: "New disk" }));
   fireEvent.change(await screen.findByLabelText("disk label"), { target: { value: "MY DISK" } });
@@ -18,7 +18,7 @@ export async function openDisk(core: Core = createFakeCore()) {
   await screen.findByText("[MY DISK]");
 }
 
-export async function openInstrumentDisk(core: Core = createFakeCore()) {
+export async function openInstrumentDisk(core: Core = createScenarioCore()) {
   render(<App core={core} />);
   const image = new File([new Uint8Array(IMAGE_SIZE)], "TECHNO.img");
   fireEvent.click(await screen.findByRole("button", { name: "Browse" }));

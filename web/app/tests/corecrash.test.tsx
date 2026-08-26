@@ -7,7 +7,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Core, Snapshot } from "../src/boundary/contract";
 import { CORE_CRASH_MESSAGE, CORE_UNAVAILABLE, coreCrash } from "../src/boundary/contract";
-import { createFakeCore } from "../src/core/fake";
+import { createScenarioCore } from "./support/scenarioCore";
 import { createCoreStub } from "../src/core/stub";
 import { App } from "../src/shell/App";
 import { openInstrumentDisk, pickFiles } from "./helpers";
@@ -29,7 +29,7 @@ describe("a fatal envelope (E5)", () => {
   });
 
   it("keeps the technical reason to hand, and reaches every call site", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const core: Core = {
       ...inner,
       extractFile: () => Promise.resolve(coreCrash<Uint8Array>("postMessage on a dead worker")),

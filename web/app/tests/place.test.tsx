@@ -5,7 +5,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Channel, Core, SampleRate } from "../src/boundary/contract";
 import { IMAGE_SIZE } from "../src/boundary/contract";
-import { createFakeCore, fakeCalls } from "../src/core/fake";
+import { createScenarioCore, scenarioCalls } from "./support/scenarioCore";
 import { App } from "../src/shell/App";
 import { classifyInput, sfzCandidates } from "../src/viewstate/place";
 import { openDisk, openInstrumentDisk, pickFiles, wavFixture, wavHeader } from "./helpers";
@@ -165,7 +165,7 @@ describe("placement routing", () => {
       const statuses = screen.getAllByRole("status").map((s) => s.textContent);
       expect(statuses.join(" ")).toContain("2 WAVs mapped up the keyboard");
     });
-    expect(fakeCalls.wavFolderChannel).toBe("mix");
+    expect(scenarioCalls.wavFolderChannel).toBe("mix");
   });
 
   // B2: the SFZ route is what a dropped library takes, and it asks the
@@ -181,7 +181,7 @@ describe("placement routing", () => {
     fireEvent.click(screen.getByRole("button", { name: "Fit to disk (downsample)" }));
 
     await waitFor(() => {
-      expect(fakeCalls.sfzChannel).toBe("left");
+      expect(scenarioCalls.sfzChannel).toBe("left");
     });
   });
 
@@ -189,7 +189,7 @@ describe("placement routing", () => {
   // than one .sfz. The core asks which one, so the dialog has to carry
   // the question or Cancel is the only way out.
   it("a folder holding two .sfz files asks which one to convert (R6)", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const asked: string[] = [];
     const core = {
       ...inner,
@@ -230,7 +230,7 @@ describe("placement routing", () => {
   });
 
   it("one .sfz asks nothing extra, and the core still gets the path", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const asked: string[] = [];
     const core = {
       ...inner,
@@ -271,12 +271,12 @@ describe("placement routing", () => {
     // parseChannel refuses anything outside the three.
     fireEvent.click(screen.getByRole("button", { name: "Split across two disks" }));
     await waitFor(() => {
-      expect(fakeCalls.sfzChannel).toBe("mix");
+      expect(scenarioCalls.sfzChannel).toBe("mix");
     });
   });
 
   it("material with no disk open asks for a disk label first (R7)", async () => {
-    render(<App core={createFakeCore()} />);
+    render(<App core={createScenarioCore()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
     pickFiles([new File([bytes(6)], "SOLO.fzv")]);
 
@@ -310,7 +310,7 @@ describe("split pairs in the shell (R5)", () => {
   };
 
   it("two images open together as one two disk instrument", async () => {
-    render(<App core={createFakeCore()} />);
+    render(<App core={createScenarioCore()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
     pickFiles([half(2, "b.img"), half(1, "a.img")]);
     await screen.findByText("[PAIR]");
@@ -318,7 +318,7 @@ describe("split pairs in the shell (R5)", () => {
   });
 
   it("a lone half banners its missing twin, and the twin completes it", async () => {
-    render(<App core={createFakeCore()} />);
+    render(<App core={createScenarioCore()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
     pickFiles([half(1, "a.img")]);
 
@@ -371,7 +371,7 @@ describe("sidebar file actions", () => {
   // R26: the core stitches a split dump back together for extractFile,
   // and the UI calls it for the full dump.
   it("exports the instrument dump as .fzf (R26)", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const asked: string[] = [];
     const core = {
       ...inner,
@@ -420,7 +420,7 @@ describe("a lone .sfz asks for its samples", () => {
 
   /** A core that records the paths and sizes each conversion got. */
   function recordingCore() {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const sfzCallKeys: string[][] = [];
     const sfzCallSizes: Record<string, number>[] = [];
     const core: Core = {

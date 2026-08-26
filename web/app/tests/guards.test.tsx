@@ -3,7 +3,7 @@
 // folder picker (R6).
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { createFakeCore } from "../src/core/fake";
+import { createScenarioCore } from "./support/scenarioCore";
 import { App } from "../src/shell/App";
 import { dropEntries, walkEntries } from "../src/shell/drop";
 import { openDisk, pickFiles } from "./helpers";
@@ -17,7 +17,7 @@ function closeTab(): boolean {
 
 describe("unexported changes guard the tab close (R3)", () => {
   it("stays quiet on a clean document", async () => {
-    render(<App core={createFakeCore()} />);
+    render(<App core={createScenarioCore()} />);
     await screen.findByRole("button", { name: "New disk" });
     expect(closeTab()).toBe(false);
   });
@@ -36,7 +36,7 @@ describe("unexported changes guard the tab close (R3)", () => {
 describe("the undo hotkey leaves text fields alone", () => {
   /** An app whose core counts the undos the hotkey asks for. */
   async function appCountingUndos() {
-    const core = createFakeCore();
+    const core = createScenarioCore();
     const calls = { undo: 0 };
     const counted = {
       ...core,
@@ -177,7 +177,7 @@ describe("a dropped folder walks like the picker (R6)", () => {
 // walk and not the wiring, where a bad path shape still looks correct.
 describe("a dropped WAV folder reaches the core the way the picker does", () => {
   it("hands the core the folder's files at its root", async () => {
-    const core = createFakeCore();
+    const core = createScenarioCore();
     const seen: string[][] = [];
     const watched: typeof core = {
       ...core,
@@ -233,7 +233,7 @@ describe("a dropped WAV folder reaches the core the way the picker does", () => 
 // every input alike leaves Cmd+Z dead after the waveform's zoom.
 describe("the undo guard covers typing, not every input", () => {
   it("still undoes from a range slider", async () => {
-    const core = createFakeCore();
+    const core = createScenarioCore();
     let undos = 0;
     const counted: typeof core = {
       ...core,

@@ -34,9 +34,11 @@ import { releaseLoop, sustainLoop } from "../viewstate/loops";
 import { matchAreas } from "../viewstate/mapping";
 import { CrashPanel, ErrorBoundary } from "./ErrorBoundary";
 import { dropEntries, walkEntries } from "./drop";
+import { deriveEditorFocus } from "./editorFocus";
+import type { EditorTab } from "./editorFocus";
 import { exportLastResort, readBytes, relativePath, saveFile } from "./fileio";
-import type { SaveOutcome } from "./fileio";
 import { useDocumentSession } from "./useDocumentSession";
+import { useExport } from "./useExport";
 import { wavChannels } from "./wavinfo";
 
 /** True for a target that owns its own undo stack; the document's undo hotkey leaves it alone. */
@@ -69,9 +71,7 @@ function batchChannels(files: NamedBytes[]): number | null {
   }, 1);
 }
 
-type Tab = "voices" | "banks" | "effects";
-
-const TABS: { id: Tab; label: string }[] = [
+const TABS: { id: EditorTab; label: string }[] = [
   { id: "voices", label: "Voices" },
   { id: "banks", label: "Banks and Areas" },
   { id: "effects", label: "Effects" },
@@ -114,7 +114,7 @@ interface BarMsg {
 }
 
 function Shell({ core }: { core: Core }) {
-  const [tab, setTab] = useState<Tab>("voices");
+  const [tab, setTab] = useState<EditorTab>("voices");
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [selectedBank, setSelectedBank] = useState(0);
   const [selectedArea, setSelectedArea] = useState<number | null>(null);
@@ -186,36 +186,13 @@ function Shell({ core }: { core: Core }) {
   const disk = snap?.disk ?? null;
   const instrument = disk?.instrument ?? null;
 
-  const voice =
-    instrument?.voices.find((v) => v.slot === selectedSlot) ?? instrument?.voices[0] ?? null;
-
-  // The keyboard focuses the banks tab's selected area voice, else
-  // the selected voice; the highlight follows the same focus.
-  const bank = instrument?.banks[Math.min(selectedBank, (instrument.banks.length || 1) - 1)];
-  const area = selectedArea === null ? null : (bank?.areas[selectedArea] ?? null);
-  const areaVoice = area
-    ? (instrument?.voices.find((v) => v.slot === area.voiceSlot) ?? null)
-    : null;
-  const focusVoice = tab === "banks" && areaVoice ? areaVoice : voice;
-  const highlight =
-    tab === "banks"
-      ? area
-        ? [{ lo: area.keyLow, hi: area.keyHigh }]
-        : (bank?.areas.map((a) => ({ lo: a.keyLow, hi: a.keyHigh })) ?? null)
-      : voice &&
-          typeof voice.params?.["keyLow"] === "number" &&
-          typeof voice.params["keyHigh"] === "number"
-        ? [{ lo: voice.params["keyLow"], hi: voice.params["keyHigh"] }]
-        : null;
-  // On the banks tab both the marker and the sound come from the
-  // selected area's root, the cent byte the hardware pitches by; the
-  // voices tab reads the voice header's own root.
-  const focusRoot =
-    tab === "banks"
-      ? (area?.root ?? null)
-      : typeof focusVoice?.params?.["rootKey"] === "number"
-        ? focusVoice.params["rootKey"]
-        : null;
+  const { voice, bank, focusVoice, highlight, focusRoot } = deriveEditorFocus(
+    instrument,
+    tab,
+    selectedSlot,
+    selectedBank,
+    selectedArea,
+  );
 
   // Peaks for the selected voice's waveform (R17): the full extent,
   // zoomed inside wavesurfer.
@@ -266,7 +243,7 @@ function Shell({ core }: { core: Core }) {
     if (tab !== "banks" || !bank) return;
     const slots = new Set(bank.areas.map((a) => a.voiceSlot));
     for (const slot of slots) {
-      const slotVoice = instrument.voices.find((v) => v.slot === slot);
+      const slotVoice = instrument?.voices.find((v) => v.slot === slot);
       void queryClient.prefetchQuery({
         queryKey: ["audition", slot, slotVoice?.audioKey ?? ""],
         queryFn: () => core.auditionSlot(slot),
@@ -343,7 +320,7 @@ function Shell({ core }: { core: Core }) {
       const releases: (() => void)[] = [];
       let released = false;
       for (const matched of matches) {
-        const slotVoice = instrument.voices.find((v) => v.slot === matched.voiceSlot);
+        const slotVoice = instrument?.voices.find((v) => v.slot === matched.voiceSlot);
         // Each sounding slot repeats its own sustain loop, so a layered
         // key can hold one voice looping and another playing out.
         const loop = sustainLoop(slotVoice?.voice);
@@ -644,88 +621,14 @@ function Shell({ core }: { core: Core }) {
     setRowFocus(null);
   }, [rowFocus, fileNames]);
 
-  // ---- Export and save --------------------------------------------
-
-  // The document is clean only once the bytes land, so the dirty flag
-  // and the success message wait for the write. A cancel leaves it
-  // dirty and says nothing was written; a failed write says so. `then`
-  // (a guard's "Export first") runs only on a real save: R25 says a
-  // failed export writes nothing, so the guarded action must not run.
-  const exportImage = (then?: () => void) => {
-    const diskLabel = disk?.label.trim() ?? "DISK";
-
-    const landed = (outcomes: SaveOutcome[]) => {
-      if (outcomes.includes("cancelled")) {
-        say("export cancelled; the disk still holds unsaved changes");
-        return;
-      }
+  const { exportImage, exportInstrumentFile } = useExport(core, disk, instrument, {
+    report,
+    fail,
+    say,
+    markClean: () => {
       setDirty(false);
-      say(`exported ${diskLabel}`, "ok");
-      then?.();
-    };
-    const writeFailed = (reason: unknown) => {
-      fail(`save failed: ${reason instanceof Error ? reason.message : String(reason)}`);
-    };
-
-    if (disk && disk.disks === 2) {
-      // R25: a split instrument exports as a named two image set.
-      void core.exportImageAt(0).then((one) => {
-        if (!one.ok) {
-          report(one.error);
-          return;
-        }
-        void core.exportImageAt(1).then((two) => {
-          if (!two.ok) {
-            report(two.error);
-            return;
-          }
-          saveFile(one.value, `${diskLabel}-1.img`)
-            .then(async (first) => {
-              // A cancelled first half ends the export: writing disk 2
-              // alone leaves a half set the sampler can't load, and the
-              // export reports itself cancelled either way.
-              if (first === "cancelled") return [first];
-              return [first, await saveFile(two.value, `${diskLabel}-2.img`)];
-            })
-            .then(landed, writeFailed);
-        });
-      });
-      return;
-    }
-    void core.exportImage().then((result) => {
-      if (!result.ok) {
-        report(result.error);
-        return;
-      }
-      saveFile(result.value, `${diskLabel}.img`).then((outcome) => {
-        landed([outcome]);
-      }, writeFailed);
-    });
-  };
-
-  // R26's .fzf export: the instrument's own dump, stitched back into
-  // one file by the core when it spans a pair.
-  const exportInstrumentFile = () => {
-    const dumpName = instrument?.fileName ?? "FULL-DATA-FZ";
-    const target = `${disk?.label.trim() ?? "INSTRUMENT"}.fzf`;
-    void core.extractFile(dumpName).then((r) => {
-      if (!r.ok) {
-        report(r.error);
-        return;
-      }
-      saveFile(r.value, target).then(
-        (outcome) => {
-          say(
-            outcome === "saved" ? `exported ${target}` : "export cancelled; nothing was written",
-            outcome === "saved" ? "ok" : "status",
-          );
-        },
-        (reason: unknown) => {
-          fail(`save failed: ${reason instanceof Error ? reason.message : String(reason)}`);
-        },
-      );
-    });
-  };
+    },
+  });
 
   // ---- The placement matrix (R6, R7) ------------------------------
 

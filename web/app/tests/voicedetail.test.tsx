@@ -2,7 +2,7 @@
 // slots (R16, R17), through the voice editor's tables.
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { createFakeCore } from "../src/core/fake";
+import { createScenarioCore } from "./support/scenarioCore";
 import { commitField, openInstrumentDisk } from "./helpers";
 
 describe("loops on a slot", () => {
@@ -52,7 +52,7 @@ describe("loops on a slot", () => {
   // Radix select these tests can't drive, so it goes through the core
   // and the field commit below refetches the snapshot carrying it.
   it("says which loop repeats when the drawn one is the sustain loop", async () => {
-    const core = createFakeCore();
+    const core = createScenarioCore();
     await openInstrumentDisk(core);
     await screen.findByLabelText("loop 1 start");
     expect(screen.queryByText(/repeats while held/)).toBeNull();
@@ -71,7 +71,7 @@ describe("loops on a slot", () => {
   // 459 corpus voices name loop_sus below loop_end, but none carries a
   // usable loop in both roles, so this fixture's shape is synthetic.
   it("says a release loop repeats after the key comes up", async () => {
-    const core = createFakeCore();
+    const core = createScenarioCore();
     await openInstrumentDisk(core);
     await screen.findByLabelText("loop 1 start");
     expect(screen.queryByText(/repeats after the key/)).toBeNull();
@@ -92,7 +92,7 @@ describe("loops on a slot", () => {
   // so the chain runs no further than the sustain loop while the key is
   // held. It reads as the sustain loop, and only that caption shows.
   it("shows only the sustain caption when one loop serves both roles", async () => {
-    const core = createFakeCore();
+    const core = createScenarioCore();
     await openInstrumentDisk(core);
     await screen.findByLabelText("loop 1 start");
 

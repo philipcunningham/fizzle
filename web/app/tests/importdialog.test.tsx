@@ -8,7 +8,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Core, SFZImportResult, Snapshot } from "../src/boundary/contract";
 import { err } from "../src/boundary/contract";
-import { createFakeCore } from "../src/core/fake";
+import { createScenarioCore } from "./support/scenarioCore";
 import { App } from "../src/shell/App";
 import { openDisk, openInstrumentDisk, pickFiles, wavFixture } from "./helpers";
 
@@ -151,7 +151,7 @@ describe("the estimate follows the document", () => {
   });
 
   it("keeps the refusal, and Convert disabled, while a re-estimate is in flight", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const gate: { release?: () => void } = {};
     const core: Core = {
       ...inner,
@@ -184,7 +184,7 @@ describe("the estimate follows the document", () => {
 
 describe("an instrument at the voice limit", () => {
   it("names the limit and disables Convert", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const core: Core = {
       ...inner,
       estimateImport: async (files, rate, channel) => {
@@ -204,7 +204,7 @@ describe("an instrument at the voice limit", () => {
 
 describe("a conversion that fails", () => {
   it("reports in the open dialog and lets the user retry", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const core: Core = {
       ...inner,
       importWavToInstrument: () =>
@@ -223,7 +223,7 @@ describe("a conversion that fails", () => {
   });
 
   it("reports a failed folder conversion in the open dialog", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const core: Core = {
       ...inner,
       importWavFolder: () =>
@@ -243,7 +243,7 @@ describe("a conversion that fails", () => {
   });
 
   it("stops a batch at the failing file and keeps the rest to retry", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     let calls = 0;
     const core: Core = {
       ...inner,
@@ -278,7 +278,7 @@ describe("a conversion that fails", () => {
 // arriving after the cancel must not resurrect the dialog.
 describe("cancelling a running conversion", () => {
   it("stops the chain and stays closed on a late failure", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const gates: (() => void)[] = [];
     let calls = 0;
     const core: Core = {
@@ -371,7 +371,7 @@ describe("confirm dialogs focus the safe action", () => {
 // A refusal reads as a sentence, not a machine code plus a Go chain.
 describe("refusals read as words", () => {
   it("shows the message alone, without the envelope code", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const core: Core = {
       ...inner,
       importWavToInstrument: () =>
@@ -390,7 +390,7 @@ describe("refusals read as words", () => {
   // The status bar carries the same words: a code prefix here would
   // put the machine code back on screen.
   it("puts no machine code in the status bar either", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const core: Core = {
       ...inner,
       newDisk: () => Promise.resolve(err<Snapshot>("invalid-label", "that label is not ASCII")),
@@ -412,7 +412,7 @@ describe("refusals read as words", () => {
 // naming the machine matters most (R30).
 describe("the estimate names the machine on every path that lands", () => {
   it("says what a split instrument needs to load", async () => {
-    const core = createFakeCore();
+    const core = createScenarioCore();
     await openDisk(core);
     // Past one floppy, inside the two disk set, past a stock machine.
     pickFiles([new File([wavFixture(1, 18000, 700000)], "huge.wav")]);
