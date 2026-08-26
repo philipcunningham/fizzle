@@ -147,7 +147,7 @@ func TestFormatRejectsUnicodeLabel(t *testing.T) {
 
 // A label longer than the 12-byte field, whose only non-ASCII
 // character sits past the cut, must still be rejected. Validating
-// after the truncation would accept it and write a disk.
+// after a byte-length check could report the replacement rune or write a disk.
 func TestFormatRejectsUnicodeLabelPastTruncation(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -248,18 +248,11 @@ func TestFormatOverlengthLabel(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "long.img")
 
-	if err := Format(path, "ABCDEFGHIJKLMNOP"); err != nil {
-		t.Fatal(err)
+	if err := Format(path, "ABCDEFGHIJKLMNOP"); err == nil {
+		t.Fatal("over-length label was silently truncated")
 	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	want := disk.PadLabel("ABCDEFGHIJKL")
-	if [disk.LabelSize]byte(data[0:disk.LabelSize]) != want {
-		t.Errorf("label not truncated: got %q, want %q", data[0:disk.LabelSize], want)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("rejected label created an image: %v", err)
 	}
 }
 
@@ -283,8 +276,7 @@ func TestFormatReadImageRoundTrip(t *testing.T) {
 }
 
 // BuildImage is the pure entry point the web core calls: same image
-// bytes as Format, no filesystem, and strict validation (the web
-// boundary rejects an over-length label instead of truncating).
+// bytes and strict validation as Format, with no filesystem.
 func TestBuildImageMatchesFormat(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "disk.img")
 	if err := Format(path, "TECHNO"); err != nil {

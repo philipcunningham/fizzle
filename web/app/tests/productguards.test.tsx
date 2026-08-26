@@ -8,7 +8,7 @@ import { createCoreStub, emptySnapshot } from "../src/core/stub";
 import { createQueryClient } from "../src/queries/client";
 import { App } from "../src/shell/App";
 import { useDocumentSession } from "../src/shell/useDocumentSession";
-import { presentationCore } from "./support/presentation";
+import { instrumentSnapshot, presentationCore } from "./support/presentation";
 
 const MEMORY_KEY = "fizzle.sampleMemory";
 
@@ -128,5 +128,16 @@ describe("open-file accessibility state", () => {
     expect(
       rows.find((row) => row.textContent.includes("SPARE.FZV"))?.getAttribute("aria-current"),
     ).toBeNull();
+  });
+});
+
+describe("unexported changes accessibility state", () => {
+  it("announces the dirty state instead of exposing only a coloured dot", async () => {
+    render(<App core={presentationCore(instrumentSnapshot())} />);
+    fireEvent.click(await screen.findByRole("button", { name: "disk MY DISK, rename" }));
+    const label = await screen.findByRole("textbox", { name: "disk label" });
+    fireEvent.change(label, { target: { value: "NEW NAME" } });
+    fireEvent.blur(label);
+    expect(await screen.findByRole("status", { name: "Unexported changes" })).toBeTruthy();
   });
 });

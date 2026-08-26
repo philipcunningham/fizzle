@@ -17,7 +17,7 @@ export function MatrixGrid({ matrix, onChange, onGestureBegin, onGestureCommit }
   const gesture = useGestureBracket(onGestureBegin, onGestureCommit);
 
   return (
-    <table className="term matrix">
+    <table className="term matrix" aria-label="effects modulation matrix">
       <thead>
         <tr>
           <th>Controller</th>

@@ -25,30 +25,23 @@ const unformattedFillByte = 'Z'
 const catInitialAlloc = 0x03
 
 // Format creates a new blank FZ series disk image at path with the given label.
-// The label is padded or truncated to 12 bytes. The image is written
+// Labels longer than the sampler display are refused. The image is written
 // atomically via a temporary file and rename.
 func Format(path, label string) error {
 	if label == "" {
-		return fmt.Errorf("diskformat: disk label must not be empty")
+		return fmt.Errorf("disk label must not be empty")
 	}
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		return fmt.Errorf("diskformat: %q is a directory, IMAGE must be a file path", path)
+		return fmt.Errorf("%q is a directory, IMAGE must be a file path", path)
 	}
-	// Validate the label the user typed, before the truncation below.
-	// Checking after the cut would accept a non-ASCII byte past byte 12
-	// and would report the replacement rune when the cut splits a
-	// multi-byte character.
+	// Validate the complete label the user typed before creating anything.
 	for _, r := range label {
 		if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
-			return fmt.Errorf("diskformat: disk label contains non-ASCII character %q (the sampler only supports printable ASCII)", string(r))
+			return fmt.Errorf("disk label contains non-ASCII character %q (the sampler only supports printable ASCII)", string(r))
 		}
 	}
 	if len(label) > disk.LabelSize {
-		log.Warn().
-			Str("label", label).
-			Int("limit", disk.LabelSize).
-			Msgf("diskformat: disk label truncated to %d characters", disk.LabelSize)
-		label = label[:disk.LabelSize]
+		return fmt.Errorf("disk label %q exceeds %d characters", label, disk.LabelSize)
 	}
 	log.Info().
 		Str("file", filepath.Base(path)).
@@ -63,7 +56,7 @@ func Format(path, label string) error {
 		return err
 	}
 	if err := fileutil.WriteAtomic(path, img); err != nil {
-		return fmt.Errorf("diskformat: %w", err)
+		return err
 	}
 	return nil
 }
@@ -71,18 +64,17 @@ func Format(path, label string) error {
 // BuildImage constructs the raw bytes of a blank formatted disk image in
 // memory. Unlike Format it never touches the filesystem and validates
 // strictly: an empty, over-length, or non printable ASCII label is an error.
-// Format validates then truncates before calling here, which keeps the CLI's
-// truncate-and-warn behaviour.
+// Format and BuildImage deliberately share the same strict label contract.
 func BuildImage(label string) ([]byte, error) {
 	if label == "" {
-		return nil, fmt.Errorf("diskformat: disk label must not be empty")
+		return nil, fmt.Errorf("disk label must not be empty")
 	}
 	if len(label) > disk.LabelSize {
-		return nil, fmt.Errorf("diskformat: disk label exceeds %d characters", disk.LabelSize)
+		return nil, fmt.Errorf("disk label exceeds %d characters", disk.LabelSize)
 	}
 	for _, r := range label {
 		if r < disk.PrintableASCIIMin || r > disk.PrintableASCIIMax {
-			return nil, fmt.Errorf("diskformat: disk label contains non-ASCII character %q (the sampler only supports printable ASCII)", string(r))
+			return nil, fmt.Errorf("disk label contains non-ASCII character %q (the sampler only supports printable ASCII)", string(r))
 		}
 	}
 	return buildImage(label), nil

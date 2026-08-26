@@ -63,6 +63,15 @@ export function presentationCore(snapshot: Snapshot = instrumentSnapshot()) {
     newDisk: () => Promise.resolve(ok(diskSnapshot())),
     openImage: () => Promise.resolve(ok(snapshot)),
     closeDisk: () => Promise.resolve(ok(emptySnapshot({ revision: snapshot.revision + 1 }))),
+    undo: () => Promise.resolve(ok({ ...snapshot, revision: snapshot.revision + 1 })),
+    renameDisk: (label) =>
+      Promise.resolve(
+        ok({
+          ...snapshot,
+          revision: snapshot.revision + 1,
+          disk: snapshot.disk ? { ...snapshot.disk, label } : null,
+        }),
+      ),
     exportImage: () => Promise.resolve(ok(new Uint8Array([1, 2, 3]))),
     extractFile: () => Promise.resolve(ok(new Uint8Array([1, 2, 3]))),
     setSampleMemory: (bytes) =>
