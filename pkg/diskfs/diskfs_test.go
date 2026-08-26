@@ -2,12 +2,16 @@ package diskfs_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/diskfs"
+	"github.com/philipcunningham/fizzle/pkg/fzutil"
 )
 
 func image(t *testing.T) *disk.Image {
@@ -59,5 +63,56 @@ func TestReplaceRollsBackOnFailure(t *testing.T) {
 	}
 	if !bytes.Equal(img.Bytes(), before) {
 		t.Fatal("failed replacement changed the image")
+	}
+}
+
+func TestFullDumpStoresWalkedVoiceCount(t *testing.T) {
+	path := filepath.Join("..", "..", "testdata", "corpus",
+		"casio-fz1-soundwaves", "accompaniment", "harpsichord",
+		"Harpsichord.fzf")
+	dump, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := diskfs.FullDump(dump, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.Voices != 32 {
+		t.Fatalf("walked voice count = %d, want 32", file.Voices)
+	}
+	bstepSum := 0
+	for bank := range fzutil.CountBankSectors(dump) {
+		off := bank*disk.SectorSize + disk.BankVoiceCountOffset
+		bstepSum += int(binary.LittleEndian.Uint16(dump[off : off+2]))
+	}
+	if bstepSum != 177 {
+		t.Fatalf("fixture bstep sum = %d, want the misleading count 177", bstepSum)
+	}
+	img := image(t)
+	if err := diskfs.Add(img, dump, file); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := img.Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("directory entries = %d, want 1", len(entries))
+	}
+	disBytes, err := img.SectorRef(int(entries[0].DisSector))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dis, err := disk.DecodeDisSector(disBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dis.VoiceCount != 32 {
+		t.Fatalf("stored DIS voice count = %d, want walked count 32", dis.VoiceCount)
+	}
+	wantWaves := disk.SectorsNeeded(len(dump)) - file.Banks - disk.VoiceAreaSectors(32)
+	if int(dis.WaveCount) != wantWaves {
+		t.Fatalf("stored DIS wave count = %d, want %d from the walked voice boundary", dis.WaveCount, wantWaves)
 	}
 }
