@@ -182,4 +182,4 @@ A user disk saved on a real FZ-1, now the PREY.img fixture, drove one PR. New fi
 
 ## [2026-08-26] ingest | The mod wheel's amp and filter offsets, from an FZ-1
 
-A user reported the browser naming mod wheel DCF as DCA, with a photo of the machine beside it. The panel read `DCA LEVEL = 000` and `DCF LEVEL = 127`, where the saved block holds 0 at 0x07 and 127 at 0x08. The spec's List C transposes those two labels, alone among the three controllers. New finding page mod-wheel-dca-dcf-order. The firmware agrees: effectdata_edit_screen at F000:6B98 divides an offset by 7 to pick a controller, so all three groups share one layout. Running it routes 0x07 and 0x08 to the same group slots the foot row uses for dca and dcf. The corpus survey backs it too: 0x07 never set across 112 dumps, and 0x08 set in eight, every one a sustained patch.
+A user's FZ-1 photo showed mod wheel `DCF LEVEL = 127` where the saved block holds 127 at 0x08. The spec's List C transposes that row's two labels. New finding page mod-wheel-dca-dcf-order, with the firmware and a corpus survey behind it.

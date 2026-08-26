@@ -18,14 +18,11 @@ func readEffectByte(t *testing.T, path string, fieldOffset int) byte {
 	return data[disk.BankEffectOffset+fieldOffset]
 }
 
-// TestEffectOffsetsMatchSpec pins every effect-block field offset
-// fzfeffects uses to the FZ-1 Data Structures spec section 2-3 (`struct
+// TestEffectFieldOffsets pins every effect-block field offset. All but
+// the mod row's amp and filter follow the spec's section 2-3 (`struct
 // effectdata`). It guards an off-by-one that maps aft_lfp to byte 18
 // (aft_lfa) instead of 17.
-//
-// The mod row's amp and filter offsets are the exception: they follow
-// hardware, which contradicts the spec.
-func TestEffectOffsetsMatchSpec(t *testing.T) {
+func TestEffectFieldOffsets(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name string
