@@ -54,7 +54,21 @@ Example:
 }
 
 func run() int {
-	app := &cli.Command{
+	app := newApp()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := app.Run(ctx, os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "fizzle: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// newApp builds the complete command tree. Keeping command metadata behind a
+// constructor lets documentation and contract tests inspect the same tree the
+// executable runs.
+func newApp() *cli.Command {
+	return &cli.Command{
 		Name:                  "fizzle",
 		Version:               fizzleversion.String(),
 		Usage:                 "FZ series sampler disk and voice tool",
@@ -78,11 +92,4 @@ func run() int {
 			licensesCmd(),
 		},
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	if err := app.Run(ctx, os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "fizzle: %v\n", err)
-		return 1
-	}
-	return 0
 }
