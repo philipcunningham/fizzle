@@ -787,7 +787,7 @@ func prepareDocument(img *disk.Image, img2 []byte, disMode bool) (preparedDocume
 		used:        disk.ImageSize - img.FreeSectors()*disk.SectorSize,
 		files:       files,
 		instrument:  inst,
-		missingDisk: missingDiskOf(img, img2),
+		missingDisk: state.MissingDisk(),
 	}
 	if parsedImage2 != nil {
 		next.used += disk.ImageSize - parsedImage2.FreeSectors()*disk.SectorSize
@@ -795,7 +795,7 @@ func prepareDocument(img *disk.Image, img2 []byte, disMode bool) (preparedDocume
 	// Measured once here, where the document changes and both images
 	// are in hand, so a snapshot stays a plain read.
 	if inst != nil {
-		if fzf, cerr := stitchedDumpPair(img, img2); cerr == nil {
+		if fzf, err := state.StitchedFullDump(); err == nil {
 			next.audioBytes = dumpAudioBytes(fzf, vn)
 		}
 	}
