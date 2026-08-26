@@ -44,6 +44,13 @@ func (v BankView) AreaCount() int {
 	return int(binary.LittleEndian.Uint16(v.data[disk.BankVoiceCountOffset : disk.BankVoiceCountOffset+2]))
 }
 
+// TotalWaveSectors returns the optional whole-instrument wave-sector marker.
+// Only bank zero carries this marker; callers interpreting split dumps should
+// read it from Document.Bank(0).
+func (v BankView) TotalWaveSectors() int {
+	return int(binary.LittleEndian.Uint32(v.data[disk.BankTotalWaveOffset : disk.BankTotalWaveOffset+4]))
+}
+
 // VoiceSlot returns the file-level voice slot played by area.
 func (v BankView) VoiceSlot(area int) (int, error) {
 	if area < 0 || area >= v.AreaCount() {
@@ -114,6 +121,11 @@ func (v AreaView) MIDIChannel() int   { return int(v.bank[disk.BankMIDIRecvChanO
 func (v AreaView) Output() string {
 	return disk.FormatAudioOut(v.bank[disk.BankAudioOutOffset+v.index])
 }
+
+// OutputValue returns the raw output bitmask stored for the area.
+func (v AreaView) OutputValue() int {
+	return int(v.bank[disk.BankAudioOutOffset+v.index])
+}
 func (v AreaView) Volume() byte { return v.bank[disk.BankVolumeOffset+v.index] }
 
 // NamePatch returns a stale-safe patch that changes the bank's display name.
@@ -163,6 +175,23 @@ func (v VoiceView) WaveStart() uint32 {
 // WaveEnd returns the voice's absolute end address in samples.
 func (v VoiceView) WaveEnd() uint32 {
 	return binary.LittleEndian.Uint32(v.data[disk.VoiceWaveEndOffset : disk.VoiceWaveEndOffset+4])
+}
+
+// SampleRateIndex returns the stored sample-rate table index.
+func (v VoiceView) SampleRateIndex() byte { return v.data[disk.VoiceSampOffset] }
+
+// HasActiveLoop reports whether the selected sustain loop has a non-empty
+// address range after masking the format's flag bits.
+func (v VoiceView) HasActiveLoop() bool {
+	selected := v.data[disk.VoiceLoopSusOffset]
+	if selected >= disk.NoSustainLoop {
+		return false
+	}
+	startOffset := disk.VoiceLoopSt0Offset + int(selected)*4
+	endOffset := disk.VoiceLoopEd0Offset + int(selected)*4
+	start := binary.LittleEndian.Uint32(v.data[startOffset : startOffset+4])
+	end := binary.LittleEndian.Uint32(v.data[endOffset : endOffset+4])
+	return disk.LoopStartAddress(start) < disk.LoopEndAddress(end)
 }
 
 // RootKey returns the voice's raw key-center byte.

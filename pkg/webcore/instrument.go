@@ -1,13 +1,11 @@
 package webcore
 
 import (
-	"encoding/binary"
 	"fmt"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzfeffects"
-	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/model"
 )
@@ -103,46 +101,44 @@ func instrumentFrom(fileName string, fzfData []byte, disVN int) (*InstrumentSnap
 		return nil, fmt.Errorf("webcore: %w", err)
 	}
 	layout := doc.Layout()
-	hdr := &fzutil.FZFHeader{NVoice: layout.VoiceCount(), BStep0: layout.BStep0(), NBankSectors: layout.BankCount(), VoiceAreaStart: layout.VoiceStart()}
-	if hdr.VoiceAreaStart > len(fzfData) {
-		return nil, fmt.Errorf("webcore: voice area starts past the dump")
-	}
-	voiceArea := fzfData[hdr.VoiceAreaStart:]
 
 	referenced := make(map[int]bool)
-	banks := make([]BankSnapshot, 0, hdr.NBankSectors)
-	for b := 0; b < hdr.NBankSectors; b++ {
-		base := b * disk.SectorSize
-		if base+disk.SectorSize > len(fzfData) {
-			break
-		}
-		bank := fzfData[base : base+disk.SectorSize]
-		bstep := int(binary.LittleEndian.Uint16(bank[disk.BankVoiceCountOffset:]))
-		if bstep > disk.MaxVoices {
-			bstep = disk.MaxVoices
+	banks := make([]BankSnapshot, 0, layout.BankCount())
+	for b := range layout.BankCount() {
+		bank, berr := doc.Bank(b)
+		if berr != nil {
+			return nil, fmt.Errorf("webcore: %w", berr)
 		}
 		snapshot := BankSnapshot{
-			Name:  disk.TrimPadded(bank[disk.BankNameOffset : disk.BankNameOffset+disk.LabelSize]),
-			Areas: make([]AreaSnapshot, 0, bstep),
+			Name:  bank.Name(),
+			Areas: make([]AreaSnapshot, 0, bank.AreaCount()),
 		}
-		for i := 0; i < bstep; i++ {
-			slot := int(binary.LittleEndian.Uint16(bank[disk.BankVoiceNumOffset+i*disk.VPEntrySize:]))
+		for i := range bank.AreaCount() {
+			areaView, aerr := bank.Area(i)
+			if aerr != nil {
+				return nil, fmt.Errorf("webcore: %w", aerr)
+			}
+			slot := areaView.VoiceSlot()
 			referenced[slot] = true
+			voiceName := fmt.Sprintf("VOICE %d", slot+1)
+			if voice, verr := doc.Voice(slot); verr == nil {
+				name := voice.Name()
+				if name != "" && disk.IsPrintableName([]byte(name)) {
+					voiceName = name
+				}
+			}
 			area := AreaSnapshot{
 				VoiceSlot:   slot,
-				VoiceName:   fmt.Sprintf("VOICE %d", slot+1),
-				KeyLow:      int(bank[disk.BankKeyLowOffset+i]),
-				KeyHigh:     int(bank[disk.BankKeyHighOffset+i]),
-				Root:        int(bank[disk.BankKeyCentOffset+i]),
-				VelLow:      int(bank[disk.BankVelLowOffset+i]),
-				VelHigh:     int(bank[disk.BankVelHighOffset+i]),
-				MidiChannel: int(bank[disk.BankMIDIRecvChanOffset+i]) + 1,
-				Output:      int(bank[disk.BankAudioOutOffset+i]),
-				OutputLabel: disk.FormatAudioOut(bank[disk.BankAudioOutOffset+i]),
-				Volume:      disk.AreaLevelFromByte(bank[disk.BankVolumeOffset+i]),
-			}
-			if entry, ok := fzutil.ParseBankVoiceEntry(bank, voiceArea, i, slot); ok {
-				area.VoiceName = entry.Name
+				VoiceName:   voiceName,
+				KeyLow:      int(areaView.KeyLow()),
+				KeyHigh:     int(areaView.KeyHigh()),
+				Root:        int(areaView.RootKey()),
+				VelLow:      int(areaView.VelocityLow()),
+				VelHigh:     int(areaView.VelocityHigh()),
+				MidiChannel: areaView.MIDIChannel(),
+				Output:      areaView.OutputValue(),
+				OutputLabel: areaView.Output(),
+				Volume:      disk.AreaLevelFromByte(areaView.Volume()),
 			}
 			snapshot.Areas = append(snapshot.Areas, area)
 		}
@@ -151,36 +147,35 @@ func instrumentFrom(fileName string, fzfData []byte, disVN int) (*InstrumentSnap
 
 	// The first slot to claim a wave start owns that audio; later slots
 	// pointing at the same address are clones sharing it.
-	audioOwners := make(map[uint32]int, hdr.NVoice)
-	voices := make([]InstrumentVoice, 0, hdr.NVoice)
-	for slot := 0; slot < hdr.NVoice; slot++ {
-		off := disk.VoiceSlotOffset(0, slot)
-		if off+disk.VoiceHeaderUsed > len(voiceArea) {
-			break
+	audioOwners := make(map[uint32]int, layout.VoiceCount())
+	voices := make([]InstrumentVoice, 0, layout.VoiceCount())
+	for slot := range layout.VoiceCount() {
+		voiceView, verr := doc.Voice(slot)
+		if verr != nil {
+			return nil, fmt.Errorf("webcore: %w", verr)
 		}
-		slotHdr := voiceArea[off : off+disk.VoiceHeaderUsed]
-		mode := binary.LittleEndian.Uint16(slotHdr[disk.VoiceLoopModeOffset:])
+		mode := voiceView.PlaybackMode()
 		if mode == disk.PlaybackModeNoSound {
 			continue
 		}
-		name := disk.TrimPadded(slotHdr[disk.VoiceNameOffset : disk.VoiceNameOffset+disk.LabelSize])
+		name := voiceView.Name()
 		if name == "" || !disk.IsPrintableName([]byte(name)) {
 			name = fmt.Sprintf("VOICE %d", slot+1)
 		}
 		voice := InstrumentVoice{Slot: slot, Name: name, Referenced: referenced[slot]}
-		waveStart := binary.LittleEndian.Uint32(slotHdr[disk.VoiceWaveStartOffset : disk.VoiceWaveStartOffset+4])
+		waveStart := voiceView.WaveStart()
 		if seenAt, ok := audioOwners[waveStart]; ok && seenAt != slot {
 			voice.SharesAudio = true
 		} else {
 			audioOwners[waveStart] = slot
 		}
-		waveEnd := binary.LittleEndian.Uint32(slotHdr[disk.VoiceWaveEndOffset : disk.VoiceWaveEndOffset+4])
+		waveEnd := voiceView.WaveEnd()
 		voice.AudioKey = fmt.Sprintf("%d:%d", waveStart, waveEnd)
 		// Header-only enrichment: pad the slot header to the sector the
 		// parser expects; no audio is copied. A slot that fails to parse
 		// simply carries no editable surface.
 		padded := make([]byte, disk.SectorSize)
-		copy(padded, slotHdr)
+		copy(padded, voiceView.HeaderBytes())
 		if vp, err := fzvinfo.ParseBytes(padded); err == nil {
 			voice.Params = voiceParams(vp, padded)
 			detail := voiceDetailFrom(vp)

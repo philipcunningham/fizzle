@@ -4,7 +4,6 @@
 package fzfinfo
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/logger"
 	"github.com/philipcunningham/fizzle/pkg/render"
@@ -58,30 +58,13 @@ func Parse(path string) (*FullDump, error) {
 	if disk.IsPlausibleVoiceHeader(data) {
 		return nil, fmt.Errorf("fzfinfo: %q looks like a voice file, not a full dump. Try 'fzv info' instead", path)
 	}
-	layout, err := fzutil.ResolveStandaloneFZFLayout(data)
+	doc, err := fzf.NewStandalone(data)
 	if err != nil {
 		return nil, fmt.Errorf("fzfinfo: %w", err)
 	}
-
-	bank := data[:disk.SectorSize]
+	layout := doc.Layout()
 	nvoice := layout.VoiceCount()
-	voiceAreaStart := layout.VoiceStart()
-	hdr := &fzutil.FZFHeader{NVoice: nvoice, BStep0: layout.BStep0(), NBankSectors: layout.BankCount(), VoiceAreaStart: voiceAreaStart}
-
-	voiceSectors := disk.VoiceAreaSectors(nvoice)
-	voiceAreaEnd := voiceAreaStart + voiceSectors*disk.SectorSize
-	if len(data) < voiceAreaEnd {
-		return nil, fmt.Errorf("fzfinfo: %q: file truncated", path)
-	}
-	voiceArea := data[voiceAreaStart:voiceAreaEnd]
-
-	waveEnds := make([]uint32, nvoice)
-	for i := range nvoice {
-		voff := disk.VoiceSlotOffset(0, i)
-		if voff+8 <= len(voiceArea) {
-			waveEnds[i] = binary.LittleEndian.Uint32(voiceArea[voff+disk.VoiceWaveEndOffset : voff+disk.VoiceWaveEndOffset+4])
-		}
-	}
+	voiceAreaEnd := layout.AudioStart()
 
 	// Multi-disk detection.
 	//
@@ -99,19 +82,18 @@ func Parse(path string) (*FullDump, error) {
 	// plausible (printable name and valid sample-rate index). When only
 	// implausible slots trigger it, the marker is noise and the file
 	// reports as standalone.
-	totalWaveMarker := int(binary.LittleEndian.Uint32(bank[disk.BankTotalWaveOffset : disk.BankTotalWaveOffset+4]))
+	firstBank, _ := doc.Bank(0)
+	totalWaveMarker := firstBank.TotalWaveSectors()
 	localAudioBytes := len(data) - voiceAreaEnd
 	localWaveSectors := localAudioBytes / disk.SectorSize
 	splitAt := -1
 	if totalWaveMarker > 0 && totalWaveMarker > localWaveSectors {
 		for i := range nvoice {
-			voff := disk.VoiceSlotOffset(0, i)
-			slot := voiceArea[voff : voff+disk.VoiceHeaderUsed]
-			if !disk.IsPlausibleVoiceSlot(slot) {
+			voice, verr := doc.Voice(i)
+			if verr != nil || !disk.IsPlausibleVoiceSlot(voice.HeaderBytes()) {
 				continue
 			}
-			wavst := binary.LittleEndian.Uint32(slot[disk.VoiceWaveStartOffset : disk.VoiceWaveStartOffset+4])
-			if int(wavst)*disk.BytesPerSample >= localAudioBytes {
+			if int(voice.WaveStart())*disk.BytesPerSample >= localAudioBytes {
 				splitAt = i
 				break
 			}
@@ -132,9 +114,11 @@ func Parse(path string) (*FullDump, error) {
 	} else {
 		info.VoiceCount = nvoice
 		var totalBytes uint32
-		if nvoice > 0 && waveEnds[nvoice-1] > 0 {
-			totalBytes = waveEnds[nvoice-1] * disk.BytesPerSample
-		} else if len(data) > voiceAreaEnd {
+		if nvoice > 0 {
+			voice, _ := doc.Voice(nvoice - 1)
+			totalBytes = voice.WaveEnd() * disk.BytesPerSample
+		}
+		if totalBytes == 0 && len(data) > voiceAreaEnd {
 			totalBytes = uint32(localAudioBytes) //nolint:gosec // G115: localAudioBytes derived from file length, always non-negative
 		}
 		// Clamp to the audio present in the file. Real FZFs from older
@@ -147,11 +131,14 @@ func Parse(path string) (*FullDump, error) {
 		info.MemoryBytes = int(totalBytes)
 	}
 
-	info.ShowVelocity = fzutil.BankSectorShowsVelocity(data, hdr)
-	info.ShowVolume = fzutil.BankSectorShowsVolume(data, hdr)
+	for bankIndex := range layout.BankCount() {
+		bank, _ := doc.Bank(bankIndex)
+		info.ShowVelocity = info.ShowVelocity || bank.ShowsVelocity()
+		info.ShowVolume = info.ShowVolume || bank.ShowsVolume()
+	}
 
 	for i := range nvoice {
-		info.Voices = append(info.Voices, parseVoiceEntry(voiceArea, data, hdr, i))
+		info.Voices = append(info.Voices, parseVoiceEntry(doc, i))
 	}
 
 	if splitAt >= 0 {
@@ -174,10 +161,9 @@ func Parse(path string) (*FullDump, error) {
 // deterministic and matches the front panel's first reference. Orphan
 // headers with no bank site render with zero metadata; fizzle-built dumps
 // never produce those, hand-crafted hardware files can.
-func parseVoiceEntry(voiceArea, data []byte, fhdr *fzutil.FZFHeader, i int) VoiceEntry {
-	voff := disk.VoiceSlotOffset(0, i)
-	hdr := voiceArea[voff : voff+disk.VoiceHeaderUsed]
-	mode := binary.LittleEndian.Uint16(hdr[disk.VoiceLoopModeOffset : disk.VoiceLoopModeOffset+2])
+func parseVoiceEntry(doc *fzf.Document, i int) VoiceEntry {
+	voice, _ := doc.Voice(i)
+	mode := voice.PlaybackMode()
 
 	if mode == disk.PlaybackModeNoSound {
 		return VoiceEntry{
@@ -199,26 +185,42 @@ func parseVoiceEntry(voiceArea, data []byte, fhdr *fzutil.FZFHeader, i int) Voic
 			Msg("voice slot uses undocumented playback mode 0x0157 (treating as Normal variant)")
 	}
 
-	sites := fzutil.FindBankSitesForVoice(data, fhdr, i)
 	var (
 		base   fzutil.BankVoiceEntry
 		baseOK bool
 	)
-	if len(sites) > 0 {
-		site := sites[0]
-		bank := fzutil.BankSliceAt(data, site.BankIdx)
-		if bank != nil {
-			base, baseOK = fzutil.ParseBankVoiceEntry(bank, voiceArea, site.SplitIdx, i)
+	for bankIndex := range doc.Layout().BankCount() {
+		bank, _ := doc.Bank(bankIndex)
+		for areaIndex := range bank.AreaCount() {
+			area, err := bank.Area(areaIndex)
+			if err != nil || area.VoiceSlot() != i {
+				continue
+			}
+			name := voice.Name()
+			if name == "" || !disk.IsPrintableName([]byte(name)) {
+				name = fmt.Sprintf("VOICE %d", i+1)
+			}
+			base = fzutil.BankVoiceEntry{
+				Index: i + 1, Name: name, RootNote: area.RootKey(),
+				KeyLow: area.KeyLow(), KeyHigh: area.KeyHigh(),
+				VelLow: area.VelocityLow(), VelHigh: area.VelocityHigh(),
+				MIDIChannel: area.MIDIChannel(), Output: area.Output(),
+				BankVolume: area.Volume(),
+			}
+			baseOK = true
+			break
+		}
+		if baseOK {
+			break
 		}
 	}
 	if !baseOK {
-		// Orphan voice header, or ParseBankVoiceEntry declined. The
-		// header still carries the audio metadata, so default the bank
+		// An orphan header still carries audio metadata. Default its bank
 		// fields and carry on with duration, rate, and hasLoop below.
 		// MIDIChannel reports 1 (spec channel 1) so downstream invariants
 		// don't read 0 as out of range, and Output renders "none" to
 		// mirror the gchn=0 case.
-		name := disk.TrimPadded(hdr[disk.VoiceNameOffset : disk.VoiceNameOffset+disk.LabelSize])
+		name := voice.Name()
 		if name == "" || !disk.IsPrintableName([]byte(name)) {
 			name = fmt.Sprintf("VOICE %d", i+1)
 		}
@@ -230,11 +232,11 @@ func parseVoiceEntry(voiceArea, data []byte, fhdr *fzutil.FZFHeader, i int) Voic
 		}
 	}
 
-	sampIdx := hdr[disk.VoiceSampOffset]
+	sampIdx := voice.SampleRateIndex()
 	rate := disk.SampleRate(sampIdx)
 
-	waveStart := binary.LittleEndian.Uint32(hdr[disk.VoiceWaveStartOffset : disk.VoiceWaveStartOffset+4])
-	waveEnd := binary.LittleEndian.Uint32(hdr[disk.VoiceWaveEndOffset : disk.VoiceWaveEndOffset+4])
+	waveStart := voice.WaveStart()
+	waveEnd := voice.WaveEnd()
 	var voiceSamples uint32
 	if waveEnd > waveStart {
 		voiceSamples = waveEnd - waveStart
@@ -242,19 +244,6 @@ func parseVoiceEntry(voiceArea, data []byte, fhdr *fzutil.FZFHeader, i int) Voic
 	var duration float64
 	if rate > 0 && voiceSamples > 0 {
 		duration = float64(voiceSamples) / float64(rate)
-	}
-
-	loopSus := hdr[disk.VoiceLoopSusOffset]
-	// loop_sus (0 to 7) picks the active loopst/looped pair; 8 means no
-	// sustain loop. Mask the spec's reserved loop-fine and skip-flag bits
-	// so the comparison sees sample positions only.
-	hasLoop := false
-	if loopSus < disk.NoSustainLoop {
-		stOff := disk.VoiceLoopSt0Offset + int(loopSus)*4
-		edOff := disk.VoiceLoopEd0Offset + int(loopSus)*4
-		rawSt := binary.LittleEndian.Uint32(hdr[stOff : stOff+4])
-		rawEd := binary.LittleEndian.Uint32(hdr[edOff : edOff+4])
-		hasLoop = disk.LoopStartAddress(rawSt) < disk.LoopEndAddress(rawEd)
 	}
 
 	return VoiceEntry{
@@ -273,7 +262,7 @@ func parseVoiceEntry(voiceArea, data []byte, fhdr *fzutil.FZFHeader, i int) Voic
 		},
 		RateIndex: sampIdx,
 		Duration:  duration,
-		HasLoop:   hasLoop,
+		HasLoop:   voice.HasActiveLoop(),
 	}
 }
 
