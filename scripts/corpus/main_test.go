@@ -58,11 +58,53 @@ func TestCorpusReadyRequiresMatchingVersionMarker(t *testing.T) {
 	if corpusReady(root, "wanted") {
 		t.Fatal("wrong marker accepted")
 	}
-	if err := os.WriteFile(filepath.Join(root, ".archive-sha256"), []byte("wanted\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "fixture.fzf"), []byte("fixture"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	digest, err := treeDigest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".archive-sha256"), []byte("wanted\n"+digest+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if !corpusReady(root, "wanted") {
 		t.Fatal("matching marker rejected")
+	}
+	if err := os.WriteFile(filepath.Join(root, "fixture.fzf"), []byte("tampered"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if corpusReady(root, "wanted") {
+		t.Fatal("tampered installed fixture accepted")
+	}
+}
+
+func TestRunRepairsTamperedInstallationFromVerifiedCache(t *testing.T) {
+	archive := testArchive(t, "corpus/example/file.fzf", []byte("fixture"))
+	digest := sha256.Sum256(archive)
+	expected := hex.EncodeToString(digest[:])
+	cache := t.TempDir()
+	archivePath := filepath.Join(cache, "fizzle-corpus-v1.tar.gz")
+	if err := os.WriteFile(archivePath, archive, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	destination := t.TempDir()
+	if err := run(destination, cache, "unused", expected); err != nil {
+		t.Fatal(err)
+	}
+	fixture := filepath.Join(destination, "corpus", "example", "file.fzf")
+	if err := os.WriteFile(fixture, []byte("tampered"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(destination, cache, "unused", expected); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "fixture" {
+		t.Fatalf("repaired content = %q", got)
 	}
 }
 

@@ -23,7 +23,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/diskget"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/fileutil"
 	"github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
@@ -146,8 +146,16 @@ func UnpackMultiDisk(disk1ImgPath, disk2ImgPath, outputDir string) error {
 	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	d1FZF := filepath.Join(tmpDir, "d1.fzf")
-	if err := diskget.Get(disk1ImgPath, disk.FullDumpName, d1FZF); err != nil {
+	disk1, err := disk.OpenImage(disk1ImgPath)
+	if err != nil {
+		return fmt.Errorf("voiceunpack: opening disk 1: %w", err)
+	}
+	disk1Data, err := diskfs.Extract(disk1, disk.FullDumpName)
+	if err != nil {
 		return fmt.Errorf("voiceunpack: extracting FZF from disk 1: %w", err)
+	}
+	if err := os.WriteFile(d1FZF, disk1Data, 0o644); err != nil {
+		return fmt.Errorf("voiceunpack: staging FZF from disk 1: %w", err)
 	}
 	doc, err := readStandalone(d1FZF)
 	if err != nil {
@@ -155,13 +163,13 @@ func UnpackMultiDisk(disk1ImgPath, disk2ImgPath, outputDir string) error {
 	}
 	d1Data := doc.Bytes()
 
-	d2FZF := filepath.Join(tmpDir, "d2.dat")
-	if err := diskget.Get(disk2ImgPath, disk.FullDumpName, d2FZF); err != nil {
-		return fmt.Errorf("voiceunpack: extracting audio from disk 2: %w", err)
-	}
-	d2Data, err := os.ReadFile(d2FZF)
+	disk2, err := disk.OpenImage(disk2ImgPath)
 	if err != nil {
-		return fmt.Errorf("voiceunpack: reading disk 2 data: %w", err)
+		return fmt.Errorf("voiceunpack: opening disk 2: %w", err)
+	}
+	d2Data, err := diskfs.Extract(disk2, disk.FullDumpName)
+	if err != nil {
+		return fmt.Errorf("voiceunpack: extracting audio from disk 2: %w", err)
 	}
 
 	voiceAreaEnd := doc.Layout().AudioStart()
