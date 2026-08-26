@@ -5,7 +5,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Core, CoreResult, Snapshot } from "../src/boundary/contract";
-import { createFakeCore } from "../src/core/fake";
+import { createScenarioCore } from "./support/scenarioCore";
 import { Keyboard } from "../src/ui/Keyboard";
 import { Knob } from "../src/ui/Knob";
 import { RangeSlider } from "../src/ui/RangeSlider";
@@ -18,7 +18,7 @@ import { openInstrumentDisk } from "./helpers";
  * is injected into every snapshot.
  */
 function twoFileCore(): Core {
-  const inner = createFakeCore();
+  const inner = createScenarioCore();
   const withSpare = (result: CoreResult<Snapshot>): CoreResult<Snapshot> =>
     result.ok && result.value.disk
       ? {

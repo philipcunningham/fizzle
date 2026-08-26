@@ -5,7 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { describe, expect, it } from "vitest";
 import type { Core, CoreResult, Snapshot } from "../src/boundary/contract";
 import { IMAGE_SIZE } from "../src/boundary/contract";
-import { createFakeCore } from "../src/core/fake";
+import { createScenarioCore } from "./support/scenarioCore";
 import { App } from "../src/shell/App";
 import { ErrorBoundary } from "../src/shell/ErrorBoundary";
 import { Keyboard } from "../src/ui/Keyboard";
@@ -13,7 +13,7 @@ import { openDisk, openInstrumentDisk, pickFiles } from "./helpers";
 
 describe("unsupported browser notice", () => {
   it("appears where the save picker is missing and dismisses", async () => {
-    render(<App core={createFakeCore()} />);
+    render(<App core={createScenarioCore()} />);
     const notice = await screen.findByRole("alert", { name: "unsupported browser" });
     expect(notice.textContent).toContain("Chromium");
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
@@ -23,7 +23,7 @@ describe("unsupported browser notice", () => {
 
 describe("dismissible errors (E1)", () => {
   it("an operation failure shows in the status bar and dismisses", async () => {
-    render(<App core={createFakeCore()} />);
+    render(<App core={createScenarioCore()} />);
     // A bad image through the picker: the core rejects with an envelope.
     fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
     fireEvent.change(screen.getByLabelText("fz files"), {
@@ -95,7 +95,7 @@ describe("rendering error boundary (E5)", () => {
    * shell's own output, so only a boundary above it contains them.
    */
   function crashingStatusBarCore(): { core: Core; exports: () => number } {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     let exports = 0;
     const poison = (result: CoreResult<Snapshot>): CoreResult<Snapshot> =>
       result.ok && result.value.disk
@@ -182,7 +182,7 @@ describe("QA fixes in the shell", () => {
 // ellipsis affordance is not this UI's idiom.
 describe("labels carry no trailing ellipsis", () => {
   it("the browse button states the action plainly", async () => {
-    render(<App core={createFakeCore()} />);
+    render(<App core={createScenarioCore()} />);
     const browse = await screen.findByRole("button", { name: "Browse" });
     expect(browse.textContent).not.toMatch(/…$/);
   });

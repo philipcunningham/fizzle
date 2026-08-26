@@ -13,7 +13,7 @@ import type {
   SchemaField,
   Snapshot,
   VoiceDetail,
-} from "../boundary/contract";
+} from "../../src/boundary/contract";
 import {
   CHANNELS,
   IMAGE_SIZE,
@@ -21,8 +21,12 @@ import {
   SAMPLE_RATES,
   err,
   ok,
-} from "../boundary/contract";
+} from "../../src/boundary/contract";
 
+// Transitional scenario fixture for shell interaction tests. New tests stage
+// exact responses with createCoreStub; this stateful fixture remains only for
+// long interaction sequences whose UI assertions span several revisions.
+//
 // The estimate's capacity model, scaled-down mirrors of the core's:
 // the sampler's sample memory in samples, the dump one disk holds,
 // and the empty instrument a first voice brings with it.
@@ -50,7 +54,7 @@ export function voiceName(filename: string): string {
 // and a name that drifts from the core's would silently play every
 // voice unbent. Carrying them lets a test set one and watch it reach
 // the engine.
-export const FAKE_SCHEMA: SchemaField[] = [
+export const SCENARIO_SCHEMA: SchemaField[] = [
   { id: "dcaLevelKF", label: "DCA level", group: "Key follow", kind: "stepper", min: -15, max: 15 },
   { id: "dcaRateKF", label: "DCA rate", group: "Key follow", kind: "stepper", min: -15, max: 15 },
   {
@@ -313,21 +317,21 @@ function fakeMissingDisk(image: Uint8Array): number {
 /**
  * Arguments the fake received that its snapshot cannot show. The stereo
  * answer is one: it changes the samples the real core writes, and the
- * fake has no samples, so a test asserts it here. createFakeCore clears
+ * fake has no samples, so a test asserts it here. createScenarioCore clears
  * it, so each test starts from a blank record.
  */
-export const fakeCalls: { wavFolderChannel: Channel | null; sfzChannel: Channel | null } = {
+export const scenarioCalls: { wavFolderChannel: Channel | null; sfzChannel: Channel | null } = {
   wavFolderChannel: null,
   sfzChannel: null,
 };
 
-export function createFakeCore(): Core {
+export function createScenarioCore(): Core {
   let revision = 0;
   // The core's default: the machine Casio sold most of.
   let memoryBytes = 1024 * 1024;
   let state: FakeState = emptyState();
-  fakeCalls.wavFolderChannel = null;
-  fakeCalls.sfzChannel = null;
+  scenarioCalls.wavFolderChannel = null;
+  scenarioCalls.sfzChannel = null;
   let past: FakeState[] = [];
   let future: FakeState[] = [];
   let inGesture = false;
@@ -458,7 +462,7 @@ export function createFakeCore(): Core {
     },
 
     schema(): Promise<CoreResult<SchemaField[]>> {
-      return Promise.resolve(ok(FAKE_SCHEMA.map((f) => ({ ...f }))));
+      return Promise.resolve(ok(SCENARIO_SCHEMA.map((f) => ({ ...f }))));
     },
 
     undo(): Promise<CoreResult<Snapshot>> {
@@ -931,7 +935,7 @@ export function createFakeCore(): Core {
       split: boolean,
       channel: Channel,
     ): Promise<CoreResult<SFZImportResult>> {
-      fakeCalls.sfzChannel = channel;
+      scenarioCalls.sfzChannel = channel;
       if (fitToDisk && split) {
         return Promise.resolve(
           err("invalid-value", "fit to disk and the two disk split are alternatives; choose one"),
@@ -998,7 +1002,7 @@ export function createFakeCore(): Core {
       fitToDisk: boolean,
       channel: Channel,
     ): Promise<CoreResult<SFZImportResult>> {
-      fakeCalls.wavFolderChannel = channel;
+      scenarioCalls.wavFolderChannel = channel;
       const names = Object.keys(files)
         .filter((n) => n.toLowerCase().endsWith(".wav"))
         .sort();
@@ -1034,7 +1038,7 @@ export function createFakeCore(): Core {
     },
 
     setSlotParamNumber(slot: number, field: string, value: number) {
-      const spec = FAKE_SCHEMA.find((f) => f.id === field);
+      const spec = SCENARIO_SCHEMA.find((f) => f.id === field);
       if (!spec || spec.kind === "select") {
         return Promise.resolve(err("invalid-field", `${field} is not a numeric schema field`));
       }
@@ -1048,7 +1052,7 @@ export function createFakeCore(): Core {
     },
 
     setSlotParamOption(slot: number, field: string, option: string) {
-      const spec = FAKE_SCHEMA.find((f) => f.id === field);
+      const spec = SCENARIO_SCHEMA.find((f) => f.id === field);
       if (!spec || spec.kind !== "select") {
         return Promise.resolve(err("invalid-field", `${field} is not a select schema field`));
       }

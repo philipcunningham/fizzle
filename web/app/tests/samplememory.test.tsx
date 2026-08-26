@@ -4,7 +4,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Core } from "../src/boundary/contract";
-import { createFakeCore } from "../src/core/fake";
+import { createScenarioCore } from "./support/scenarioCore";
 import { openDisk, openInstrumentDisk, pickFiles, wavFixture } from "./helpers";
 
 const MB = 1024 * 1024;
@@ -16,7 +16,7 @@ afterEach(() => {
 
 /** A core that records what the shell told it about the machine. */
 function recordingCore() {
-  const inner = createFakeCore();
+  const inner = createScenarioCore();
   const declared: number[] = [];
   const core: Core = {
     ...inner,

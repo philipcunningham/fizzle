@@ -8,7 +8,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Core, Snapshot } from "../src/boundary/contract";
 import { IMAGE_SIZE, err } from "../src/boundary/contract";
-import { createFakeCore } from "../src/core/fake";
+import { createScenarioCore } from "./support/scenarioCore";
 import { createCoreStub } from "../src/core/stub";
 import { App } from "../src/shell/App";
 import { openInstrumentDisk, pickFiles } from "./helpers";
@@ -40,7 +40,7 @@ describe("a refused dialog action (E1)", () => {
   });
 
   it("closes the delete confirmation and shows why", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const core: Core = {
       ...inner,
       deleteFile: (name) => Promise.resolve(err<Snapshot>("in-use", `${name} is open elsewhere`)),
@@ -55,7 +55,7 @@ describe("a refused dialog action (E1)", () => {
   });
 
   it("closes the unexported changes guard when the close fails", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const core: Core = {
       ...inner,
       closeDisk: () => Promise.resolve(err<Snapshot>("busy", "a conversion is still running")),
@@ -71,7 +71,7 @@ describe("a refused dialog action (E1)", () => {
   });
 
   it("closes the switch guard when the replacement image is refused", async () => {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     let opens = 0;
     const core: Core = {
       ...inner,

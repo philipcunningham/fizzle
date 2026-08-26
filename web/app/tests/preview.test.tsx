@@ -6,7 +6,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Core } from "../src/boundary/contract";
-import { createFakeCore } from "../src/core/fake";
+import { createScenarioCore } from "./support/scenarioCore";
 import { commitField, openInstrumentDisk } from "./helpers";
 
 interface Recorded {
@@ -169,7 +169,7 @@ describe("preview pitch (R20)", () => {
 describe("the preview repeats the sustain loop", () => {
   it("loops between the named loop's bounds, in buffer seconds", async () => {
     const recorded = stubAudioContext();
-    const core = createFakeCore();
+    const core = createScenarioCore();
     await openInstrumentDisk(core);
     await core.setSlotLoopSelect(0, 0, 8);
     await commitField("loop 1 start", "1000");
@@ -200,7 +200,7 @@ describe("the preview repeats the sustain loop", () => {
   // voice can name the loop an import parked at the generation end.
   it("plays straight through when the named loop has no width", async () => {
     const recorded = stubAudioContext();
-    const core = createFakeCore();
+    const core = createScenarioCore();
     await openInstrumentDisk(core);
     await core.setSlotLoopSelect(0, 0, 8);
     // Loop 2 carries the edit, so loop 1 keeps the width it imported
@@ -216,7 +216,7 @@ describe("the preview repeats the sustain loop", () => {
 
   it("follows a loop edit instead of the cached payload", async () => {
     const recorded = stubAudioContext();
-    const core = createFakeCore();
+    const core = createScenarioCore();
     await openInstrumentDisk(core);
     await core.setSlotLoopSelect(0, 0, 8);
     await commitField("loop 1 start", "1000");
@@ -241,7 +241,7 @@ describe("the preview repeats the sustain loop", () => {
 describe("the preview never plays one voice through another's payload", () => {
   it("stays silent until the switched-to voice's samples arrive", async () => {
     const recorded = stubAudioContext();
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     let open: (() => void) | null = null;
     const core: Core = {
       ...inner,
@@ -428,7 +428,7 @@ describe("a held note survives nothing", () => {
 // plays the one selected voice across the whole keyboard.
 describe("the banks tab keyboard plays the key mapping", () => {
   function slotRecordingCore() {
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const slots: number[] = [];
     const core: Core = {
       ...inner,
@@ -489,7 +489,7 @@ describe("the banks tab keyboard plays the key mapping", () => {
 
   it("a tap released before the sound arrives stays silent", async () => {
     const recorded = stubAudioContext();
-    const inner = createFakeCore();
+    const inner = createScenarioCore();
     const gate: { open?: () => void } = {};
     const gated: Core = {
       ...inner,
@@ -556,7 +556,7 @@ describe("the banks tab keyboard plays the key mapping", () => {
 
   it("loops each sounding slot's own sustain loop, not the selected voice's", async () => {
     const recorded = stubAudioContext();
-    const core = createFakeCore();
+    const core = createScenarioCore();
     await openInstrumentDisk(core);
     await core.setSlotLoopSelect(0, 0, 8);
     await core.setSlotLoopSelect(1, 0, 8);
@@ -585,7 +585,7 @@ describe("the banks tab keyboard plays the key mapping", () => {
 
   it("layers two slots and gives each its own loop", async () => {
     const recorded = stubAudioContext();
-    const core = createFakeCore();
+    const core = createScenarioCore();
     await openInstrumentDisk(core);
     // KICK repeats; the duplicate that layers over it doesn't.
     await core.setSlotLoopSelect(0, 0, 8);
@@ -616,7 +616,7 @@ describe("the banks tab keyboard plays the key mapping", () => {
 
   it("names a release loop for the sounding slot, not the selected voice's", async () => {
     const recorded = stubAudioContext();
-    const core = createFakeCore();
+    const core = createScenarioCore();
     await openInstrumentDisk(core);
     await core.setSlotLoopSelect(0, 8, 0);
     await core.setSlotLoopSelect(1, 8, 0);
@@ -670,7 +670,7 @@ describe("the banks tab keyboard plays the key mapping", () => {
 describe("the release loop reaches the preview", () => {
   it("moves the window to the release loop at key up", async () => {
     const recorded = stubAudioContext();
-    const core = createFakeCore();
+    const core = createScenarioCore();
     await openInstrumentDisk(core);
     // Name loop 1 the sustain loop and loop 2 the release loop, with
     // distinct bounds. A sustain loop naming none (8) would let note

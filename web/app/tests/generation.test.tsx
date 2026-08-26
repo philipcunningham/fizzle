@@ -8,7 +8,7 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import type { Core, InstrumentSnapshot, Snapshot } from "../src/boundary/contract";
 import { IMAGE_SIZE } from "../src/boundary/contract";
-import { FAKE_SCHEMA, createFakeCore } from "../src/core/fake";
+import { SCENARIO_SCHEMA, createScenarioCore } from "./support/scenarioCore";
 import { VoiceEditor } from "../src/screens/VoiceEditor";
 import { App } from "../src/shell/App";
 import { openInstrumentDisk } from "./helpers";
@@ -26,7 +26,7 @@ function Harness({ core, first }: { core: Core; first: InstrumentSnapshot }) {
   return (
     <VoiceEditor
       instrument={instrument}
-      schema={FAKE_SCHEMA}
+      schema={SCENARIO_SCHEMA}
       selectedSlot={0}
       selectedLoop={0}
       peaks={null}
@@ -52,7 +52,7 @@ function Harness({ core, first }: { core: Core; first: InstrumentSnapshot }) {
 }
 
 async function editorOverFake() {
-  const core = createFakeCore();
+  const core = createScenarioCore();
   const opened = await core.openImage(new Uint8Array(IMAGE_SIZE));
   if (!opened.ok) throw new Error(opened.error.message);
   const instrument = opened.value.disk?.instrument;
@@ -95,7 +95,7 @@ describe("the generation window", () => {
 // commits none of them back.
 describe("the generation window commits through the shell", () => {
   it("sends the edited frames to the core", async () => {
-    const core = createFakeCore();
+    const core = createScenarioCore();
     const seen: number[][] = [];
     const watched: typeof core = {
       ...core,

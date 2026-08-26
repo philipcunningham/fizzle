@@ -5,7 +5,7 @@
 import { createEvent, fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Core, CoreResult, Snapshot } from "../src/boundary/contract";
-import { createFakeCore } from "../src/core/fake";
+import { createScenarioCore } from "./support/scenarioCore";
 import { openDisk, openInstrumentDisk } from "./helpers";
 
 /**
@@ -14,7 +14,7 @@ import { openDisk, openInstrumentDisk } from "./helpers";
  * into every snapshot, which makes a neighbour exist to receive focus.
  */
 function twoFileCore(): Core {
-  const inner = createFakeCore();
+  const inner = createScenarioCore();
   const withSpare = (result: CoreResult<Snapshot>): CoreResult<Snapshot> =>
     result.ok && result.value.disk
       ? {
