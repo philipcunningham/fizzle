@@ -41,30 +41,6 @@ func TestResolveStandaloneFZFLayoutRetainsMarkerAuthority(t *testing.T) {
 	}
 }
 
-func TestLegacyResolversAdaptResolvedLayout(t *testing.T) {
-	data := fzfbuilder.MakeBanklessVoiceDump(t)
-	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
-	layout, err := fzutil.ResolveStandaloneFZFLayout(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	header, source, err := fzutil.ResolveStandaloneFZF(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if source != layout.VoiceCountSource() || header.NBankSectors != layout.BankCount() ||
-		header.NVoice != layout.VoiceCount() || header.BStep0 != layout.BStep0() ||
-		header.VoiceAreaStart != layout.VoiceStart() {
-		t.Fatalf("legacy result = %+v/%v, layout disagrees", header, source)
-	}
-	// The compatibility header remains mutable, but changing it cannot alter
-	// the immutable layout value it was copied from.
-	header.NVoice = 1
-	if layout.VoiceCount() != fzfbuilder.BanklessDumpVoices {
-		t.Fatal("mutating a compatibility header changed the resolved layout")
-	}
-}
-
 func TestResolveFZFLayoutRejectsUnreadableDump(t *testing.T) {
 	garbage := bytes.Repeat([]byte{0xff}, disk.SectorSize)
 	if _, err := fzutil.ResolveStandaloneFZFLayout(garbage); err == nil {

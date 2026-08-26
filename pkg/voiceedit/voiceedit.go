@@ -91,10 +91,11 @@ func applyToFZFVoiceLocked(path string, voiceName string, patches []Edit) error 
 	if err != nil {
 		return fmt.Errorf("voiceedit: reading FZF: %w", err)
 	}
-	hdr, err := fzutil.ParseFZFHeader(data)
+	layout, err := fzutil.ResolveStandaloneFZFLayout(data)
 	if err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}
+	hdr := &fzutil.FZFHeader{NVoice: layout.VoiceCount(), BStep0: layout.BStep0(), NBankSectors: layout.BankCount(), VoiceAreaStart: layout.VoiceStart()}
 	idx, err := findVoiceIndex(data, hdr, voiceName)
 	if err != nil {
 		return err
@@ -103,7 +104,7 @@ func applyToFZFVoiceLocked(path string, voiceName string, patches []Edit) error 
 	if voiceOffset+disk.VoiceHeaderUsed > len(data) {
 		return fmt.Errorf("voiceedit: voice %d header extends beyond file", idx)
 	}
-	resolved, err := voicepatch.ResolveFZFSlotGeometry(data, hdr.NVoice, hdr.VoiceAreaStart, hdr.NBankSectors, idx, patches)
+	resolved, err := voicepatch.ResolveFZFSlot(data, layout, idx, patches)
 	if err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}
@@ -122,17 +123,11 @@ func applyToFZFVoiceLocked(path string, voiceName string, patches []Edit) error 
 // of ApplyToFZFVoice. Key-range patches mirror into every bank site
 // that references the slot, exactly as the file-path edit does.
 func ApplyToFZFSlotBytes(data []byte, slot int, patches []Edit) error {
-	hdr, err := fzutil.ParseFZFHeader(data)
+	layout, err := fzutil.ResolveStandaloneFZFLayout(data)
 	if err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}
-	return ApplyToFZFSlotBytesWithHeader(data, hdr, slot, patches)
-}
-
-// ApplyToFZFSlotBytesWithHeader is ApplyToFZFSlotBytes under a header
-// the caller already parsed.
-func ApplyToFZFSlotBytesWithHeader(data []byte, hdr *fzutil.FZFHeader, slot int, patches []Edit) error {
-	resolved, err := voicepatch.ResolveFZFSlotGeometry(data, hdr.NVoice, hdr.VoiceAreaStart, hdr.NBankSectors, slot, patches)
+	resolved, err := voicepatch.ResolveFZFSlot(data, layout, slot, patches)
 	if err != nil {
 		return fmt.Errorf("voiceedit: %w", err)
 	}

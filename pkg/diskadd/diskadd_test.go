@@ -13,43 +13,11 @@ import (
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/diskget"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
-	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )
-
-func TestBuildDISContiguous(t *testing.T) {
-	t.Parallel()
-	// DIS at sector 2, data sectors 3-6 (contiguous after DIS).
-	// Expected: one extent [2,6]. DIS is prepended as ss0.
-	dis := buildDIS(2, []int{3, 4, 5, 6}, 0, 1, 3)
-	if len(dis.Extents) != 1 {
-		t.Fatalf("expected 1 extent for contiguous sectors, got %d", len(dis.Extents))
-	}
-	if dis.Extents[0][0] != 2 || dis.Extents[0][1] != 6 {
-		t.Errorf("extent: got [%d,%d], want [2,6]", dis.Extents[0][0], dis.Extents[0][1])
-	}
-	if dis.VoiceCount != 1 || dis.WaveCount != 3 {
-		t.Errorf("counts: voice=%d wave=%d", dis.VoiceCount, dis.WaveCount)
-	}
-}
-
-func TestBuildDISNonContiguous(t *testing.T) {
-	t.Parallel()
-	// DIS at sector 2, data at 3-4 and 10-11 (non-contiguous).
-	// Expected: two extents [2,4] and [10,11].
-	dis := buildDIS(2, []int{3, 4, 10, 11}, 0, 1, 3)
-	if len(dis.Extents) != 2 {
-		t.Fatalf("expected 2 extents for non-contiguous sectors, got %d", len(dis.Extents))
-	}
-	if dis.Extents[0] != ([2]uint16{2, 4}) {
-		t.Errorf("extent[0]: got %v, want [2,4]", dis.Extents[0])
-	}
-	if dis.Extents[1] != ([2]uint16{10, 11}) {
-		t.Errorf("extent[1]: got %v, want [10,11]", dis.Extents[1])
-	}
-}
 
 func TestDetectFileVoice(t *testing.T) {
 	t.Parallel()
@@ -635,19 +603,6 @@ func TestAddBytesProgramRoundTrip(t *testing.T) {
 	}
 }
 
-func TestBuildDISEmptySectors(t *testing.T) {
-	t.Parallel()
-	dis := buildDIS(0, nil, 0, 0, 0)
-	encoded := disk.EncodeDisSector(dis)
-	decoded, err := disk.DecodeDisSector(encoded)
-	if err != nil {
-		t.Fatalf("decoding DIS: %v", err)
-	}
-	if len(decoded.Extents) != 0 {
-		t.Errorf("expected 0 extents, got %d", len(decoded.Extents))
-	}
-}
-
 func TestDetectFileHeuristicFallback(t *testing.T) {
 	t.Parallel()
 	data := make([]byte, 5*disk.SectorSize)
@@ -1052,101 +1007,6 @@ func TestAddDuplicateNameRejected(t *testing.T) {
 	}
 }
 
-// TestReplaceInMemoryRollsBackOnFailure verifies ReplaceInMemory is
-// transactional on the *disk.Image value itself: when addToImage fails
-// (here, the replacement is too large to fit), the image bytes must be
-// byte-identical to their pre-call state. Callers rely on this so they
-// can safely abort a save without writing a half-modified image.
-func TestReplaceInMemoryRollsBackOnFailure(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	imgPath := filepath.Join(dir, "test.img")
-	if err := diskformat.Format(imgPath, "TEST"); err != nil {
-		t.Fatal(err)
-	}
-
-	fzv := make([]byte, disk.SectorSize*2)
-	copy(fzv[disk.VoiceNameOffset:], "SMALL       ")
-	fzvPath := filepath.Join(dir, "small.fzv")
-	if err := os.WriteFile(fzvPath, fzv, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Add(imgPath, fzvPath, 0); err != nil {
-		t.Fatal(err)
-	}
-
-	img, err := disk.OpenImage(imgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	before := append([]byte(nil), img.Bytes()...)
-
-	oversized := make([]byte, disk.ImageSize+disk.SectorSize)
-	copy(oversized[disk.VoiceNameOffset:], "TOOBIG      ")
-
-	if err := ReplaceInMemory(img, "SMALL", oversized, 0); err == nil {
-		t.Fatal("expected error when replacement file exceeds disk capacity")
-	}
-
-	if !bytes.Equal(before, img.Bytes()) {
-		t.Error("image bytes mutated after failed ReplaceInMemory (rollback did not restore state)")
-	}
-
-	// Sanity: the original file must still be loadable from the image.
-	entries, err := img.Directory()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 1 || entries[0].NameString() != "SMALL" {
-		names := make([]string, len(entries))
-		for i, e := range entries {
-			names[i] = e.NameString()
-		}
-		t.Errorf("expected directory to still contain SMALL, got %v", names)
-	}
-}
-
-// TestReplaceInMemoryRollsBackOnMissingFile verifies the early failure path
-// (file not found) leaves the image untouched. This is the path a caller
-// could hit if the in-progress file is renamed/deleted between selection and
-// save, and a partial mutation would corrupt the on-disk image when the caller
-// proceeds to write a sibling image.
-func TestReplaceInMemoryRollsBackOnMissingFile(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	imgPath := filepath.Join(dir, "test.img")
-	if err := diskformat.Format(imgPath, "TEST"); err != nil {
-		t.Fatal(err)
-	}
-
-	fzv := make([]byte, disk.SectorSize*2)
-	copy(fzv[disk.VoiceNameOffset:], "PRESENT     ")
-	fzvPath := filepath.Join(dir, "present.fzv")
-	if err := os.WriteFile(fzvPath, fzv, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := Add(imgPath, fzvPath, 0); err != nil {
-		t.Fatal(err)
-	}
-
-	img, err := disk.OpenImage(imgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	before := append([]byte(nil), img.Bytes()...)
-
-	replacement := make([]byte, disk.SectorSize*2)
-	copy(replacement[disk.VoiceNameOffset:], "NEW         ")
-
-	if err := ReplaceInMemory(img, "ABSENT", replacement, 0); err == nil {
-		t.Fatal("expected error when replacing a name that doesn't exist")
-	}
-
-	if !bytes.Equal(before, img.Bytes()) {
-		t.Error("image bytes mutated after failed ReplaceInMemory of missing file")
-	}
-}
-
 func TestReplaceOnImageOverCapacity(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -1318,162 +1178,6 @@ func TestConcurrentAddSafe(t *testing.T) {
 	}
 }
 
-// AddToImage is the pure in-memory entry point the web core calls:
-// the same detection and placement as Add, no filesystem.
-func TestAddToImageMatchesAdd(t *testing.T) {
-	t.Parallel()
-	samples := make([]int16, 4096)
-	for i := range samples {
-		samples[i] = int16(i % 251)
-	}
-	voice := voiceimport.Encode(samples, 1, "SNARE", 0, voiceimport.NoLoop())
-
-	dir := t.TempDir()
-	imgPath := filepath.Join(dir, "disk.img")
-	if err := diskformat.Format(imgPath, "PARITY"); err != nil {
-		t.Fatalf("Format: %v", err)
-	}
-	voicePath := filepath.Join(dir, "SNARE.fzv")
-	if err := os.WriteFile(voicePath, voice, 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-	if err := Add(imgPath, voicePath, 0); err != nil {
-		t.Fatalf("Add: %v", err)
-	}
-	fromFile, err := os.ReadFile(imgPath)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-
-	blank, err := diskformat.BuildImage("PARITY")
-	if err != nil {
-		t.Fatalf("BuildImage: %v", err)
-	}
-	img, err := disk.ReadImage(bytes.NewReader(blank))
-	if err != nil {
-		t.Fatalf("ReadImage: %v", err)
-	}
-	if err := AddToImage(img, voice, 0); err != nil {
-		t.Fatalf("AddToImage: %v", err)
-	}
-	if !bytes.Equal(fromFile, img.Bytes()) {
-		t.Fatal("AddToImage bytes differ from Add output")
-	}
-}
-
-func TestAddToImageRejectsGarbage(t *testing.T) {
-	t.Parallel()
-	blank, err := diskformat.BuildImage("REJECT")
-	if err != nil {
-		t.Fatalf("BuildImage: %v", err)
-	}
-	img, err := disk.ReadImage(bytes.NewReader(blank))
-	if err != nil {
-		t.Fatalf("ReadImage: %v", err)
-	}
-	if err := AddToImage(img, []byte{0x00}, 0); err == nil {
-		t.Fatal("garbage accepted")
-	}
-}
-
-// TestAddBytesToImageMatchesAddBytes pins the in-memory variant to the
-// path variant byte for byte.
-func TestAddBytesToImageMatchesAddBytes(t *testing.T) {
-	t.Parallel()
-	imgPath := filepath.Join(t.TempDir(), "path.img")
-	if err := diskformat.Format(imgPath, "PAIR"); err != nil {
-		t.Fatalf("Format: %v", err)
-	}
-
-	fileData := make([]byte, 3*disk.SectorSize)
-	for i := range fileData {
-		fileData[i] = byte(i % 251)
-	}
-	name := disk.PadLabel("FULL-DATA-FZ")
-
-	if err := AddBytes(imgPath, fileData, name, disk.TypeFullDump, 1, 1, 5, 40); err != nil {
-		t.Fatalf("AddBytes: %v", err)
-	}
-	want, err := os.ReadFile(imgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	imgBytes, err := diskformat.BuildImage("PAIR")
-	if err != nil {
-		t.Fatalf("BuildImage: %v", err)
-	}
-	img, err := disk.ReadImage(bytes.NewReader(imgBytes))
-	if err != nil {
-		t.Fatalf("ReadImage: %v", err)
-	}
-	if err := AddBytesToImage(img, fileData, name, disk.TypeFullDump, 1, 1, 5, 40); err != nil {
-		t.Fatalf("AddBytesToImage: %v", err)
-	}
-	if !bytes.Equal(img.Bytes(), want) {
-		t.Error("in-memory image differs from the AddBytes-written image")
-	}
-}
-
-func TestAddBytesToImageEmptyErrors(t *testing.T) {
-	t.Parallel()
-	imgBytes, err := diskformat.BuildImage("EMPTY")
-	if err != nil {
-		t.Fatal(err)
-	}
-	img, err := disk.ReadImage(bytes.NewReader(imgBytes))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := AddBytesToImage(img, nil, disk.PadLabel("X"), disk.TypeVoice, 0, 0, 1, 1); err == nil {
-		t.Error("expected an error for empty file data")
-	}
-}
-
-// The DIS tail carries the caller's vn, and wn moves with it.
-func TestAddToImageWithVoiceCount(t *testing.T) {
-	t.Parallel()
-	dump := fzfbuilder.MakeBanklessVoiceDump(t)
-	totalSectors := disk.SectorsNeeded(len(dump))
-
-	img := formattedImage(t)
-	if err := AddToImageWithVoiceCount(img, dump, 0, fzfbuilder.BanklessDumpVoices); err != nil {
-		t.Fatal(err)
-	}
-
-	dis := fzfbuilder.FullDumpDISTail(t, img)
-	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
-		t.Errorf("DIS vn = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
-	}
-	wantWn := totalSectors - fzfbuilder.BanklessDumpBanks - disk.VoiceAreaSectors(fzfbuilder.BanklessDumpVoices)
-	if got := int(dis.WaveCount); got != wantWn {
-		t.Errorf("DIS wn = %d, want %d", got, wantWn)
-	}
-	if got := int(dis.BankCount); got != fzfbuilder.BanklessDumpBanks {
-		t.Errorf("DIS bn = %d, want %d", got, fzfbuilder.BanklessDumpBanks)
-	}
-}
-
-// TestReplaceInMemoryWithVoiceCount covers the same vn plumbing on the
-// replace path webcore's write-back uses.
-func TestReplaceInMemoryWithVoiceCount(t *testing.T) {
-	t.Parallel()
-	dump := fzfbuilder.MakeBanklessVoiceDump(t)
-
-	img := formattedImage(t)
-	if err := AddToImage(img, dump, 0); err != nil {
-		t.Fatal(err)
-	}
-	if err := ReplaceInMemoryWithVoiceCount(img, disk.FullDumpName, dump, 0, fzfbuilder.BanklessDumpVoices); err != nil {
-		t.Fatal(err)
-	}
-
-	dis := fzfbuilder.FullDumpDISTail(t, img)
-	if got := int(dis.VoiceCount); got != fzfbuilder.BanklessDumpVoices {
-		t.Errorf("DIS vn = %d, want %d", got, fzfbuilder.BanklessDumpVoices)
-	}
-}
-
 // formattedImage returns a blank formatted image parsed in memory.
 func formattedImage(t *testing.T) *disk.Image {
 	t.Helper()
@@ -1488,48 +1192,13 @@ func formattedImage(t *testing.T) *disk.Image {
 	return img
 }
 
-func TestAddToImageWithVoiceCountRejectsBadCounts(t *testing.T) {
-	t.Parallel()
-	dump := fzfbuilder.MakeBanklessVoiceDump(t)
-	for _, vn := range []int{-1, 0, disk.MaxVoices + 1, 70000} {
-		img := formattedImage(t)
-		if err := AddToImageWithVoiceCount(img, dump, 0, vn); err == nil {
-			t.Errorf("vn=%d: expected error, got nil", vn)
-		}
-	}
-	// A count whose voice area cannot fit the file is refused, not
-	// clamped into a tail the sampler reads past the file's end.
-	img := formattedImage(t)
-	if err := AddToImageWithVoiceCount(img, dump[:3*disk.SectorSize], 0, disk.MaxVoices); err == nil {
-		t.Error("oversized voice area: expected error, got nil")
-	}
-}
-
-func TestReplaceInMemoryWithVoiceCountRollsBack(t *testing.T) {
-	t.Parallel()
-	dump := fzfbuilder.MakeBanklessVoiceDump(t)
-	img := formattedImage(t)
-	if err := AddToImage(img, dump, 0); err != nil {
-		t.Fatal(err)
-	}
-	before := append([]byte(nil), img.Bytes()...)
-	oversized := make([]byte, disk.ImageSize+disk.SectorSize)
-	copy(oversized, dump)
-	if err := ReplaceInMemoryWithVoiceCount(img, disk.FullDumpName, oversized, 0, fzfbuilder.BanklessDumpVoices); err == nil {
-		t.Fatal("expected error for oversized replacement")
-	}
-	if !bytes.Equal(before, img.Bytes()) {
-		t.Error("image mutated after failed replace")
-	}
-}
-
 // A dump carrying the fizzle voice-count marker adds with that count.
 func TestAddHonoursVoiceCountMarker(t *testing.T) {
 	t.Parallel()
 	dump := fzfbuilder.MakeBanklessVoiceDump(t)
 	fzutil.StampVoiceCountMarker(dump, fzfbuilder.BanklessDumpVoices)
 	img := formattedImage(t)
-	if err := AddToImage(img, dump, 0); err != nil {
+	if err := addDetected(img, dump, 0); err != nil {
 		t.Fatal(err)
 	}
 	dis := fzfbuilder.FullDumpDISTail(t, img)
@@ -1545,7 +1214,7 @@ func TestAddScrubsMarkerFromDiskPayload(t *testing.T) {
 	dump := fzfbuilder.MakeBanklessVoiceDump(t)
 	fzutil.StampVoiceCountMarker(dump, fzfbuilder.BanklessDumpVoices)
 	img := formattedImage(t)
-	if err := AddToImage(img, dump, 0); err != nil {
+	if err := addDetected(img, dump, 0); err != nil {
 		t.Fatal(err)
 	}
 	dis := fzfbuilder.FullDumpDISTail(t, img)
@@ -1567,6 +1236,14 @@ func TestAddScrubsMarkerFromDiskPayload(t *testing.T) {
 
 const testVoiceMarkerMagic = "fzv1"
 
+func addDetected(img *disk.Image, data []byte, diskNum uint8) error {
+	fi, err := detectFile(data)
+	if err != nil {
+		return err
+	}
+	return diskfs.Add(img, data, diskfs.File{Name: fi.name, Type: fi.fileType, DiskNumber: diskNum, Banks: fi.nbank, Voices: fi.nvoice, Waves: fi.nwave})
+}
+
 // A stale marker is untrusted for counting but is still standalone
 // metadata, so it must not cross onto the disk either.
 func TestAddScrubsInvalidMarkerFromDiskPayload(t *testing.T) {
@@ -1580,7 +1257,7 @@ func TestAddScrubsInvalidMarkerFromDiskPayload(t *testing.T) {
 	}
 
 	img := formattedImage(t)
-	if err := AddToImage(img, dump, 0); err != nil {
+	if err := addDetected(img, dump, 0); err != nil {
 		t.Fatal(err)
 	}
 	payload, err := diskget.FromImage(img, disk.FullDumpName)

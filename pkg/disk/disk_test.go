@@ -1204,7 +1204,7 @@ func TestRemoveFileFreesDisSector(t *testing.T) {
 // (label/CAT, spec §1-1) or sector 1 (directory, spec §1-2) must not cause
 // RemoveFile to mis-parse those bytes as a DIS and free arbitrary CAT bits.
 // RemoveFile must surface ErrCorruptDIS without mutating the CAT bitmap so
-// the diskadd.ReplaceInMemory snapshot/restore can roll the image back.
+// diskfs.Replace can roll the image back.
 func TestRemoveFileRejectsCorruptDIS(t *testing.T) {
 	t.Parallel()
 

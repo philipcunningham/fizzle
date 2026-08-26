@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
 	"github.com/philipcunningham/fizzle/pkg/model"
@@ -70,9 +69,7 @@ func TestEditKeepsSharedVoiceKitDISCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	dump := fzfbuilder.MakeSharedVoiceDump(t)
-	if err := diskadd.AddToImageWithVoiceCount(img, dump, 0, fzfbuilder.SharedVoiceDumpVoices); err != nil {
-		t.Fatal(err)
-	}
+	storeFullDump(t, img, dump, fzfbuilder.SharedVoiceDumpVoices)
 
 	s := NewSession()
 	if _, cerr := s.OpenImage(img.Bytes()); cerr != nil {

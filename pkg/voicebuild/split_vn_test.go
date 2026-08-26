@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 )
 
 // A two-disk split of a dump whose voice count only the DIS knows.
-func TestSplitDumpWithVoiceCount(t *testing.T) {
+func TestSplitDocumentRetainsDiskVoiceCount(t *testing.T) {
 	t.Parallel()
 	const vn = 2
 	headerSectors := 1 + disk.VoiceAreaSectors(vn)
@@ -22,9 +23,13 @@ func TestSplitDumpWithVoiceCount(t *testing.T) {
 		binary.LittleEndian.PutUint16(fzf[off+disk.VoiceLoopModeOffset:], disk.PlaybackModeNormal)
 	}
 
-	result, err := SplitDumpWithVoiceCount(fzf, vn)
+	doc, err := fzfmodel.NewDiskFile(fzf, vn)
 	if err != nil {
-		t.Fatalf("SplitDumpWithVoiceCount: %v", err)
+		t.Fatalf("NewDiskFile: %v", err)
+	}
+	result, err := SplitDocument(doc)
+	if err != nil {
+		t.Fatalf("SplitDocument: %v", err)
 	}
 	if result.VoiceCount != vn {
 		t.Errorf("VoiceCount = %d, want %d", result.VoiceCount, vn)

@@ -76,36 +76,6 @@ func Add(imagePath, filePath string, diskNum uint8) error {
 	return writeToImage(imagePath, fileData, fi.name, fi.fileType, diskNum, fi.nbank, fi.nvoice, fi.nwave)
 }
 
-// AddToImage adds fileData to an in-memory disk image with the same
-// content detection as Add and no filesystem access. Program files are
-// rejected: their name comes from a host filename, which an in-memory
-// caller doesn't have; use Add or AddBytes for those.
-func AddToImage(img *disk.Image, fileData []byte, diskNum uint8) error {
-	if len(fileData) == 0 {
-		return errors.New("diskadd: file is empty")
-	}
-	fi, err := detectFile(fileData)
-	if err != nil {
-		return fmt.Errorf("diskadd: %w", err)
-	}
-	if fi.fileType == disk.TypeProgram {
-		return errors.New("diskadd: program files need a host filename for their name; use Add")
-	}
-	return addToImage(img, fileData, fi.name, fi.fileType, diskNum, fi.nbank, fi.nvoice, fi.nwave)
-}
-
-// AddBytesToImage adds fileData to an in-memory disk image with explicit
-// file type, name, and DIS tail counts: the in-memory twin of AddBytes.
-// Used for multi-disk full dumps, where the counts must be controlled
-// rather than detected (disk 1's wn spans both disks, and disk 2 is a bare
-// audio continuation that content detection cannot classify).
-func AddBytesToImage(img *disk.Image, fileData []byte, name [disk.LabelSize]byte, fileType disk.FileType, diskNum uint8, nbank, nvoice, nwave int) error {
-	if len(fileData) == 0 {
-		return errors.New("diskadd: file is empty")
-	}
-	return addToImage(img, fileData, name, fileType, diskNum, nbank, nvoice, nwave)
-}
-
 func writeToImage(imagePath string, fileData []byte, name [disk.LabelSize]byte, fileType disk.FileType, diskNum uint8, nbank, nvoice, nwave int) error {
 	return fileutil.WithFileLock(imagePath, func() error {
 		img, err := disk.OpenImage(imagePath)
@@ -140,123 +110,16 @@ func ReplaceOnImage(imagePath string, oldName string, fileData []byte, diskNum u
 		if err != nil {
 			return fmt.Errorf("diskadd: %w", err)
 		}
-		if err := ReplaceInMemory(img, oldName, fileData, diskNum); err != nil {
-			return err
+		fi, err := detectFile(fileData)
+		if err != nil {
+			return fmt.Errorf("diskadd: %w", err)
+		}
+		file := diskfs.File{Name: fi.name, Type: fi.fileType, DiskNumber: diskNum, Banks: fi.nbank, Voices: fi.nvoice, Waves: fi.nwave}
+		if err := diskfs.Replace(img, oldName, fileData, file); err != nil {
+			return fmt.Errorf("diskadd: %w", err)
 		}
 		return fileutil.WriteAtomic(imagePath, img.Bytes())
 	})
-}
-
-// ReplaceInMemory replaces a named file on an in-memory disk image without
-// writing to disk. This allows the caller to batch multiple replacements
-// before writing, enabling transactional semantics across multiple images.
-//
-// The mutation is transactional: if any step fails (file not found, detect
-// failure, disk full, directory full) the image bytes are restored to their
-// pre-call state, so callers can keep using the *Image after an error, say
-// to try a different replacement or write a sibling image, without
-// inheriting a half-modified CAT or directory.
-func ReplaceInMemory(img *disk.Image, oldName string, fileData []byte, diskNum uint8) error {
-	return replaceInMemory(img, oldName, fileData, diskNum, detectFile)
-}
-
-// AddToImageWithVoiceCount is AddToImage with a known voice count. It
-// overrides detection's bstep sum, and wn moves with it.
-func AddToImageWithVoiceCount(img *disk.Image, fileData []byte, diskNum uint8, vn int) error {
-	if len(fileData) == 0 {
-		return errors.New("diskadd: file is empty")
-	}
-	fi, err := detectFullDumpWithVoiceCount(fileData, vn)
-	if err != nil {
-		return fmt.Errorf("diskadd: %w", err)
-	}
-	return addToImage(img, fileData, fi.name, fi.fileType, diskNum, fi.nbank, fi.nvoice, fi.nwave)
-}
-
-// ReplaceInMemoryWithVoiceCount is ReplaceInMemory with
-// AddToImageWithVoiceCount's known voice count semantics.
-func ReplaceInMemoryWithVoiceCount(img *disk.Image, oldName string, fileData []byte, diskNum uint8, vn int) error {
-	return replaceInMemory(img, oldName, fileData, diskNum, func(data []byte) (fileInfo, error) {
-		return detectFullDumpWithVoiceCount(data, vn)
-	})
-}
-
-// replaceInMemory is the one transactional replace, rolling the image
-// back byte for byte on any failure.
-func replaceInMemory(img *disk.Image, oldName string, fileData []byte, diskNum uint8, detect func([]byte) (fileInfo, error)) (retErr error) {
-	// Snapshot the full image to roll back a partial mutation on error. At
-	// 1.25 MiB the allocation is cheap next to the rest of the work, and
-	// copy() restores in place without reallocating the caller's *Image.
-	snapshot := append([]byte(nil), img.Bytes()...)
-	defer func() {
-		if retErr != nil {
-			copy(img.Bytes(), snapshot)
-		}
-	}()
-
-	if err := img.RemoveFile(oldName); err != nil {
-		return fmt.Errorf("diskadd: %w", err)
-	}
-	fi, err := detect(fileData)
-	if err != nil {
-		return fmt.Errorf("diskadd: %w", err)
-	}
-	return addToImage(img, fileData, fi.name, fi.fileType, diskNum, fi.nbank, fi.nvoice, fi.nwave)
-}
-
-// detectFullDumpWithVoiceCount overrides detection's voice count with
-// the caller's vn and rebuilds the counts deriving from it.
-func detectFullDumpWithVoiceCount(fileData []byte, vn int) (fileInfo, error) {
-	fi, err := detectFile(fileData)
-	if err != nil {
-		return fileInfo{}, err
-	}
-	if fi.fileType != disk.TypeFullDump {
-		return fileInfo{}, fmt.Errorf("known voice count given for a %s file; only full dumps carry one", fi.fileType)
-	}
-	if vn < 1 || vn > disk.MaxVoices {
-		return fileInfo{}, fmt.Errorf("voice count %d outside 1..%d", vn, disk.MaxVoices)
-	}
-	totalSectors := disk.SectorsNeeded(len(fileData))
-	if fi.nbank+disk.VoiceAreaSectors(vn) > totalSectors {
-		return fileInfo{}, fmt.Errorf("voice count %d needs a voice area running past the file", vn)
-	}
-	fi.nvoice = vn
-	fi.nwave = totalSectors - fi.nbank - disk.VoiceAreaSectors(vn)
-	applyMultiDiskMarker(fileData, &fi)
-	return fi, nil
-}
-
-// buildDIS constructs a DisSector from a list of allocated sector indices,
-// grouping contiguous sectors into extent (start, end) pairs. disSector is
-// the index of the DIS sector itself, which the FZ-1 expects to be ss of the
-// first extent. This matches the format written by the real hardware.
-func buildDIS(disSector int, sectors []int, nbank, nvoice, nwave int) disk.DisSector {
-	var dis disk.DisSector
-	if len(sectors) == 0 {
-		return dis
-	}
-
-	// Prepend the DIS sector so it becomes ss0 of the first extent.
-	allSectors := append([]int{disSector}, sectors...)
-
-	start := allSectors[0]
-	end := allSectors[0]
-	for _, s := range allSectors[1:] {
-		if s == end+1 {
-			end = s
-		} else {
-			dis.Extents = append(dis.Extents, [2]uint16{uint16(start), uint16(end)}) //nolint:gosec // G115: sector index < 1280, fits uint16
-			start = s
-			end = s
-		}
-	}
-	dis.Extents = append(dis.Extents, [2]uint16{uint16(start), uint16(end)}) //nolint:gosec // G115: sector index < 1280, fits uint16
-
-	dis.BankCount = uint16(nbank)   //nolint:gosec // G115: bank count ≤ 8
-	dis.VoiceCount = uint16(nvoice) //nolint:gosec // G115: voice count bounded by FZ disk capacity (≤ 64)
-	dis.WaveCount = uint16(nwave)   //nolint:gosec // G115: wave count bounded by FZ disk capacity
-	return dis
 }
 
 // fileInfo holds the detected type metadata for a file being added to a disk.
@@ -414,12 +277,12 @@ func detectFile(fileData []byte) (fileInfo, error) {
 // applyVoiceCountMarker honours the fizzle voice-count marker, so an
 // exported dump's DIS tail gets the count its walk cannot re-derive.
 func applyVoiceCountMarker(fileData []byte, fi *fileInfo) {
-	hdr, src, err := fzutil.ResolveStandaloneFZF(fileData)
-	if err != nil || src != fzutil.VoiceCountMarker {
+	layout, err := fzutil.ResolveStandaloneFZFLayout(fileData)
+	if err != nil || layout.VoiceCountSource() != fzutil.VoiceCountMarker {
 		return
 	}
-	fi.nvoice = hdr.NVoice
-	fi.nwave = disk.SectorsNeeded(len(fileData)) - fi.nbank - disk.VoiceAreaSectors(hdr.NVoice)
+	fi.nvoice = layout.VoiceCount()
+	fi.nwave = disk.SectorsNeeded(len(fileData)) - fi.nbank - disk.VoiceAreaSectors(layout.VoiceCount())
 	if fi.nwave < 0 {
 		fi.nwave = 0
 	}

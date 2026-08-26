@@ -90,15 +90,6 @@ func newDumpState(fzf []byte, disVN int) (*dumpState, *Error) {
 	}, nil
 }
 
-// dumpHeaderFor is the compatibility parser used by callers that have not yet
-// migrated to the resolved document context.
-func dumpHeaderFor(fzf []byte, vn int) (*fzutil.FZFHeader, error) {
-	if vn > 0 {
-		return fzutil.ParseFZFHeaderWithVoiceCount(fzf, vn)
-	}
-	return fzutil.ParseFZFHeader(fzf)
-}
-
 // checkGeometry refuses an operation that leaves the audio at a byte
 // a reader would not derive: walk mode re-derives the count (see
 // bstepSum), DIS mode validates under the count the write-back

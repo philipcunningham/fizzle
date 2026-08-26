@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/logger"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
@@ -46,7 +46,11 @@ func benchSession(b *testing.B, voices [][]byte, groups []voicebuild.Keygroup) *
 	if err != nil {
 		b.Fatal(err)
 	}
-	if err := diskadd.AddToImage(img, fzf, 0); err != nil {
+	file, err := diskfs.FullDump(fzf, 0, len(voices))
+	if err != nil {
+		b.Fatal(err)
+	}
+	if err := diskfs.Add(img, fzf, file); err != nil {
 		b.Fatal(err)
 	}
 	s := NewSession()

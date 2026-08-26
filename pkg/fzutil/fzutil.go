@@ -236,12 +236,12 @@ func ParseFZFHeader(data []byte) (*FZFHeader, error) {
 	}, nil
 }
 
-// ParseFZFHeaderWithVoiceCount parses under the DIS tail's voice
+// parseFZFHeaderWithVoiceCount parses under the DIS tail's voice
 // count, validating the slots it claims. Zeroed bytes read as
 // placeholder slots, so the effective ceiling is geometry: a count
 // whose voice area runs past the data errors.
 // See llm-wiki/topics/voice-area-sizing.md.
-func ParseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
+func parseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
 	if len(data) < disk.SectorSize {
 		return nil, fmt.Errorf("fzutil: FZF too small (%d bytes, need at least %d)", len(data), disk.SectorSize)
 	}
@@ -281,28 +281,6 @@ const (
 	VoiceCountDIS
 	VoiceCountMarker
 )
-
-// ResolveDiskFZF parses a disk-backed dump under the DIS tail's vn. A
-// count at or below the walk is an undercount (TECHNO.img carries vn
-// 30 with 32 live voices) and never hides the voices past it; a
-// marker belongs to a standalone copy and never competes here.
-func ResolveDiskFZF(data []byte, disVN int) (*FZFHeader, VoiceCountSource, error) {
-	layout, err := ResolveDiskFZFLayout(data, disVN)
-	if err != nil {
-		return nil, VoiceCountWalk, err
-	}
-	return layout.compatibilityHeader(), layout.VoiceCountSource(), nil
-}
-
-// ResolveStandaloneFZF parses a standalone dump under its marker
-// record, where one binds.
-func ResolveStandaloneFZF(data []byte) (*FZFHeader, VoiceCountSource, error) {
-	layout, err := ResolveStandaloneFZFLayout(data)
-	if err != nil {
-		return nil, VoiceCountWalk, err
-	}
-	return layout.compatibilityHeader(), layout.VoiceCountSource(), nil
-}
 
 // voiceMarkerMagic guards the voice-count marker record: the offset
 // holds firmware garbage on real dumps. The trailing digit is the
@@ -705,10 +683,11 @@ func ReadFZF(path string) ([]byte, *FZFHeader, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	hdr, _, err := ResolveStandaloneFZF(data)
+	layout, err := ResolveStandaloneFZFLayout(data)
 	if err != nil {
 		return nil, nil, err
 	}
+	hdr := &FZFHeader{NVoice: layout.VoiceCount(), BStep0: layout.BStep0(), NBankSectors: layout.BankCount(), VoiceAreaStart: layout.VoiceStart()}
 	return data, hdr, nil
 }
 
