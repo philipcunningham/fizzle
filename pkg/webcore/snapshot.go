@@ -1,5 +1,53 @@
 package webcore
 
+import (
+	"encoding/binary"
+	"strings"
+
+	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
+)
+
+func typeCode(displayName string) string {
+	first, _, _ := strings.Cut(displayName, " ")
+	return strings.ToLower(first)
+}
+
+func voiceParams(vp *fzvinfo.VoiceParams, voiceBytes []byte) map[string]any {
+	wave := ""
+	if idx := int(lfoNameByte(voiceBytes) & disk.LFOWaveformMask); idx < len(lfoWaveNames) {
+		wave = lfoWaveNames[idx]
+	}
+	mode := vp.PlaybackMode
+	if mode == "synthesized" {
+		mode = "synth"
+	}
+	tune := 0
+	sync := "off"
+	if lfoNameByte(voiceBytes)&disk.LFOPhaseFlag != 0 {
+		sync = "on"
+	}
+	if len(voiceBytes) >= disk.VoiceDCPOffset+2 {
+		tune = int(int16(binary.LittleEndian.Uint16(voiceBytes[disk.VoiceDCPOffset : disk.VoiceDCPOffset+2]))) // #nosec G115 -- intentional signed reinterpretation
+	}
+	return map[string]any{
+		fieldPlaybackMode: mode, fieldTune: disk.TuneWordToDisplay(int16(tune)),
+		fieldRootKey: int(vp.KeyCentre), fieldKeyLow: int(vp.KeyLow), fieldKeyHigh: int(vp.KeyHigh),
+		fieldCutoff: int(vp.FilterCutoff), fieldResonance: int(vp.FilterQ),
+		fieldDcaLevelKF: disk.KFByteToDisplay(uint8(vp.DCALevelKF)),
+		fieldDcaRateKF:  disk.KFByteToDisplay(uint8(vp.DCARateKF)),
+		fieldDcfLevelKF: disk.KFByteToDisplay(uint8(vp.DCFLevelKF)),
+		fieldDcfRateKF:  disk.KFByteToDisplay(uint8(vp.DCFRateKF)),
+		fieldVelDcaKF:   int(vp.VelDCAKF), fieldVelDcfKF: int(vp.VelDCFKF),
+		fieldVelDcqKF: disk.VelDCQByteToDisplay(uint8(vp.VelDCQKF)),
+		fieldVelDcaRS: int(vp.VelDCARS), fieldVelDcfRS: int(vp.VelDCFRS),
+		fieldLfoWave: wave, fieldLfoRate: int(vp.LFORate),
+		fieldLfoDelay: disk.LFODelayWordToDisplay(vp.LFODelay),
+		fieldLfoPitch: int(vp.LFODepthPitch), fieldLfoAmp: int(vp.LFODepthAmp),
+		fieldLfoFilter: int(vp.LFODepthFilter), fieldLfoSync: sync,
+	}
+}
+
 func cloneParams(in map[string]any) map[string]any {
 	if in == nil {
 		return nil
