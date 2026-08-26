@@ -46,11 +46,15 @@ func unformatted(root string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		formatted, err := format.Source(source)
+		// Git may materialise tracked LF files as CRLF on Windows. Formatting
+		// is a property of the Go tokens, not the checkout's line-ending policy,
+		// so compare canonical LF bytes while leaving the working tree untouched.
+		canonical := bytes.ReplaceAll(source, []byte("\r\n"), []byte("\n"))
+		formatted, err := format.Source(canonical)
 		if err != nil {
 			return fmt.Errorf("formatting %s: %w", path, err)
 		}
-		if !bytes.Equal(source, formatted) {
+		if !bytes.Equal(canonical, formatted) {
 			files = append(files, path)
 		}
 		return nil
