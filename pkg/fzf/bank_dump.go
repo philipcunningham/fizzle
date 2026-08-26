@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/fzutil"
 )
 
 // BankDumpLayout is the immutable resolved geometry of an FZB bank dump.
@@ -56,7 +55,7 @@ func NewBankDump(data []byte) (*BankDump, error) {
 	if upper < 1 || upper > disk.MaxVoices {
 		upper = disk.MaxVoices
 	}
-	count := fzutil.InferVoiceCount(owned, disk.SectorSize, upper)
+	count := inferVoiceCount(owned, disk.SectorSize, upper)
 	if count == 0 {
 		return nil, fmt.Errorf("fzf: bank dump has no valid voice headers (bstep=%d)", stored)
 	}
@@ -73,6 +72,18 @@ func NewBankDump(data []byte) (*BankDump, error) {
 			countFromWalk: stored != count,
 		},
 	}, nil
+}
+
+func inferVoiceCount(data []byte, voiceStart, upper int) int {
+	upper = min(upper, disk.MaxVoices)
+	for slot := range upper {
+		offset := disk.VoiceSlotOffset(voiceStart, slot)
+		if offset+disk.VoiceHeaderUsed > len(data) ||
+			!disk.IsActiveOrEmptyVoiceSlot(data[offset:offset+disk.VoiceHeaderUsed]) {
+			return slot
+		}
+	}
+	return upper
 }
 
 func (d *BankDump) Bytes() []byte          { return bytes.Clone(d.data) }

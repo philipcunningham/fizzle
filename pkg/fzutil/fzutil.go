@@ -219,12 +219,12 @@ func ParseFZFHeader(data []byte) (*FZFHeader, error) {
 	if bstep == 0 || bstep > disk.MaxVoices {
 		return nil, fmt.Errorf("fzutil: invalid bstep %d (if this is a multi-disk continuation disk, run fzf info on disk 1 instead)", bstep)
 	}
-	nBankSectors := CountBankSectors(data)
+	nBankSectors := countBankSectors(data)
 	voiceAreaStart := nBankSectors * disk.SectorSize
-	// Bank 0's bstep doesn't cover voices in banks 1..N. CountAllVoices sums
+	// Bank 0's bstep doesn't cover voices in banks 1..N. countAllVoices sums
 	// every bank's bstep for the walk bound, so nvoice spans the whole
 	// voice area.
-	nvoice := CountAllVoices(data)
+	nvoice := countAllVoices(data)
 	if nvoice == 0 {
 		return nil, fmt.Errorf("fzutil: no valid voice headers found in voice area")
 	}
@@ -252,7 +252,7 @@ func parseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
 	if bstep == 0 || bstep > disk.MaxVoices {
 		return nil, fmt.Errorf("fzutil: invalid bstep %d (if this is a multi-disk continuation disk, run fzf info on disk 1 instead)", bstep)
 	}
-	nBankSectors := CountBankSectors(data)
+	nBankSectors := countBankSectors(data)
 	voiceAreaStart := nBankSectors * disk.SectorSize
 	if voiceAreaStart+disk.VoiceAreaSectors(vn)*disk.SectorSize > len(data) {
 		return nil, fmt.Errorf("fzutil: DIS voice count %d needs a voice area running past the dump", vn)
@@ -299,7 +299,7 @@ const (
 // markerChecksum hashes the dump's structural region (banks and the
 // vn-sized voice area) with the marker record zeroed.
 func markerChecksum(data []byte, vn int) uint32 {
-	end := CountBankSectors(data)*disk.SectorSize + disk.VoiceAreaSectors(vn)*disk.SectorSize
+	end := countBankSectors(data)*disk.SectorSize + disk.VoiceAreaSectors(vn)*disk.SectorSize
 	if end > len(data) {
 		end = len(data)
 	}
@@ -355,7 +355,7 @@ func MarkerVoiceCount(data []byte) int {
 	return vn
 }
 
-// InferVoiceCount walks voice slots from voiceAreaStart and counts the
+// inferVoiceCount walks voice slots from voiceAreaStart and counts the
 // contiguous ones that are plausible active voices or explicit
 // PlaybackModeNoSound placeholders. It stops at the first slot that doesn't
 // look like a voice header, the boundary where the audio area begins.
@@ -364,7 +364,7 @@ func MarkerVoiceCount(data []byte) int {
 // min(bstep, MaxVoices) bound stops the walk early. No real-world FZF does
 // that, and an under-count beats over-walking arbitrary bytes past the
 // slot region.
-func InferVoiceCount(data []byte, voiceAreaStart, bstep int) int {
+func inferVoiceCount(data []byte, voiceAreaStart, bstep int) int {
 	upper := bstep
 	if upper > disk.MaxVoices {
 		upper = disk.MaxVoices
@@ -383,7 +383,7 @@ func InferVoiceCount(data []byte, voiceAreaStart, bstep int) int {
 	return n
 }
 
-// CountAllVoices returns the inferred total voice count across all bank
+// countAllVoices returns the inferred total voice count across all bank
 // sectors. It sums bstep from every valid bank sector (clamped to
 // MaxVoices) and uses that sum as the upper bound for InferVoiceCount.
 //
@@ -392,8 +392,8 @@ func InferVoiceCount(data []byte, voiceAreaStart, bstep int) int {
 // banks. The sum is safe, overshooting when vp[] shares voices across
 // banks, and the walk-and-validate step trims the overshoot. See
 // ParseFZFHeader for why the count is walked rather than read.
-func CountAllVoices(data []byte) int {
-	nBanks := CountBankSectors(data)
+func countAllVoices(data []byte) int {
+	nBanks := countBankSectors(data)
 	total := 0
 	for b := range nBanks {
 		off := b * disk.SectorSize
@@ -407,10 +407,10 @@ func CountAllVoices(data []byte) int {
 		total = disk.MaxVoices
 	}
 	voiceAreaStart := nBanks * disk.SectorSize
-	return InferVoiceCount(data, voiceAreaStart, total)
+	return inferVoiceCount(data, voiceAreaStart, total)
 }
 
-// CountBankSectors returns the number of consecutive valid bank sectors at the
+// countBankSectors returns the number of consecutive valid bank sectors at the
 // start of a raw FZF byte slice. Real hardware full dumps can contain up to 8
 // banks; each bank sector has a non-zero voice count and a printable name at
 // offset 0x282. Returns at least 1.
@@ -422,7 +422,7 @@ func CountAllVoices(data []byte) int {
 // Callers that produce empty trailing banks (auto-grow on rename, or
 // assign-skip) must compact them at save time, or those banks vanish on
 // reload.
-func CountBankSectors(data []byte) int {
+func countBankSectors(data []byte) int {
 	n := 1
 	for i := 1; i < disk.MaxBanks; i++ {
 		off := i * disk.SectorSize
