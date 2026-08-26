@@ -182,11 +182,11 @@ func profileWAVs(files map[string][]byte) ([]wavProfile, *Error) {
 // demand, so the estimate assumes the same.
 func (s *Session) profileDocument() (*docProfile, *Error) {
 	doc := &docProfile{disks: 1, freeSectors: disk.SectorCount, memoryBytes: s.sampleMemory()}
-	if s.image == nil {
+	if !s.state.IsOpen() {
 		return doc, nil
 	}
 	doc.hasImage = true
-	if s.image2 != nil {
+	if s.state.HasSecondDisk() {
 		doc.disks = 2
 	}
 	img, ierr := s.openedImage()
@@ -203,7 +203,7 @@ func (s *Session) profileDocument() (*docProfile, *Error) {
 		return nil, cerr
 	}
 	disVN := 0
-	if s.usesDIS() {
+	if s.state.UsesDIS() {
 		disVN = disVoiceCount(img)
 	}
 	d, cerr := newDumpState(fzf, disVN)

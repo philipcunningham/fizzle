@@ -59,7 +59,7 @@ func (s *Session) AuditionSlot(slot int) (*Audition, *Error) {
 // the same unpack path as the CLI's fzf unpack. Shared by audition,
 // slot peaks, and slot extract.
 func (s *Session) slotFZV(slot int) ([]byte, *Error) {
-	if s.image == nil {
+	if !s.state.IsOpen() {
 		return nil, errf(codeNoDisk, "no disk is open")
 	}
 	if s.instrument == nil {
@@ -76,7 +76,7 @@ func (s *Session) slotFZV(slot int) ([]byte, *Error) {
 	var doc *fzfmodel.Document
 	var uerr error
 	vn := 0
-	if s.usesDIS() {
+	if s.state.UsesDIS() {
 		vn = disVoiceCount(img)
 	}
 	if vn > 0 {

@@ -25,7 +25,7 @@ func (s *Session) Close() (Snapshot, *Error) {
 // On a split pair, disk 1 carries the document's name; disk 2 keeps
 // the derived label it was formatted with.
 func (s *Session) RenameDisk(label string) (Snapshot, *Error) {
-	if s.image == nil {
+	if !s.state.IsOpen() {
 		return s.Snapshot(), errf(codeNoDisk, "no disk is open")
 	}
 	if len(label) == 0 || len(label) > disk.LabelSize {
@@ -36,7 +36,7 @@ func (s *Session) RenameDisk(label string) (Snapshot, *Error) {
 			return s.Snapshot(), errf(codeInvalidValue, "disk label contains non-ASCII character %q", string(r))
 		}
 	}
-	img, rerr := disk.ReadImage(bytes.NewReader(s.image))
+	img, rerr := disk.ReadImage(bytes.NewReader(s.state.Image1()))
 	if rerr != nil {
 		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: %v", rerr)
 	}
@@ -70,7 +70,7 @@ func (s *Session) ExtractFile(name string) ([]byte, *Error) {
 		return nil, cerr
 	}
 	var data []byte
-	if name == disk.FullDumpName && s.image2 != nil {
+	if name == disk.FullDumpName && s.state.HasSecondDisk() {
 		stitched, cerr := s.stitchedDump(img)
 		if cerr != nil {
 			return nil, cerr
@@ -87,7 +87,7 @@ func (s *Session) ExtractFile(name string) ([]byte, *Error) {
 	// re-derive rides out in the fizzle marker. A walk-mode extract
 	// clears any stale marker instead of shipping it.
 	if name == disk.FullDumpName {
-		if s.usesDIS() {
+		if s.state.UsesDIS() {
 			fzutil.StampVoiceCountMarker(data, disVoiceCount(img))
 		} else {
 			fzutil.ClearVoiceCountMarker(data)
@@ -168,7 +168,7 @@ func (s *Session) NewInstrument(name string) (Snapshot, *Error) {
 	if err := diskfs.Add(img, dump, file); err != nil {
 		return s.Snapshot(), addError(err)
 	}
-	return s.adoptPair(img, s.image2, modeDerive)
+	return s.adoptPair(img, s.state.Image2(), modeDerive)
 }
 
 // emptyInstrumentDump builds the smallest dump the format accepts:

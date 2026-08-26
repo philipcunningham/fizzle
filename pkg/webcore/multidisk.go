@@ -173,7 +173,7 @@ func checkCoversLastVoice(stitched []byte, hdr *fzutil.FZFHeader, voiceAreaEnd i
 }
 
 func (s *Session) stitchedDump(img *disk.Image) ([]byte, *Error) {
-	return stitchedDumpPair(img, s.image2)
+	return stitchedDumpPair(img, s.state.Image2())
 }
 
 // stitchedDumpPair returns a candidate document's FULL-DATA-FZ payload. For a
@@ -291,8 +291,8 @@ func putDump(img *disk.Image, data []byte, diskNum uint8, split *voicebuild.Mult
 // fresh formatted one (labelled after disk 1) the first time a
 // document outgrows one disk.
 func (s *Session) disk2Image() (*disk.Image, *Error) {
-	if s.image2 != nil {
-		img2, rerr := disk.ReadImage(bytes.NewReader(s.image2))
+	if s.state.HasSecondDisk() {
+		img2, rerr := disk.ReadImage(bytes.NewReader(s.state.Image2()))
 		if rerr != nil {
 			return nil, errf("invalid-image", "disk 2 unreadable: %v", rerr)
 		}

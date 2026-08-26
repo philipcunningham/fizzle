@@ -54,7 +54,7 @@ func (s *Session) AddVoice(fzvData []byte) (Snapshot, *Error) {
 	if err != nil {
 		return s.Snapshot(), errf("not-a-voice", "%v", err)
 	}
-	if s.image != nil && s.instrument != nil {
+	if s.state.IsOpen() && s.instrument != nil {
 		return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
 			result, err := d.doc.AddVoice(fzvData)
 			if err != nil {
@@ -126,7 +126,7 @@ func (s *Session) AddBank(data []byte, slot int) (Snapshot, *Error) {
 	if _, err := fzutil.ParseFZFHeader(data); err != nil {
 		return s.Snapshot(), errf("invalid-fzb", "%v", err)
 	}
-	if s.image != nil && s.instrument != nil {
+	if s.state.IsOpen() && s.instrument != nil {
 		return s.patchDump(func(d *dumpState) ([]model.Patch, *Error) {
 			return addBankDocumentOperation(d, data, slot)
 		})
@@ -142,7 +142,7 @@ func (s *Session) AddBank(data []byte, slot int) (Snapshot, *Error) {
 	if err := diskfs.Add(img, data, file); err != nil {
 		return s.Snapshot(), addError(err)
 	}
-	return s.adoptPair(img, s.image2, modeDerive)
+	return s.adoptPair(img, s.state.Image2(), modeDerive)
 }
 
 func addBankDocumentOperation(d *dumpState, data []byte, slot int) ([]model.Patch, *Error) {
@@ -221,7 +221,7 @@ func convertWAV(filename string, wavData []byte, rate uint32, channel string) ([
 // imageOrNew parses the open image, or formats a fresh one when no
 // disk is open: the matrix's implicit new disk column.
 func (s *Session) imageOrNew() (*disk.Image, *Error) {
-	if s.image == nil {
+	if !s.state.IsOpen() {
 		data, err := diskformat.BuildImage(defaultLabel)
 		if err != nil {
 			return nil, errf("invalid-label", "%v", err)
@@ -232,7 +232,7 @@ func (s *Session) imageOrNew() (*disk.Image, *Error) {
 		}
 		return img, nil
 	}
-	img, rerr := disk.ReadImage(bytes.NewReader(s.image))
+	img, rerr := disk.ReadImage(bytes.NewReader(s.state.Image1()))
 	if rerr != nil {
 		return nil, errf("invalid-image", "not a readable FZ image: %v", rerr)
 	}

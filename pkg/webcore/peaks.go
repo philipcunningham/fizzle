@@ -15,7 +15,7 @@ const maxPeakBuckets = 16384
 // clamps to the voice's frame count; buckets must be positive. The
 // PCM decode is the same code path as the CLI's fzv extract.
 func (s *Session) Peaks(fileName string, startFrame, endFrame, buckets int) ([]int16, *Error) {
-	if s.image == nil {
+	if !s.state.IsOpen() {
 		return nil, errf(codeNoDisk, "no disk is open")
 	}
 	if buckets <= 0 || buckets > maxPeakBuckets {
