@@ -8,10 +8,7 @@ package webcore
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
-	"fmt"
-	"strings"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
@@ -21,91 +18,6 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/voiceedit"
 )
-
-// Error is a boundary error envelope: a stable machine code plus a
-// human message. It never wraps a panic; the glue recovers those.
-type Error struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	// Item names the offending file, voice, or field where one
-	// exists, the way the spec's contract section promises.
-	Item string `json:"item,omitempty"`
-	// Detail carries the technical reason for a bug report; the
-	// message above stays the one a musician reads.
-	Detail string `json:"detail,omitempty"`
-}
-
-func (e *Error) Error() string { return e.Code + ": " + e.Message }
-
-func errf(code, format string, args ...any) *Error {
-	return &Error{Code: code, Message: fmt.Sprintf(format, args...)}
-}
-
-// errItemf is errf with the offending item named.
-func errItemf(code, item, format string, args ...any) *Error {
-	e := errf(code, format, args...)
-	e.Item = item
-	return e
-}
-
-// Envelope codes shared across calls; the TypeScript boundary matches
-// on them.
-const (
-	codeNoDisk       = "no-disk"
-	codeInvalidImage = "invalid-image"
-	codeInvalidField = "invalid-field"
-	codeInvalidValue = "invalid-value"
-	codeNotFound     = "not-found"
-	// codePairMismatch covers every way two images fail to be disks 1
-	// and 2 of one split set.
-	codePairMismatch = "pair-mismatch"
-	// codeLastArea refuses an area deletion that would leave a bank
-	// with no areas, which drops the bank out of the dump.
-	codeLastArea = "last-area"
-	// codeMissingDisk refuses a mutation while half of a split pair is
-	// absent; the message names the disk to fetch.
-	codeMissingDisk = "missing-disk"
-)
-
-// FileSnapshot describes one directory entry for the UI. Voice files
-// carry their editable parameter values keyed by schema field ID, plus
-// the bespoke-editor detail (waveform extent, loops, envelopes).
-type FileSnapshot struct {
-	Name      string         `json:"name"`
-	Type      string         `json:"type"`
-	SizeBytes int            `json:"sizeBytes"`
-	Params    map[string]any `json:"params,omitempty"`
-	Voice     *VoiceDetail   `json:"voice,omitempty"`
-}
-
-// DiskSnapshot describes the open disk set for the UI. Instrument is
-// the parsed full dump when the disk carries one. Disks is 1 or 2: a
-// split instrument spans a pair and the capacity figures cover both
-// (R23). MissingDisk names the absent half when one image of a pair
-// was opened alone (R5): 2 means "this is disk 1, disk 2 is missing".
-type DiskSnapshot struct {
-	Label         string `json:"label"`
-	UsedBytes     int    `json:"usedBytes"`
-	CapacityBytes int    `json:"capacityBytes"`
-	// AudioBytes is what the instrument asks the sampler's memory to
-	// hold, and MemoryBytes is what the user says their sampler has.
-	// The two make the second reading of R23's capacity readout.
-	AudioBytes  int                 `json:"audioBytes"`
-	MemoryBytes int                 `json:"memoryBytes"`
-	Disks       int                 `json:"disks"`
-	MissingDisk int                 `json:"missingDisk,omitempty"`
-	Files       []FileSnapshot      `json:"files"`
-	Instrument  *InstrumentSnapshot `json:"instrument,omitempty"`
-}
-
-// Snapshot is the state the UI renders from. Revision is a monotonic
-// per-session token; a changed revision means changed state.
-type Snapshot struct {
-	Revision int           `json:"revision"`
-	Disk     *DiskSnapshot `json:"disk"`
-	CanUndo  bool          `json:"canUndo"`
-	CanRedo  bool          `json:"canRedo"`
-}
 
 func authorityFromDIS(disMode bool) documentmodel.Authority {
 	if disMode {
@@ -145,67 +57,6 @@ type preparedDocument struct {
 // NewSession returns an empty session with no disk open.
 func NewSession() *Session {
 	return &Session{}
-}
-
-// Snapshot returns the state the UI renders from.
-func (s *Session) Snapshot() Snapshot {
-	snap := Snapshot{
-		Revision: s.revision,
-		CanUndo:  len(s.past) > 0,
-		CanRedo:  len(s.future) > 0,
-	}
-	if s.state.IsOpen() {
-		disks := 1
-		if s.state.HasSecondDisk() {
-			disks = 2
-		}
-		snap.Disk = &DiskSnapshot{
-			Label:         s.label,
-			UsedBytes:     s.used,
-			CapacityBytes: disks * disk.ImageSize,
-			AudioBytes:    s.audioBytes,
-			MemoryBytes:   s.sampleMemory(),
-			Disks:         disks,
-			MissingDisk:   s.missingDisk,
-			Files:         cloneFiles(s.files),
-			Instrument:    cloneInstrument(s.instrument),
-		}
-	}
-	return snap
-}
-
-// SampleMemoryMin and SampleMemoryMax bound what an FZ can hold. The
-// FZ-1 shipped with 1 MB and reaches 2 MB with Casio's expansion card;
-// the rack units shipped with 2 MB. The machine discovers which it has
-// at power on: the wave memory probe at F000:07D4 counts 64 KB banks
-// from a floor of 16, and length_limit at F000:7A74 spends what it
-// found. Only five bits of the bank register reach memory, so 32 banks
-// is the ceiling. See llm-wiki/topics/sample-memory.md.
-const (
-	SampleMemoryMin = 1 << 20
-	SampleMemoryMax = 2 << 20
-)
-
-// sampleMemory is the machine the user declared, defaulting to the
-// smaller one: a disk built for 1 MB loads on any FZ.
-func (s *Session) sampleMemory() int {
-	if s.memoryBytes == 0 {
-		return SampleMemoryMin
-	}
-	return s.memoryBytes
-}
-
-// SetSampleMemory records how much sample memory the sampler has (R27).
-// It describes the machine rather than the document, so it changes no
-// bytes and leaves the revision, the undo history, and the dirty flag
-// alone. It never refuses an import or an export; it informs.
-func (s *Session) SetSampleMemory(bytes int) (Snapshot, *Error) {
-	if bytes < SampleMemoryMin || bytes > SampleMemoryMax {
-		return s.Snapshot(), errf(codeInvalidValue,
-			"sample memory %d is outside the 1 MB to 2 MB an FZ holds", bytes)
-	}
-	s.memoryBytes = bytes
-	return s.Snapshot(), nil
 }
 
 // dumpAudioBytes totals the audio a dump asks the sampler to hold: the
@@ -328,63 +179,6 @@ func (s *Session) ImportWAV(filename string, wavData []byte, rate uint32, channe
 		return s.Snapshot(), addError(err)
 	}
 	return s.adopt(img)
-}
-
-// typeCode reduces a disklist display name to the boundary's stable
-// one-word lowercase code ("Full Dump" becomes "full").
-func typeCode(displayName string) string {
-	first, _, _ := strings.Cut(displayName, " ")
-	return strings.ToLower(first)
-}
-
-// voiceParams maps parsed voice values to schema field IDs. The LFO
-// waveform and playback mode come back as the identifiers the setters
-// accept, read from the raw byte where the display name differs.
-func voiceParams(vp *fzvinfo.VoiceParams, voiceBytes []byte) map[string]any {
-	wave := ""
-	if idx := int(lfoNameByte(voiceBytes) & disk.LFOWaveformMask); idx < len(lfoWaveNames) {
-		wave = lfoWaveNames[idx]
-	}
-	mode := vp.PlaybackMode
-	if mode == "synthesized" {
-		mode = "synth"
-	}
-	// fzvinfo reports tune in semitones and KF in raw bytes; the schema
-	// speaks the setters' units (the panel's cents, hardware display scale), so
-	// both convert here.
-	tune := 0
-	sync := "off"
-	if lfoNameByte(voiceBytes)&disk.LFOPhaseFlag != 0 {
-		sync = "on"
-	}
-	if len(voiceBytes) >= disk.VoiceDCPOffset+2 {
-		tune = int(int16(binary.LittleEndian.Uint16(voiceBytes[disk.VoiceDCPOffset : disk.VoiceDCPOffset+2]))) // #nosec G115 -- intentional signed reinterpretation
-	}
-	return map[string]any{
-		fieldPlaybackMode: mode,
-		fieldTune:         disk.TuneWordToDisplay(int16(tune)), //nolint:gosec // read back as int16 above
-		fieldRootKey:      int(vp.KeyCentre),
-		fieldKeyLow:       int(vp.KeyLow),
-		fieldKeyHigh:      int(vp.KeyHigh),
-		fieldCutoff:       int(vp.FilterCutoff),
-		fieldResonance:    int(vp.FilterQ),
-		fieldDcaLevelKF:   disk.KFByteToDisplay(uint8(vp.DCALevelKF)), // #nosec G115 -- two's complement round trip
-		fieldDcaRateKF:    disk.KFByteToDisplay(uint8(vp.DCARateKF)),  // #nosec G115
-		fieldDcfLevelKF:   disk.KFByteToDisplay(uint8(vp.DCFLevelKF)), // #nosec G115
-		fieldDcfRateKF:    disk.KFByteToDisplay(uint8(vp.DCFRateKF)),  // #nosec G115
-		fieldVelDcaKF:     int(vp.VelDCAKF),
-		fieldVelDcfKF:     int(vp.VelDCFKF),
-		fieldVelDcqKF:     disk.VelDCQByteToDisplay(uint8(vp.VelDCQKF)), //nolint:gosec // two's complement round trip
-		fieldVelDcaRS:     int(vp.VelDCARS),
-		fieldVelDcfRS:     int(vp.VelDCFRS),
-		fieldLfoWave:      wave,
-		fieldLfoRate:      int(vp.LFORate),
-		fieldLfoDelay:     disk.LFODelayWordToDisplay(vp.LFODelay),
-		fieldLfoPitch:     int(vp.LFODepthPitch),
-		fieldLfoAmp:       int(vp.LFODepthAmp),
-		fieldLfoFilter:    int(vp.LFODepthFilter),
-		fieldLfoSync:      sync,
-	}
 }
 
 // clampNumberField resolves a numeric schema edit and clamps the
