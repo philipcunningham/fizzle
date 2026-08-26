@@ -13,10 +13,11 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "protocol-check": "node scripts/check-protocol.mjs",
     "bundle-check": "node scripts/check-bundle.mjs",
     "smoke": "node scripts/smoke.mjs",
     "perf": "node scripts/perf-drag.mjs",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build && npm run bundle-check && npm run base-check",
+    "check": "npm run protocol-check && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build && npm run bundle-check && npm run base-check",
     "visual": "node scripts/visual.mjs",
     "visual:update": "node scripts/visual.mjs --update",
     "base-check": "node scripts/check-base.mjs"

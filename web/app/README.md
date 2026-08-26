@@ -25,3 +25,19 @@ check chain; `make check` includes it.
 
 `npm run visual` compares per-platform screenshot baselines. CI skips
 it, so run it by hand before shipping a UI change.
+
+## Core protocol
+
+`../protocol/methods.json` is the browser boundary manifest. It names every
+method plus its request, response, and transferable shape. Change that file
+when adding or removing a capability, then run:
+
+```sh
+node scripts/check-protocol.mjs --write
+```
+
+The normal check rejects a stale generated method union. TypeScript proves
+that the manifest, public `Core`, raw WASM surface, and worker dispatch are
+complete. The Go parity test proves that the module registers exactly the
+same methods. Payload conversion remains explicit in the worker because it
+owns structured-clone and transferable behavior.

@@ -2,6 +2,7 @@
 // serialises calls onto it. One request in, one response out, matched
 // by id; exported image bytes travel back as a transferable.
 import { coreCrash, err } from "../boundary/contract";
+import type { Assert, CoreMethod, ExactProtocol } from "../boundary/protocol";
 import type {
   Channel,
   CoreResult,
@@ -88,6 +89,8 @@ interface FizzleCore {
   extractVoiceSlot(slot: number, format: string): CoreResult<{ name: string; bytes: Uint8Array }>;
 }
 
+export type FizzleCoreMatchesProtocol = Assert<ExactProtocol<FizzleCore>>;
+
 export type AreaArgs = number[];
 
 export interface ImportWavPayload {
@@ -142,52 +145,7 @@ function folderFiles(files: Record<string, ArrayBuffer>): Record<string, Uint8Ar
 
 export interface WorkerRequest {
   id: number;
-  method:
-    | "snapshot"
-    | "newDisk"
-    | "openImage"
-    | "schema"
-    | "undo"
-    | "redo"
-    | "beginGesture"
-    | "commitGesture"
-    | "setAreaField"
-    | "renameBank"
-    | "swapAreas"
-    | "deleteArea"
-    | "addArea"
-    | "duplicateArea"
-    | "mapVoice"
-    | "setEffectCell"
-    | "setBendRange"
-    | "auditionSlot"
-    | "exportImage"
-    | "exportImageAt"
-    | "loadFzf"
-    | "addVoice"
-    | "addBank"
-    | "importWavToInstrument"
-    | "openImagePair"
-    | "importSfz"
-    | "importWavFolder"
-    | "estimateImport"
-    | "setDebug"
-    | "setSlotParamNumber"
-    | "setSlotParamOption"
-    | "setSlotGeneration"
-    | "setSlotLoop"
-    | "setSlotLoopAttr"
-    | "setSlotLoopSelect"
-    | "setSampleMemory"
-    | "setSlotEnvelope"
-    | "renameVoiceSlot"
-    | "slotPeaks"
-    | "renameDisk"
-    | "closeDisk"
-    | "deleteFile"
-    | "newInstrument"
-    | "extractFile"
-    | "extractVoiceSlot";
+  method: CoreMethod;
   payload?: unknown;
 }
 
@@ -450,7 +408,10 @@ function dispatch(request: WorkerRequest): CoreResult<unknown> | undefined {
     default:
       // The union above rules this out; a stale bundle on either side
       // doesn't, and an unanswered call parks the caller forever.
-      return err("unknown-method", `the core has no method named ${String(request.method)}`);
+      return err(
+        "unknown-method",
+        `the core has no method named ${String(request.method satisfies never)}`,
+      );
   }
 }
 
