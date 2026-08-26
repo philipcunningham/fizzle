@@ -24,7 +24,7 @@ authorities.
 | Sample memory per machine | 4 | `pkg/disk/disk.go`, `pkg/webcore/session.go`, `pkg/webcore/estimate.go` | [sample-memory](topics/sample-memory.md) |
 | Multi-disk full dumps | 1-3 | `pkg/disk/disk.go`, `pkg/diskadd`, `pkg/fzfinfo` | [multi-disk-dumps](topics/multi-disk-dumps.md) |
 | Bank sector (`bankdata`) | 2-2 List B | `pkg/fzfinfo`, `pkg/voicebuild` | [mchn-offset](findings/mchn-offset.md), [bstep-key-splits](findings/bstep-key-splits.md), [multiple-bank-sectors](findings/multiple-bank-sectors.md) |
-| Voice parameter area | 1-5, 2-1 | `pkg/fzutil` (`CountAllVoices`, `InferVoiceCount`), `pkg/voiceextract`, `pkg/voiceunpack` | [voice-area-sizing](topics/voice-area-sizing.md) |
+| Voice parameter area | 1-5, 2-1 | `pkg/fzf` documents and views, `pkg/voiceextract`, `pkg/voiceunpack` | [voice-area-sizing](topics/voice-area-sizing.md) |
 | Audio area, sample rates | 1-5 | `pkg/disk/rates.go`, `pkg/wav`, `pkg/voiceimport` | [audio-block-padding](findings/audio-block-padding.md) |
 | Voice header (`voicedata`) | 2-1 List A | `pkg/disk/voice.go`, `pkg/fzvinfo`, `pkg/voiceedit` | [dcq-full-byte](findings/dcq-full-byte.md) |
 | Loops, playback modes | 2-1 | `pkg/voiceimport`, `pkg/sfzconvert`, `pkg/webcore/detail.go` | [multi-loops](topics/multi-loops.md), [looptm-unit](findings/looptm-unit.md), [voice-authoring-defaults](topics/voice-authoring-defaults.md) |

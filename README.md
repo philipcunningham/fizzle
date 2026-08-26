@@ -117,6 +117,8 @@ npm run dev        # then open the printed localhost URL
 ```
 
 For the front end layout and its checks see [web/app/README.md](web/app/README.md).
+The [architecture guide](docs/architecture.md) records domain ownership,
+dependency rules, and their executable evidence.
 
 ---
 

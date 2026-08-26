@@ -124,7 +124,7 @@ without user approval. Log every pass.
 
 ## Citations
 
-- fizzle code: `pkg/fzutil/fzutil.go:193`.
+- fizzle code: `pkg/fzf/document.go` and the relevant bounded view.
 - Firmware: ROM address and routine name; reverse engineering documents
   by filename and section.
 - Casio spec: file plus section number.
