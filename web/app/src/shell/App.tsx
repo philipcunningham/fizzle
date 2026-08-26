@@ -2,24 +2,18 @@
 // call, the returned snapshot's revision keys the query cache, and the
 // UI renders from it. The core owns the document; this file owns view
 // state only (tab, selections, dialogs, status line).
-import {
-  QueryClientProvider,
-  keepPreviousData,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { QueryClientProvider, keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Channel,
   Core,
-  CoreError,
   CoreResult,
   InstrumentVoice,
   SampleRate,
   Snapshot,
 } from "../boundary/contract";
-import { IMAGE_SIZE, isCoreCrash } from "../boundary/contract";
+import { IMAGE_SIZE } from "../boundary/contract";
 import type { DialogActions, PendingDialog } from "../dialogs/Dialogs";
 import { Dialogs } from "../dialogs/Dialogs";
 import { createQueryClient, queryKeys } from "../queries/client";
@@ -28,10 +22,7 @@ import { EffectsScreen } from "../screens/EffectsScreen";
 import { NoInstrumentPanel } from "../screens/NoInstrumentPanel";
 import { StartScreen } from "../screens/StartScreen";
 import { VoiceEditor } from "../screens/VoiceEditor";
-import { CapacityBar, MEMORY_CHOICES } from "../ui/CapacityBar";
-
-/** Where the declared machine is kept between sessions. */
-const MEMORY_KEY = "fizzle.sampleMemory";
+import { CapacityBar } from "../ui/CapacityBar";
 import { Keyboard } from "../ui/Keyboard";
 import { createAudition } from "../ui/audition";
 import { clamp, formatBytes } from "../ui/format";
@@ -43,6 +34,9 @@ import { releaseLoop, sustainLoop } from "../viewstate/loops";
 import { matchAreas } from "../viewstate/mapping";
 import { CrashPanel, ErrorBoundary } from "./ErrorBoundary";
 import { dropEntries, walkEntries } from "./drop";
+import { exportLastResort, readBytes, relativePath, saveFile } from "./fileio";
+import type { SaveOutcome } from "./fileio";
+import { useDocumentSession } from "./useDocumentSession";
 import { wavChannels } from "./wavinfo";
 
 /** True for a target that owns its own undo stack; the document's undo hotkey leaves it alone. */
@@ -101,25 +95,6 @@ function isSupportedBrowser(): boolean {
  * what crashed. A split document writes both images. Nothing renders
  * here to carry a message, so a refusal or failed write stays silent.
  */
-function lastResortExport(core: Core): void {
-  const write = (result: CoreResult<Uint8Array>, name: string): Promise<unknown> =>
-    result.ok ? saveFile(result.value, name).catch(() => null) : Promise.resolve(null);
-
-  void core.snapshot().then((snapshot) => {
-    const disk = snapshot.ok ? snapshot.value.disk : null;
-    const label = disk?.label.trim() ?? "DISK";
-    if (disk?.disks === 2) {
-      void core
-        .exportImageAt(0)
-        .then((one) => write(one, `${label}-1.img`))
-        .then(() => core.exportImageAt(1))
-        .then((two) => write(two, `${label}-2.img`));
-      return;
-    }
-    void core.exportImage().then((image) => write(image, `${label}.img`));
-  });
-}
-
 export function App({ core }: { core: Core }) {
   const client = useMemo(() => createQueryClient(), []);
   // Above the whole shell, so a throw in the topbar, a dialog, the bar,
@@ -129,7 +104,7 @@ export function App({ core }: { core: Core }) {
     <QueryClientProvider client={client}>
       <ErrorBoundary
         onExport={() => {
-          lastResortExport(core);
+          exportLastResort(core);
         }}
       >
         <Shell core={core} />
@@ -145,7 +120,6 @@ interface BarMsg {
 }
 
 function Shell({ core }: { core: Core }) {
-  const [revision, setRevision] = useState(0);
   const [tab, setTab] = useState<Tab>("voices");
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [selectedBank, setSelectedBank] = useState(0);
@@ -164,16 +138,37 @@ function Shell({ core }: { core: Core }) {
   // picked next joins this file. Every other dialog open and the close
   // path clear it, so a stale .sfz can't leak into a later import.
   const [pendingSfz, setPendingSfz] = useState<NamedBytes | null>(null);
-  const [dirty, setDirty] = useState(false);
   const [barError, setBarError] = useState<{ text: string; seq: number } | null>(null);
-  // Set once the core can no longer answer: only a reload moves on (E5).
-  const [fatal, setFatal] = useState<CoreError | null>(null);
   const [barMsg, setBarMsg] = useState<BarMsg | null>(null);
   const [filesCollapsed, setFilesCollapsed] = useState(false);
   const [renamingDisk, setRenamingDisk] = useState(false);
   const [kbLow, setKbLow] = useState(24);
   const [browserNotice, setBrowserNotice] = useState(() => !isSupportedBrowser());
   const seqRef = useRef(0);
+  const fail = useCallback((text: string) => {
+    seqRef.current += 1;
+    setBarError({ text, seq: seqRef.current });
+  }, []);
+  const clearFailure = useCallback(() => {
+    setBarError(null);
+  }, []);
+  const {
+    snapshot: snap,
+    schema,
+    queryClient,
+    dirty,
+    setDirty,
+    fatal,
+    memoryBytes,
+    setMemory,
+    report,
+    apply,
+    applyEdit,
+    undo,
+    redo,
+    gestureBegin,
+    gestureCommit,
+  } = useDocumentSession(core, fail, clearFailure);
 
   const anyRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
@@ -194,26 +189,8 @@ function Shell({ core }: { core: Core }) {
     };
   }, []);
 
-  // The CLI debug flag's analogue (E4): ?debug=1 raises the log level.
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("debug") === "1") {
-      void core.setDebug(true);
-    }
-  }, [core]);
-
-  const snapshot = useQuery({
-    queryKey: queryKeys.snapshot(revision),
-    queryFn: () => core.snapshot(),
-    placeholderData: keepPreviousData,
-  });
-  const schemaQuery = useQuery({
-    queryKey: queryKeys.schema(),
-    queryFn: () => core.schema(),
-  });
-  const snap = snapshot.data?.ok ? snapshot.data.value : null;
   const disk = snap?.disk ?? null;
   const instrument = disk?.instrument ?? null;
-  const schema = schemaQuery.data?.ok ? schemaQuery.data.value : [];
 
   const voice =
     instrument?.voices.find((v) => v.slot === selectedSlot) ?? instrument?.voices[0] ?? null;
@@ -262,7 +239,6 @@ function Shell({ core }: { core: Core }) {
   // The audition path (R20 to R22): the focus voice's PCM prefetched
   // per revision, the engine created lazily on the first gesture.
   const audition = useMemo(() => createAudition(), []);
-  const queryClient = useQueryClient();
   // Keyed by note, and tagged with where the press came from: a note a
   // MIDI device holds outlives a click on another window, where one
   // this page started cannot be released once the page loses it. One
@@ -315,7 +291,7 @@ function Shell({ core }: { core: Core }) {
     // shown refusal can't lapse into an enabled Convert mid-reply.
     queryKey: [
       "estimate",
-      revision,
+      snap?.revision ?? 0,
       wavDialog?.files.map((f) => `${f.name}:${String(f.bytes.length)}`).join("|") ?? "",
       rate,
       stereo,
@@ -544,102 +520,9 @@ function Shell({ core }: { core: Core }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [core]);
 
-  // R3: closing the tab with unexported changes warns. N3 rules out
-  // persistence, so the browser's own prompt is all that stands between
-  // an accidental Cmd+W and the whole session.
-  useEffect(() => {
-    if (!dirty) return;
-    // Chromium acts on preventDefault alone and shows its own wording;
-    // the legacy returnValue string is deprecated (N4).
-    const onUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
-    window.addEventListener("beforeunload", onUnload);
-    return () => {
-      window.removeEventListener("beforeunload", onUnload);
-    };
-  }, [dirty]);
-
   const say = (text: string, kind: BarMsg["kind"] = "status") => {
     seqRef.current += 1;
     setBarMsg({ text, kind, seq: seqRef.current });
-  };
-  const fail = (text: string) => {
-    seqRef.current += 1;
-    setBarError({ text, seq: seqRef.current });
-  };
-
-  /**
-   * Every refused call reports through here (E1). A fatal envelope
-   * instead gets the crash panel and a reload (E5): the core can no
-   * longer answer, so a dismissible bar line would offer a dead session.
-   */
-  const report = (error: CoreError) => {
-    if (isCoreCrash(error)) setFatal(error);
-    // The message is for the user; the machine code is for a bug report.
-    else fail(error.message);
-  };
-
-  const apply = (result: CoreResult<Snapshot>) => {
-    if (result.ok) {
-      setBarError(null);
-      setRevision(result.value.revision);
-    } else {
-      report(result.error);
-    }
-    return result.ok;
-  };
-
-  // A mutation marks the document dirty (the export guard's signal).
-  const applyEdit = (result: CoreResult<Snapshot>) => {
-    if (apply(result)) setDirty(true);
-    return result.ok;
-  };
-
-  // The sampler's memory is a fact about the machine, not an edit to
-  // the document, so it neither dirties nor enters history. It outlives
-  // the session in local storage, which never leaves the browser, where
-  // a cookie would ride every asset request to the host (Q4). Storage
-  // that refuses costs the memory of the choice and nothing else.
-  const [memoryBytes, setMemoryBytes] = useState(MEMORY_CHOICES[0]?.bytes ?? 1024 * 1024);
-  const setMemory = (bytes: number) => {
-    setMemoryBytes(bytes);
-    try {
-      localStorage.setItem(MEMORY_KEY, String(bytes));
-    } catch {
-      // A locked down profile just means it isn't remembered.
-    }
-    void core.setSampleMemory(bytes).then((r) => {
-      // The figure changes no bytes, so the core keeps the revision the
-      // snapshot query is keyed by. The reading is the core's answer,
-      // so it still has to be re-read.
-      if (apply(r)) void queryClient.invalidateQueries({ queryKey: ["snapshot"] });
-    });
-  };
-  useEffect(() => {
-    let saved = 0;
-    try {
-      saved = Number(localStorage.getItem(MEMORY_KEY) ?? 0);
-    } catch {
-      saved = 0;
-    }
-    // Only a machine that exists. A figure from a build with other
-    // choices, or a hand edited profile, would be refused by the core
-    // and reported to a user who did nothing to cause it.
-    if (MEMORY_CHOICES.some((c) => c.bytes === saved)) {
-      setMemory(saved);
-    }
-    // Once, at boot, before the first estimate can be asked for.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Undo and redo move the document away from what was last written, so
-  // they dirty it too, or a redone edit is discarded silently at close.
-  const undo = () => {
-    void core.undo().then(applyEdit);
-  };
-  const redo = () => {
-    void core.redo().then(applyEdit);
   };
 
   // Bumped whenever the dialog closes: a conversion chain captures
@@ -766,18 +649,6 @@ function Shell({ core }: { core: Core }) {
     (neighbour ?? sidebarRef.current?.querySelector<HTMLElement>("button"))?.focus();
     setRowFocus(null);
   }, [rowFocus, fileNames]);
-
-  const gestureBegin = () => {
-    void core.beginGesture();
-  };
-  const gestureCommit = () => {
-    void core.commitGesture().then((result) => {
-      // A press and release with nothing in between lands no history
-      // entry, so it must not raise the unsaved dot either.
-      if (result.ok && result.value.gestureLanded === false) apply(result);
-      else applyEdit(result);
-    });
-  };
 
   // ---- Export and save --------------------------------------------
 
@@ -1933,92 +1804,5 @@ function Shell({ core }: { core: Core }) {
         />
       )}
     </div>
-  );
-}
-
-// Folder pickers stamp each file with its path under the chosen root;
-// fall back to the bare name where the field is empty (drop, jsdom).
-function relativePath(file: File): string {
-  const path = file.webkitRelativePath;
-  if (path === "") return file.name;
-  const slash = path.indexOf("/");
-  return slash >= 0 ? path.slice(slash + 1) : path;
-}
-
-// FileReader rather than File.arrayBuffer: identical result, and it
-// exists in every environment the tests run in.
-function readBytes(file: File): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      resolve(new Uint8Array(reader.result as ArrayBuffer));
-    };
-    reader.onerror = () => {
-      reject(reader.error instanceof Error ? reader.error : new Error("file read failed"));
-    };
-    reader.readAsArrayBuffer(file);
-  });
-}
-
-/** What a save attempt did, so the caller can tell the truth about it. */
-export type SaveOutcome = "saved" | "cancelled";
-
-/**
- * Saves through the platform picker where available, an anchor
- * download otherwise. Resolves once the bytes are written, so the
- * caller can clear the dirty flag on a real write. A cancel resolves
- * "cancelled"; a failed write rejects, so the caller can say so. A
- * picker that never opens (headless, revoked permission) falls back to
- * the download rather than pretending the user cancelled.
- */
-function saveFile(bytes: Uint8Array, name: string): Promise<SaveOutcome> {
-  const picker = (
-    window as {
-      showSaveFilePicker?: (options: { suggestedName: string }) => Promise<{
-        createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }>;
-      }>;
-    }
-  ).showSaveFilePicker;
-  const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" });
-
-  const download = (): SaveOutcome => {
-    // jsdom has neither picker nor object URLs; the browser smoke
-    // covers real saves, and the flow around a save must not wedge.
-    try {
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = name;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      /* no download surface in this environment */
-    }
-    return "saved";
-  };
-
-  if (!picker) return Promise.resolve(download());
-
-  const started = performance.now();
-  return picker({ suggestedName: name }).then(
-    // A failure here (a full or read-only volume) rejects the returned
-    // promise, so the caller reports it instead of claiming success.
-    async (handle) => {
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      return "saved" as const;
-    },
-    (reason: unknown): SaveOutcome => {
-      // A user cancel and a picker that never opened (headless) both
-      // reject with AbortError. A dismissed dialog existed for hundreds
-      // of milliseconds; an instant rejection means no dialog.
-      const cancelled =
-        reason instanceof DOMException &&
-        reason.name === "AbortError" &&
-        performance.now() - started > 250;
-      if (cancelled) return "cancelled";
-      return download();
-    },
   );
 }
