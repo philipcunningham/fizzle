@@ -22,6 +22,9 @@ func readEffectByte(t *testing.T, path string, fieldOffset int) byte {
 // fzfeffects uses to the FZ-1 Data Structures spec section 2-3 (`struct
 // effectdata`). It guards an off-by-one that maps aft_lfp to byte 18
 // (aft_lfa) instead of 17.
+//
+// The mod row's amp and filter offsets are the exception: they follow
+// hardware, which contradicts the spec.
 func TestEffectOffsetsMatchSpec(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -36,8 +39,9 @@ func TestEffectOffsetsMatchSpec(t *testing.T) {
 		{"mod_lfa", disk.EffectModLFAOffset, 0x04},
 		{"mod_lff", disk.EffectModLFFOffset, 0x05},
 		{"mod_lfq", disk.EffectModLFQOffset, 0x06},
-		{"mod_dcf", disk.EffectModDCFOffset, 0x07},
-		{"mod_dca", disk.EffectModDCAOffset, 0x08},
+		// Hardware order, not the spec's. See findings/mod-wheel-dca-dcf-order.md.
+		{"mod_dca", disk.EffectModDCAOffset, 0x07},
+		{"mod_dcf", disk.EffectModDCFOffset, 0x08},
 		{"mod_dcq", disk.EffectModDCQOffset, 0x09},
 		{"fot_lfp", disk.EffectFotLFPOffset, 0x0A},
 		{"fot_lfa", disk.EffectFotLFAOffset, 0x0B},
@@ -341,5 +345,47 @@ func TestSetBytesRejectsOutOfRange(t *testing.T) {
 	set.AftDCQ = 200
 	if _, err := SetBytes(fzf, set); err == nil {
 		t.Fatal("out-of-range value accepted")
+	}
+}
+
+// An FZ-1 showing "DCF LEVEL = 127" saves 127 at 0x08, so that byte is
+// the filter offset. Raw offsets here, or the test asserts nothing.
+func TestParseModWheelMatchesHardwareBytes(t *testing.T) {
+	t.Parallel()
+	_, path := fzfbuilder.MakeTestFZF(t, []string{"A"})
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data[disk.BankEffectOffset+0x07] = 0
+	data[disk.BankEffectOffset+0x08] = 127
+
+	p, err := ParseBytes(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ModDCF != 127 {
+		t.Errorf("ModDCF = %d, want 127: byte 0x08 is the panel's DCF LEVEL", p.ModDCF)
+	}
+	if p.ModDCA != 0 {
+		t.Errorf("ModDCA = %d, want 0: byte 0x07 is the panel's DCA LEVEL", p.ModDCA)
+	}
+}
+
+// The write side: a filter offset must reach the byte the FZ-1 reads as
+// DCF LEVEL.
+func TestSetModWheelWritesHardwareOffsets(t *testing.T) {
+	t.Parallel()
+	_, path := fzfbuilder.MakeTestFZF(t, []string{"A"})
+	set := Unchanged()
+	set.ModDCF = 127
+	if _, err := Set(path, set); err != nil {
+		t.Fatal(err)
+	}
+	if got := readEffectByte(t, path, 0x08); got != 127 {
+		t.Errorf("byte 0x08 = %d, want 127: a filter offset belongs where the FZ-1 reads DCF LEVEL", got)
+	}
+	if got := readEffectByte(t, path, 0x07); got != 0 {
+		t.Errorf("byte 0x07 = %d, want 0: the amp offset must stay untouched", got)
 	}
 }

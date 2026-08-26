@@ -263,3 +263,28 @@ func TestDuplicateAreaVoiceSharesAudio(t *testing.T) {
 		t.Error("the clone should be marked as sharing audio")
 	}
 }
+
+// The reported bug's surface: the browser reads these columns as DCA
+// then DCF, so a byte-level swap mislabels what the user set.
+func TestModWheelMatrixColumnsFollowHardware(t *testing.T) {
+	s := twoVoiceSession(t)
+
+	if _, cerr := s.SetEffectCell(0, 5, 127); cerr != nil {
+		t.Fatalf("SetEffectCell: %v", cerr)
+	}
+	fzf := dumpBytes(t, s)
+	if got := fzf[disk.BankEffectOffset+0x08]; got != 127 {
+		t.Errorf("byte 0x08 = %d, want 127: the DCF column must reach the FZ-1's DCF LEVEL", got)
+	}
+	if got := fzf[disk.BankEffectOffset+0x07]; got != 0 {
+		t.Errorf("byte 0x07 = %d, want 0: the DCA column must stay untouched", got)
+	}
+
+	inst := instrument(t, s)
+	if got := inst.Effects.Matrix[0][5]; got != 127 {
+		t.Errorf("mod wheel DCF column = %d, want 127", got)
+	}
+	if got := inst.Effects.Matrix[0][4]; got != 0 {
+		t.Errorf("mod wheel DCA column = %d, want 0", got)
+	}
+}

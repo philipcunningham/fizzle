@@ -28,6 +28,7 @@ Conventions: [AGENTS.md](AGENTS.md).
   maps to SFZ mutegroup.
 - [dcq resonance uses the full byte, not the upper nibble](findings/dcq-full-byte.md):
   the spec's 4-bit claim is wrong on hardware.
+- [The mod wheel's amp and filter offsets are the reverse of the spec](findings/mod-wheel-dca-dcf-order.md): an FZ-1 reads 0x07 as DCA and 0x08 as DCF, matching the other two controllers.
 - [bstep counts key splits per bank, not file voices](findings/bstep-key-splits.md):
   it equals vn for only 24 of 235 dumps.
 - [looptm is a duration in 16 ms units](findings/looptm-unit.md): the
