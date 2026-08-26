@@ -66,22 +66,3 @@ archive paths. Git retains compact synthetic and real-hardware regression
 images for offline work. The full corpus checks construction, layout bounds,
 authority, bounded access, byte-preserving reads, targeted mutations, and
 stable command projections.
-
-## Issue 39 completion evidence
-
-| Criterion | Implementation and executable evidence |
-| --- | --- |
-| One retained layout and provenance | `pkg/fzf` constructors, layout tests, corpus authority digests |
-| Bank dump and reader migration | `NewBankDump`; reader view tests for FZB, FZF, FZV, disk add, and webcore |
-| Atomic mutation contract | `fzf.OperationResult`, `document.State`, stale-preimage and rollback tests |
-| Reusable operations | Domain packages and dependency guards excluding webcore and command packages |
-| Split and multi-disk transactions | Pair, replace, split, collapse, malformed continuation, and disk-full tests |
-| Thin browser facade | Focused webcore files plus the enforced 500-line `session.go` limit |
-| Bounded binary access | Bank, area, voice, DIS, and bank-dump view tests plus projection guards |
-| Storage separation | Pure `pkg/diskfs` operations and adapter-level path and lock handling |
-| Boundary drift failure | Go, WASM, worker, and TypeScript protocol parity tests |
-| No frontend editor duplicate | Strict protocol stubs, frontend import guards, real-WASM smoke suite |
-| Reproducible validation | Pinned tools, non-mutating `fmt-check`, fast and full gates |
-| Maintainable integration tests | Workflow files, central manifest lookup, corpus invariants |
-| Complete CLI documentation | Generated `docs/cli-reference.md` and regeneration test |
-| Sustainable corpus distribution | Pinned release archive, verified installer tests, CI cache |

@@ -22,8 +22,8 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
-	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/fileutil"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/render"
@@ -367,8 +367,19 @@ func ConvertMultiDisk(ctx context.Context, sfzPath, outputPrefix string, targetR
 		if err := diskformat.Format(imgPath, label); err != nil {
 			return fmt.Errorf("sfzconvert: formatting disk %d: %w", i+1, err)
 		}
-		if err := diskadd.AddBytes(imgPath, d, name, disk.TypeFullDump, diskNum, result.BankCount, result.VoiceCount, result.WaveCount); err != nil {
+		img, err := disk.OpenImage(imgPath)
+		if err != nil {
+			return fmt.Errorf("sfzconvert: opening disk %d: %w", i+1, err)
+		}
+		file := diskfs.File{
+			Name: name, Type: disk.TypeFullDump, DiskNumber: diskNum,
+			Banks: result.BankCount, Voices: result.VoiceCount, Waves: result.WaveCount,
+		}
+		if err := diskfs.Add(img, d, file); err != nil {
 			return fmt.Errorf("sfzconvert: adding data to disk %d: %w", i+1, err)
+		}
+		if err := fileutil.WriteAtomic(imgPath, img.Bytes()); err != nil {
+			return fmt.Errorf("sfzconvert: writing disk %d: %w", i+1, err)
 		}
 
 		log.Info().

@@ -60,12 +60,62 @@ func run(destination, cache, url, expected string) error {
 	if err := extractFile(archive, destination); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(root, ".archive-sha256"), []byte(expected+"\n"), 0o644)
+	tree, err := treeDigest(root)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(root, ".archive-sha256"), []byte(expected+"\n"+tree+"\n"), 0o644)
 }
 
 func corpusReady(root, expected string) bool {
 	marker, err := os.ReadFile(filepath.Join(root, ".archive-sha256")) //nolint:gosec // fixed file below caller-selected root.
-	return err == nil && strings.TrimSpace(string(marker)) == expected
+	if err != nil {
+		return false
+	}
+	lines := strings.Fields(string(marker))
+	if len(lines) != 2 || lines[0] != expected {
+		return false
+	}
+	digest, err := treeDigest(root)
+	return err == nil && digest == lines[1]
+}
+
+func treeDigest(root string) (string, error) {
+	digest := sha256.New()
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if rel == ".archive-sha256" || filepath.ToSlash(rel) == "README.md" {
+			return nil
+		}
+		file, err := os.Open(path) //nolint:gosec // path comes from the caller-selected corpus walk.
+		if err != nil {
+			return err
+		}
+		_, _ = io.WriteString(digest, filepath.ToSlash(rel)+"\x00")
+		_, copyErr := io.Copy(digest, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		_, _ = digest.Write([]byte{0})
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
 func download(url, path string) error {
