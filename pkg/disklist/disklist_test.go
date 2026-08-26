@@ -13,6 +13,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskadd"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	"github.com/philipcunningham/fizzle/pkg/internal/testutil"
 )
 
 const (
@@ -300,7 +301,7 @@ func TestRenderJSONWithEntries(t *testing.T) {
 // shown with TypeName="(corrupt)" and Size=0 rather than failing the entire
 // listing. `disk ls` is the diagnostic tool used to inspect damaged disks.
 func TestParseSkipsCorruptEntry(t *testing.T) {
-	t.Parallel()
+	logOutput := testutil.CaptureLog(t)
 	dir := t.TempDir()
 	imgPath := filepath.Join(dir, "corrupt.img")
 	if err := diskformat.Format(imgPath, "CORRUPT"); err != nil {
@@ -360,6 +361,9 @@ func TestParseSkipsCorruptEntry(t *testing.T) {
 	if listing.Entries[1].TypeName == CorruptTypeName {
 		t.Errorf("entry 1 TypeName should not be %q (good entry)", CorruptTypeName)
 	}
+	if !testutil.BufHasWarnContaining(logOutput, "failed to decode DIS sector") || !strings.Contains(logOutput.String(), "extent [0,65535] out of range") {
+		t.Errorf("warning does not explain the corrupt DIS:\n%s", logOutput)
+	}
 }
 
 func TestRenderJSONIsValidJSON(t *testing.T) {
@@ -417,7 +421,7 @@ func TestParseImageMatchesParse(t *testing.T) {
 // A named entry whose DIS pointer was damaged lists as a corrupt row
 // rather than vanishing; Directory() alone would omit it.
 func TestParseShowsDamagedPointerAsCorrupt(t *testing.T) {
-	t.Parallel()
+	logOutput := testutil.CaptureLog(t)
 	dir := t.TempDir()
 	imgPath := filepath.Join(dir, "damaged.img")
 	if err := diskformat.Format(imgPath, "DAMAGED"); err != nil {
@@ -453,5 +457,8 @@ func TestParseShowsDamagedPointerAsCorrupt(t *testing.T) {
 	}
 	if listing.Entries[0].SlotIndex == nil || *listing.Entries[0].SlotIndex != 0 {
 		t.Errorf("corrupt row slot index = %v, want the 0-based physical slot 0", listing.Entries[0].SlotIndex)
+	}
+	if !testutil.BufHasWarnContaining(logOutput, "named directory slot points outside the data sectors") || !strings.Contains(logOutput.String(), "65535") {
+		t.Errorf("warning does not explain the damaged pointer:\n%s", logOutput)
 	}
 }
