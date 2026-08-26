@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/philipcunningham/fizzle/pkg/fileutil"
+	fzfmodel "github.com/philipcunningham/fizzle/pkg/fzf"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/rs/zerolog/log"
 
@@ -131,26 +132,6 @@ type fileInfo struct {
 	nwave    int
 }
 
-// sumBankBSteps returns the sum of bstep (voice count) across the first
-// nbank bank sectors. Each bank's bstep counts the voice slots that bank
-// uses; for files where banks don't share slots via vp[] (the common case)
-// the sum equals the total voice-area slot count, which is what the DIS
-// tail's vn field should reflect.
-func sumBankBSteps(fileData []byte, nbank int) int {
-	total := 0
-	for b := range nbank {
-		off := b * disk.SectorSize
-		if off+disk.BankVoiceCountOffset+2 > len(fileData) {
-			break
-		}
-		total += int(binary.LittleEndian.Uint16(fileData[off+disk.BankVoiceCountOffset : off+disk.BankVoiceCountOffset+2]))
-	}
-	if total > disk.MaxVoices {
-		total = disk.MaxVoices
-	}
-	return total
-}
-
 // hasMultiDiskBoundaryVoice reports whether the voice area in fileData holds
 // at least one plausible voice slot whose wavst (cumulative sample address)
 // points past the local audio area. Such a slot corroborates the bank
@@ -235,30 +216,16 @@ func detectFile(fileData []byte) (fileInfo, error) {
 		name:     disk.PadLabel(disk.FullDumpName),
 	}
 
-	// Try to read the voice count directly from the bank sector header (bytes
-	// 0-1 hold bstep, the voice count). This is reliable for FZFs produced by
-	// fizzle and avoids the name-scan heuristic failing on voices with
-	// non-printable names (e.g. after resampling to 9 kHz).
-	if len(fileData) >= disk.SectorSize {
-		bstep0 := int(binary.LittleEndian.Uint16(fileData[disk.BankVoiceCountOffset : disk.BankVoiceCountOffset+2]))
-		if bstep0 > 0 && bstep0 <= disk.MaxVoices {
-			// Real-world FZFs carry up to 8 bank sectors (the factory
-			// Clarinet.fzf has 4), so walk the chain: a hardcoded bn of 1
-			// leaves the firmware reading only bank 0 of a multi-bank dump.
-			// nvoice sums each bank's bstep, since the voice area holds one
-			// slot per bstep entry per bank.
-			fi.nbank = fzutil.CountBankSectors(fileData)
-			fi.nvoice = sumBankBSteps(fileData, fi.nbank)
-			voiceSectors := disk.VoiceAreaSectors(fi.nvoice)
-			fi.nwave = totalSectors - fi.nbank - voiceSectors
-			if fi.nwave < 0 {
-				fi.nwave = 0
-			}
-
-			applyVoiceCountMarker(fileData, &fi)
-			applyMultiDiskMarker(fileData, &fi)
-			return fi, nil
-		}
+	// Canonical standalone documents own normal full-dump layout detection.
+	// Keep the heuristic below only for malformed legacy files whose headers
+	// do not provide enough evidence to construct a document.
+	if doc, err := fzfmodel.NewStandalone(fileData); err == nil {
+		layout := doc.Layout()
+		fi.nbank = layout.BankCount()
+		fi.nvoice = layout.VoiceCount()
+		fi.nwave = max(totalSectors-fi.nbank-disk.VoiceAreaSectors(fi.nvoice), 0)
+		applyMultiDiskMarker(fileData, &fi)
+		return fi, nil
 	}
 
 	fi = heuristicDetectFile(fileData, fi)
@@ -272,20 +239,6 @@ func detectFile(fileData []byte) (fileInfo, error) {
 	// sectors, breaking the sampler's "Next disk?" prompt.
 	applyMultiDiskMarker(fileData, &fi)
 	return fi, nil
-}
-
-// applyVoiceCountMarker honours the fizzle voice-count marker, so an
-// exported dump's DIS tail gets the count its walk cannot re-derive.
-func applyVoiceCountMarker(fileData []byte, fi *fileInfo) {
-	layout, err := fzutil.ResolveStandaloneFZFLayout(fileData)
-	if err != nil || layout.VoiceCountSource() != fzutil.VoiceCountMarker {
-		return
-	}
-	fi.nvoice = layout.VoiceCount()
-	fi.nwave = disk.SectorsNeeded(len(fileData)) - fi.nbank - disk.VoiceAreaSectors(layout.VoiceCount())
-	if fi.nwave < 0 {
-		fi.nwave = 0
-	}
 }
 
 // applyMultiDiskMarker honours the multi-disk total-wave marker at
