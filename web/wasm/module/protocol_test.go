@@ -2,9 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
-	"regexp"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -45,18 +49,78 @@ func TestWASMRegistrationsMatchProtocolManifest(t *testing.T) {
 		want = append(want, name)
 	}
 
-	source, err := os.ReadFile("main.go")
+	entries, err := os.ReadDir(".")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("reading WASM package: %v", err)
 	}
-	matches := regexp.MustCompile(`core\["([A-Za-z0-9]+)"\]\s*=`).FindAllSubmatch(source, -1)
-	got := make([]string, 0, len(matches))
-	for _, match := range matches {
-		got = append(got, string(match[1]))
+	files := map[string]*ast.File{}
+	fset := token.NewFileSet()
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatalf("parsing WASM package file %s: %v", name, err)
+		}
+		if file.Name.Name == "main" {
+			files[name] = file
+		}
 	}
+	if len(files) == 0 {
+		t.Fatal("parsed WASM package has no main files")
+	}
+	got := coreRegistrationNames(files)
 	slices.Sort(want)
 	slices.Sort(got)
 	if !slices.Equal(got, want) {
 		t.Fatalf("WASM registrations do not match protocol\nregistered: %v\nmanifest:   %v", got, want)
+	}
+}
+
+func coreRegistrationNames(files map[string]*ast.File) []string {
+	var names []string
+	for _, file := range files {
+		ast.Inspect(file, func(node ast.Node) bool {
+			assign, ok := node.(*ast.AssignStmt)
+			if !ok {
+				return true
+			}
+			for _, lhs := range assign.Lhs {
+				index, ok := lhs.(*ast.IndexExpr)
+				if !ok {
+					continue
+				}
+				ident, ok := index.X.(*ast.Ident)
+				literal, literalOK := index.Index.(*ast.BasicLit)
+				if !ok || ident.Name != "core" || !literalOK || literal.Kind != token.STRING {
+					continue
+				}
+				name, err := strconv.Unquote(literal.Value)
+				if err == nil {
+					names = append(names, name)
+				}
+			}
+			return true
+		})
+	}
+	return names
+}
+
+func TestCoreRegistrationNamesIgnoresComments(t *testing.T) {
+	source := `package main
+func register() {
+	core := map[string]any{}
+	// core["phantomMethod"] = handler
+	core["snapshot"] = handler
+}`
+	file, err := parser.ParseFile(token.NewFileSet(), "register.go", source, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := coreRegistrationNames(map[string]*ast.File{"register.go": file})
+	if !slices.Equal(got, []string{"snapshot"}) {
+		t.Fatalf("registrations = %v, want [snapshot]", got)
 	}
 }
