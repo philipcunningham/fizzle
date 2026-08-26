@@ -425,6 +425,9 @@ export function createFakeCore(): Core {
     },
 
     newDisk(newLabel: string): Promise<CoreResult<Snapshot>> {
+      // This integration fake checks length only. The Go core also rejects
+      // non-ASCII labels; focused refusal tests stage that response explicitly
+      // rather than treating this fake as binary-format authority.
       if (newLabel.length === 0 || newLabel.length > MAX_LABEL_LENGTH) {
         return Promise.resolve(
           err("invalid-label", `label must be 1 to ${MAX_LABEL_LENGTH} characters`),

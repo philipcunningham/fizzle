@@ -1,6 +1,8 @@
 import type { Core, CoreResult } from "../boundary/contract";
 
 export function relativePath(file: File): string {
+  // Folder pickers stamp each file with its path under the chosen root; drop
+  // and test environments may supply only the bare name.
   const path = file.webkitRelativePath;
   if (path === "") return file.name;
   const slash = path.indexOf("/");
@@ -8,6 +10,8 @@ export function relativePath(file: File): string {
 }
 
 export function readBytes(file: File): Promise<Uint8Array> {
+  // FileReader has the same result as File.arrayBuffer and exists in every
+  // environment in which the application tests run.
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -22,6 +26,12 @@ export function readBytes(file: File): Promise<Uint8Array> {
 
 export type SaveOutcome = "saved" | "cancelled";
 
+/**
+ * Save through the platform picker where available and fall back to a browser
+ * download. A genuine cancellation resolves as cancelled; write failures
+ * reject. Some headless or permission-revoked environments reject instantly
+ * without displaying a picker, in which case downloading is the fallback.
+ */
 export function saveFile(bytes: Uint8Array, name: string): Promise<SaveOutcome> {
   const picker = (
     window as {
@@ -55,6 +65,9 @@ export function saveFile(bytes: Uint8Array, name: string): Promise<SaveOutcome> 
       return "saved" as const;
     },
     (reason: unknown): SaveOutcome => {
+      // Both a dismissed picker and a picker that never opened reject with
+      // AbortError. A real dialog remains open for appreciable human time;
+      // 250ms conservatively distinguishes it from an immediate rejection.
       const cancelled =
         reason instanceof DOMException &&
         reason.name === "AbortError" &&
@@ -64,6 +77,11 @@ export function saveFile(bytes: Uint8Array, name: string): Promise<SaveOutcome> 
   );
 }
 
+/**
+ * The error boundary's last-resort export reads the core directly, so it still
+ * works if the normal shell export path crashes. Split documents write both
+ * images. There is nowhere to render an error, so refusals remain silent.
+ */
 export function exportLastResort(core: Core): void {
   const write = (result: CoreResult<Uint8Array>, name: string): Promise<unknown> =>
     result.ok ? saveFile(result.value, name).catch(() => null) : Promise.resolve(null);

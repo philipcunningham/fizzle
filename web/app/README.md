@@ -46,11 +46,14 @@ owns structured-clone and transferable behavior.
 
 `useDocumentSession` owns revision-driven snapshots, dirty state, history
 gestures, fatal core errors, sampler-memory persistence, and unload protection.
+Its caller callbacks may be inline: callback identity doesn't restart session
+boot work.
 `fileio` owns browser reads, saves, and emergency export. `App` composes those
 workflows with selection, dialogs, audition, and rendering.
 
 Component tests that only need staged boundary answers should use
 `createCoreStub`. An unstaged call returns an `unstaged-call` error, so tests do
-not acquire new disk or instrument rules accidentally. The behavioral fake is
+not acquire new disk or instrument rules accidentally. The stub is safe to
+await, and object spread preserves its fallback. The behavioral fake is
 reserved for integration-style editor workflows that exercise a long sequence
 of document changes.
