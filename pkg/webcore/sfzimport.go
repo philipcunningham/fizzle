@@ -1,6 +1,7 @@
 package webcore
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io/fs"
@@ -8,6 +9,7 @@ import (
 	"testing/fstest"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	documentmodel "github.com/philipcunningham/fizzle/pkg/document"
 	"github.com/philipcunningham/fizzle/pkg/sfzconvert"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
@@ -128,25 +130,23 @@ func (s *Session) ImportWAVFolder(files map[string][]byte, rate int, fitToDisk b
 // placement refuses rather than silently drop the disk's other files
 // (R10).
 func (s *Session) placeSplitResult(img *disk.Image, result voicebuild.MultiDiskResult, mode parseMode) (Snapshot, *Error) {
-	if others := looseFileCount(img); others > 0 {
-		return s.Snapshot(), errf("no-space",
-			"a two disk instrument fills disk 1 completely; extract the disk's %d other files first", others)
+	usesDIS := s.state.UsesDIS()
+	if mode == modeDerive {
+		usesDIS = documentDISMode(img)
 	}
-	img1, cerr := freshImage(img.Label())
-	if cerr != nil {
-		return s.Snapshot(), cerr
+	working, err := documentmodel.NewState(img.Bytes(), s.state.Image2(), authorityFromDIS(usesDIS))
+	if err != nil {
+		return s.Snapshot(), errf("invalid-image", "%v", err)
 	}
-	if cerr := putDump(img1, result.Disks[0], 0, &result, 0); cerr != nil {
-		return s.Snapshot(), cerr
+	next, err := working.PlaceSplit(result, authorityFromDIS(usesDIS))
+	if err != nil {
+		return s.Snapshot(), documentMutationError(err)
 	}
-	img2, cerr := s.disk2Image()
-	if cerr != nil {
-		return s.Snapshot(), cerr
+	img1, err := disk.ReadImage(bytes.NewReader(next.Image1()))
+	if err != nil {
+		return s.Snapshot(), errf("invalid-image", "%v", err)
 	}
-	if cerr := putDump(img2, result.Disks[1], 1, &result, 0); cerr != nil {
-		return s.Snapshot(), cerr
-	}
-	return s.adoptPair(img1, img2.Bytes(), mode)
+	return s.adoptPair(img1, next.Image2(), mode)
 }
 
 // codeInvalidChannel is the boundary code for an answer that is not
