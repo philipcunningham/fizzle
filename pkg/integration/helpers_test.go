@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"os"
 	"testing"
 )
 
@@ -16,5 +17,13 @@ func skipShort(t *testing.T) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
+	}
+}
+
+func requireFullCorpus(t *testing.T) {
+	t.Helper()
+	entries, err := os.ReadDir(corpusRoot)
+	if err != nil || len(entries) < 3 {
+		t.Fatal("full hardware corpus is not installed; run `make corpus`")
 	}
 }

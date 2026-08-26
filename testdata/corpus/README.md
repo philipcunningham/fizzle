@@ -1,5 +1,13 @@
 # Casio FZ-1 corpus
 
+The full 251 MiB corpus is distributed as the versioned
+[`corpus-v1`](https://github.com/philipcunningham/fizzle/releases/tag/corpus-v1)
+archive instead of being stored in every Git clone. Run `make corpus` to
+download it into the user cache, verify its pinned SHA-256 digest, and install
+it here. `make check-full` does this automatically; `make check-fast` remains
+offline and exercises the curated real-hardware regression images under
+`testdata/synthetic`.
+
 Real-world FZ-1 sampler files used as test fixtures, downloaded from
 https://zine.r-massive.com/casio-fz-sampler-archive/.
 
