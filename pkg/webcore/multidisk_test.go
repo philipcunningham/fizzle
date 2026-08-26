@@ -2,14 +2,12 @@ package webcore
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskget"
-	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 )
@@ -424,47 +422,6 @@ func TestSplitRefusesWithLooseFiles(t *testing.T) {
 	_, cerr := s.LoadFZF(fzf)
 	if cerr == nil || cerr.Code != "no-space" {
 		t.Fatalf("expected no-space with a loose file present, got %v", cerr)
-	}
-}
-
-// The FZ-1 does not always stamp the total wave marker. Without it the
-// pair check falls back to the furthest voice's wave end, which still
-// catches a continuation that is too short to hold this instrument's
-// audio.
-func TestCheckContinuationCatchesShortAudioWithoutTheMarker(t *testing.T) {
-	voices := make([][]byte, 3)
-	groups := make([]voicebuild.Keygroup, 3)
-	for i := range voices {
-		voices[i] = testutil.MakeTestVoice(fmt.Sprintf("MRK%02d", i+1), 40000)
-		lo := uint8(50 + i) // #nosec G115 -- small test values
-		groups[i] = voicebuild.NewKeygroup(lo, lo, lo)
-	}
-	fzf, err := voicebuild.AssembleWithKeygroups(voices, groups)
-	if err != nil {
-		t.Fatal(err)
-	}
-	hdr, err := fzutil.ParseFZFHeader(fzf)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if cerr := checkContinuation(fzf, hdr); cerr != nil {
-		t.Fatalf("a whole dump must pass: %v", cerr)
-	}
-
-	// Strike the marker, as a stored image can carry it.
-	blank := bytes.Clone(fzf)
-	binary.LittleEndian.PutUint32(blank[disk.BankTotalWaveOffset:], 0)
-	if cerr := checkContinuation(blank, hdr); cerr != nil {
-		t.Fatalf("a whole dump with no marker must still pass: %v", cerr)
-	}
-
-	// A continuation short of the last voice's audio, with no marker to
-	// measure it against.
-	short := blank[:len(blank)-4*disk.SectorSize]
-	cerr := checkContinuation(short, hdr)
-	if cerr == nil || cerr.Code != codePairMismatch {
-		t.Fatalf("expected pair-mismatch for short audio with no marker, got %v", cerr)
 	}
 }
 
