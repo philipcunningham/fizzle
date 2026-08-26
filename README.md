@@ -93,6 +93,8 @@ fizzle --debug sfz convert junglism.sfz junglism.fzf
 
 The manual's [Quickstart walkthroughs](docs/fizzle-manual.md#quickstart-walkthroughs) chapter goes further. It covers importing a single WAV, editing a voice in place, splitting a large instrument across two floppies, and round-tripping a hardware FZF.
 
+The generated [CLI reference](docs/cli-reference.md) lists every command, argument, and flag from the same metadata used by the executable.
+
 ---
 
 ## Browser editor
