@@ -107,15 +107,6 @@ type Snapshot struct {
 	CanRedo  bool          `json:"canRedo"`
 }
 
-// History has two bounds. R24 guarantees at least 100 whole-document states,
-// including split pairs. Beyond that floor, a byte budget prevents a long
-// editing session on one-disk documents from growing without limit.
-const (
-	historyMinDepth = 100
-	historyCap      = 200
-	historyByteCap  = 256 * 1024 * 1024
-)
-
 func authorityFromDIS(disMode bool) documentmodel.Authority {
 	if disMode {
 		return documentmodel.AuthorityDIS
@@ -491,112 +482,6 @@ func (s *Session) patchVoice(fileName string, build func([]byte) ([]voiceedit.Ed
 		return s.Snapshot(), errf("replace-failed", "%v", err)
 	}
 	return s.adopt(img)
-}
-
-func (s *Session) pushHistory(doc documentmodel.State) {
-	s.past = append(s.past, doc)
-	for len(s.past) > historyMinDepth && (len(s.past) > historyCap || historyBytes(s.past) > historyByteCap) {
-		s.past[0] = documentmodel.State{}
-		s.past = s.past[1:]
-	}
-}
-
-func historyBytes(states []documentmodel.State) int {
-	total := 0
-	for _, state := range states {
-		total += state.SizeBytes()
-	}
-	return total
-}
-
-// BeginGesture opens an undo bracket: edits until CommitGesture
-// coalesce into one history entry.
-func (s *Session) BeginGesture() {
-	if !s.inGesture {
-		s.inGesture = true
-		s.gestureBase = nil
-	}
-}
-
-// CommitGesture closes the bracket, landing the coalesced entry. It
-// reports whether the gesture changed anything: a press and release
-// with no movement lands no entry, and the UI must not call such a
-// document dirty.
-func (s *Session) CommitGesture() bool {
-	if !s.inGesture {
-		return false
-	}
-	s.inGesture = false
-	if s.gestureBase != nil {
-		s.pushHistory(*s.gestureBase)
-		s.gestureBase = nil
-		// The landed entry changes what undo does, so the snapshot
-		// after the commit is new state: revision-keyed caches must
-		// refetch.
-		s.revision++
-		return true
-	}
-	return false
-}
-
-// endGesture closes any open bracket before a history move. An undo
-// interleaved into a drag would otherwise leave the pre-gesture image
-// pending, and the later commit would push it on top of the undone
-// state, inverting the timeline.
-//
-// The bracket reopens straight away: the pointer is still down, so the
-// rest of that drag belongs in one entry rather than one per movement.
-// The reopened bracket starts from the undone state, so its entry sits
-// after the undo rather than across it.
-func (s *Session) endGesture() {
-	if !s.inGesture {
-		return
-	}
-	s.CommitGesture()
-	s.BeginGesture()
-}
-
-// Undo restores the previous state. The restored snapshot carries a
-// fresh revision; a changed revision is the only change signal.
-func (s *Session) Undo() (Snapshot, *Error) {
-	s.endGesture()
-	if len(s.past) == 0 {
-		return s.Snapshot(), errf("nothing-to-undo", "nothing to undo")
-	}
-	prev := s.past[len(s.past)-1]
-	img, err := disk.ReadImage(bytes.NewReader(prev.Image1()))
-	if err != nil {
-		return s.Snapshot(), errf("invalid-image", "history entry unreadable: %v", err)
-	}
-	current := s.state
-	snap, cerr := s.adoptState(img, prev.Image2(), prev.UsesDIS())
-	if cerr != nil {
-		return snap, cerr
-	}
-	s.past = s.past[:len(s.past)-1]
-	s.future = append(s.future, current)
-	return s.Snapshot(), nil
-}
-
-// Redo restores the state most recently undone.
-func (s *Session) Redo() (Snapshot, *Error) {
-	s.endGesture()
-	if len(s.future) == 0 {
-		return s.Snapshot(), errf("nothing-to-redo", "nothing to redo")
-	}
-	next := s.future[len(s.future)-1]
-	img, err := disk.ReadImage(bytes.NewReader(next.Image1()))
-	if err != nil {
-		return s.Snapshot(), errf("invalid-image", "history entry unreadable: %v", err)
-	}
-	current := s.state
-	snap, cerr := s.adoptState(img, next.Image2(), next.UsesDIS())
-	if cerr != nil {
-		return snap, cerr
-	}
-	s.future = s.future[:len(s.future)-1]
-	s.pushHistory(current)
-	return s.Snapshot(), nil
 }
 
 // ExportImage returns a copy of disk 1's image bytes. Opening then
