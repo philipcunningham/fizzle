@@ -109,6 +109,7 @@ func recordLayout(path string, layout fzutil.FZFLayout) layoutRecord {
 
 func TestStandaloneCorpusLayoutManifest(t *testing.T) {
 	skipShort(t)
+	requireFullCorpus(t)
 	manifest := readLayoutManifest(t)
 	coveredRoots := make(map[string]bool, len(manifest.Collections))
 	for _, collection := range manifest.Collections {

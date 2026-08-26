@@ -34,6 +34,7 @@ const (
 // its corpus-relative path so failures point at the offending fixture.
 func walkCorpus(t *testing.T, exts []string, fn func(t *testing.T, relPath, absPath string)) {
 	t.Helper()
+	requireFullCorpus(t)
 	wantExt := make(map[string]bool, len(exts))
 	for _, e := range exts {
 		wantExt[strings.ToLower(e)] = true
