@@ -16,6 +16,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/diskformat"
 	"github.com/philipcunningham/fizzle/pkg/diskfs"
+	documentmodel "github.com/philipcunningham/fizzle/pkg/document"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/fzvinfo"
 	"github.com/philipcunningham/fizzle/pkg/voiceedit"
@@ -115,33 +116,12 @@ const (
 	historyByteCap  = 256 * 1024 * 1024
 )
 
-// documentState is the canonical state of one open document: a single image,
-// or two when a split instrument spans a pair, plus the parse provenance that
-// must travel with those bytes. The live session and every history entry use
-// this same representation so they cannot drift apart.
-type documentState struct {
-	image     []byte
-	image2    []byte
-	authority voiceCountAuthority
-}
-
-type voiceCountAuthority uint8
-
-const (
-	voiceCountWalk voiceCountAuthority = iota
-	voiceCountDIS
-)
-
-func authorityFromDIS(disMode bool) voiceCountAuthority {
+func authorityFromDIS(disMode bool) documentmodel.Authority {
 	if disMode {
-		return voiceCountDIS
+		return documentmodel.AuthorityDIS
 	}
-	return voiceCountWalk
+	return documentmodel.AuthorityWalk
 }
-
-func (s documentState) usesDIS() bool { return s.authority == voiceCountDIS }
-
-func (s documentState) sizeBytes() int { return len(s.image) + len(s.image2) }
 
 // Session holds one open disk set. Not safe for concurrent use; the
 // worker serialises calls.
@@ -151,16 +131,16 @@ type Session struct {
 	// memoryBytes is the sampler's sample memory as the user declared
 	// it. Zero means they haven't, so sampleMemory supplies the default.
 	memoryBytes int
-	past        []documentState // undo stack, oldest first
-	future      []documentState // redo stack
+	past        []documentmodel.State // undo stack, oldest first
+	future      []documentmodel.State // redo stack
 	inGesture   bool
-	gestureBase *documentState // pre-gesture document; nil until the first edit
+	gestureBase *documentmodel.State // pre-gesture document; nil until the first edit
 }
 
 // preparedDocument is a fully parsed candidate state. Building one is
 // side-effect free; a Session installs it only after every derivation succeeds.
 type preparedDocument struct {
-	documentState
+	state documentmodel.State
 	// audioBytes is the open instrument's audio area, measured when the
 	// document changes rather than on every snapshot.
 	audioBytes  int
@@ -183,9 +163,9 @@ func (s *Session) Snapshot() Snapshot {
 		CanUndo:  len(s.past) > 0,
 		CanRedo:  len(s.future) > 0,
 	}
-	if s.image != nil {
+	if s.state.IsOpen() {
 		disks := 1
-		if s.image2 != nil {
+		if s.state.HasSecondDisk() {
 			disks = 2
 		}
 		snap.Disk = &DiskSnapshot{
@@ -338,14 +318,14 @@ const (
 // filename the way the CLI derives it. channel is ChannelLeft,
 // ChannelRight, or ChannelMix and only matters for stereo input.
 func (s *Session) ImportWAV(filename string, wavData []byte, rate uint32, channel string) (Snapshot, *Error) {
-	if s.image == nil {
+	if !s.state.IsOpen() {
 		return s.Snapshot(), errf(codeNoDisk, "no disk is open")
 	}
 	voice, cerr := convertWAV(filename, wavData, rate, channel)
 	if cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	img, rerr := disk.ReadImage(bytes.NewReader(s.image))
+	img, rerr := disk.ReadImage(bytes.NewReader(s.state.Image1()))
 	if rerr != nil {
 		return s.Snapshot(), errf("invalid-image", "not a readable FZ image: %v", rerr)
 	}
@@ -471,10 +451,10 @@ func (s *Session) SetParamOption(fileName, fieldID, option string) (Snapshot, *E
 // openedImage parses the open disk, or answers the standard
 // envelope: the guard and parse every image reader shares.
 func (s *Session) openedImage() (*disk.Image, *Error) {
-	if s.image == nil {
+	if !s.state.IsOpen() {
 		return nil, errf(codeNoDisk, "no disk is open")
 	}
-	img, err := disk.ReadImage(bytes.NewReader(s.image))
+	img, err := disk.ReadImage(bytes.NewReader(s.state.Image1()))
 	if err != nil {
 		return nil, errf("invalid-image", "not a readable FZ image: %v", err)
 	}
@@ -513,18 +493,18 @@ func (s *Session) patchVoice(fileName string, build func([]byte) ([]voiceedit.Ed
 	return s.adopt(img)
 }
 
-func (s *Session) pushHistory(doc documentState) {
+func (s *Session) pushHistory(doc documentmodel.State) {
 	s.past = append(s.past, doc)
 	for len(s.past) > historyMinDepth && (len(s.past) > historyCap || historyBytes(s.past) > historyByteCap) {
-		s.past[0] = documentState{}
+		s.past[0] = documentmodel.State{}
 		s.past = s.past[1:]
 	}
 }
 
-func historyBytes(states []documentState) int {
+func historyBytes(states []documentmodel.State) int {
 	total := 0
 	for _, state := range states {
-		total += state.sizeBytes()
+		total += state.SizeBytes()
 	}
 	return total
 }
@@ -584,12 +564,12 @@ func (s *Session) Undo() (Snapshot, *Error) {
 		return s.Snapshot(), errf("nothing-to-undo", "nothing to undo")
 	}
 	prev := s.past[len(s.past)-1]
-	img, err := disk.ReadImage(bytes.NewReader(prev.image))
+	img, err := disk.ReadImage(bytes.NewReader(prev.Image1()))
 	if err != nil {
 		return s.Snapshot(), errf("invalid-image", "history entry unreadable: %v", err)
 	}
-	current := s.documentState
-	snap, cerr := s.adoptState(img, prev.image2, prev.usesDIS())
+	current := s.state
+	snap, cerr := s.adoptState(img, prev.Image2(), prev.UsesDIS())
 	if cerr != nil {
 		return snap, cerr
 	}
@@ -605,12 +585,12 @@ func (s *Session) Redo() (Snapshot, *Error) {
 		return s.Snapshot(), errf("nothing-to-redo", "nothing to redo")
 	}
 	next := s.future[len(s.future)-1]
-	img, err := disk.ReadImage(bytes.NewReader(next.image))
+	img, err := disk.ReadImage(bytes.NewReader(next.Image1()))
 	if err != nil {
 		return s.Snapshot(), errf("invalid-image", "history entry unreadable: %v", err)
 	}
-	current := s.documentState
-	snap, cerr := s.adoptState(img, next.image2, next.usesDIS())
+	current := s.state
+	snap, cerr := s.adoptState(img, next.Image2(), next.UsesDIS())
 	if cerr != nil {
 		return snap, cerr
 	}
@@ -628,17 +608,17 @@ func (s *Session) ExportImage() ([]byte, *Error) {
 // ExportImageAt returns a copy of one image of the document: index 0
 // is disk 1, index 1 is disk 2 of a split pair (R25).
 func (s *Session) ExportImageAt(index int) ([]byte, *Error) {
-	if s.image == nil {
+	if !s.state.IsOpen() {
 		return nil, errf(codeNoDisk, "no disk is open")
 	}
 	switch index {
 	case 0:
-		return bytes.Clone(s.image), nil
+		return s.state.Image1(), nil
 	case 1:
-		if s.image2 == nil {
+		if !s.state.HasSecondDisk() {
 			return nil, errf(codeNotFound, "the document is one disk; there is no disk 2")
 		}
-		return bytes.Clone(s.image2), nil
+		return s.state.Image2(), nil
 	default:
 		return nil, errf(codeInvalidValue, "disk index must be 0 or 1, got %d", index)
 	}
@@ -679,7 +659,7 @@ func (s *Session) adoptFresh(img *disk.Image, img2 []byte) (Snapshot, *Error) {
 // adopt takes a parsed image as the session's disk as a user-visible
 // mutation, keeping the document's disk 2 half as it was.
 func (s *Session) adopt(img *disk.Image) (Snapshot, *Error) {
-	return s.adoptPair(img, s.image2, modeKeep)
+	return s.adoptPair(img, s.state.Image2(), modeKeep)
 }
 
 // checkWholeDocument refuses a mutation while half of a split pair is
@@ -712,8 +692,8 @@ func (s *Session) adoptPair(img *disk.Image, img2 []byte, mode parseMode) (Snaps
 	if cerr := s.checkWholeDocument(); cerr != nil {
 		return s.Snapshot(), cerr
 	}
-	prev := s.documentState
-	nextMode := s.usesDIS()
+	prev := s.state
+	nextMode := s.state.UsesDIS()
 	if mode == modeDerive {
 		nextMode = documentDISMode(img)
 	}
@@ -721,7 +701,7 @@ func (s *Session) adoptPair(img *disk.Image, img2 []byte, mode parseMode) (Snaps
 	if cerr != nil {
 		return snap, cerr
 	}
-	if prev.image != nil {
+	if prev.IsOpen() {
 		if s.inGesture {
 			// The whole drag lands as one undo entry (R24): only the
 			// pre-gesture document is kept, on the first edit.
@@ -797,10 +777,12 @@ func prepareDocument(img *disk.Image, img2 []byte, disMode bool) (preparedDocume
 			}
 		}
 	}
+	state, stateErr := documentmodel.NewState(img.Bytes(), img2, authorityFromDIS(disMode))
+	if stateErr != nil {
+		return preparedDocument{}, errf("invalid-image", "%v", stateErr)
+	}
 	next := preparedDocument{
-		documentState: documentState{
-			image: img.Bytes(), image2: img2, authority: authorityFromDIS(disMode),
-		},
+		state:       state,
 		label:       img.Label(),
 		used:        disk.ImageSize - img.FreeSectors()*disk.SectorSize,
 		files:       files,

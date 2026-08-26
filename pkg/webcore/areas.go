@@ -173,7 +173,7 @@ func voiceAreaBoundaryError(err error) *Error {
 // split pair), lets build mutate it (in place or via patches), and
 // writes it back, re-splitting or collapsing as its size dictates.
 func (s *Session) patchDump(build func(d *dumpState) ([]model.Patch, *Error)) (Snapshot, *Error) {
-	if s.image == nil {
+	if !s.state.IsOpen() {
 		return s.Snapshot(), errf(codeNoDisk, "no disk is open")
 	}
 	if s.instrument == nil {
@@ -188,7 +188,7 @@ func (s *Session) patchDump(build func(d *dumpState) ([]model.Patch, *Error)) (S
 		return s.Snapshot(), cerr
 	}
 	disVN := 0
-	if s.usesDIS() {
+	if s.state.UsesDIS() {
 		disVN = disVoiceCount(img)
 	}
 	out, outVN, cerr := patchDumpBytes(fzf, disVN, build)

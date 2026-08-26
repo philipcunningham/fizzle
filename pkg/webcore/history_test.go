@@ -5,7 +5,8 @@ import (
 	"crypto/sha256"
 	"testing"
 
-	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/diskformat"
+	documentmodel "github.com/philipcunningham/fizzle/pkg/document"
 )
 
 func imageHash(t *testing.T, s *Session) [32]byte {
@@ -171,7 +172,18 @@ func TestHistoryIsCapped(t *testing.T) {
 }
 
 func TestHistoryByteBudgetPreservesRequiredDepth(t *testing.T) {
-	state := documentState{image: make([]byte, disk.ImageSize), image2: make([]byte, disk.ImageSize)}
+	one, err := diskformat.BuildImage("ONE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, err := diskformat.BuildImage("TWO")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := documentmodel.NewState(one, two, documentmodel.AuthorityWalk)
+	if err != nil {
+		t.Fatal(err)
+	}
 	s := &Session{}
 	for range historyCap {
 		s.pushHistory(state)
