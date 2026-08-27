@@ -33,15 +33,17 @@ export function useAuditionData(
     const slots = new Set(bank.areas.map((area) => area.voiceSlot));
     for (const slot of slots) {
       const slotVoice = instrument?.voices.find((candidate) => candidate.slot === slot);
-      void queryClient.prefetchQuery({
-        queryKey: ["audition", slot, slotVoice?.audioKey ?? ""],
-        queryFn: () => core.auditionSlot(slot),
-      });
+      void queryClient
+        .query({
+          queryKey: ["audition", slot, slotVoice?.audioKey ?? ""],
+          queryFn: () => core.auditionSlot(slot),
+        })
+        .catch(() => undefined);
     }
   }, [bank, core, instrument, queryClient, tab]);
 
   const slotPCM = (slot: number, audioKey: string) =>
-    queryClient.fetchQuery({
+    queryClient.query({
       queryKey: ["audition", slot, audioKey],
       queryFn: () => core.auditionSlot(slot),
     });

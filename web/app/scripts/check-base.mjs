@@ -46,7 +46,7 @@ try {
   if (workers.length === 0) problems.push("no worker bundle was emitted");
   for (const worker of workers) {
     const js = readFileSync(worker, "utf8");
-    const wasmRefs = [...js.matchAll(/["']([^"']*fizzle[^"']*\.wasm)["']/g)];
+    const wasmRefs = [...js.matchAll(/["'`]([^"'`]*fizzle[^"'`]*\.wasm)["'`]/g)];
     if (wasmRefs.length === 0) {
       problems.push(`${worker} carries no reference to the core asset`);
     }
