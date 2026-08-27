@@ -46,3 +46,28 @@ func TestResolveHeaderRejectsInvalidEditWithoutChangingInput(t *testing.T) {
 		t.Fatal("rejected edit changed the input")
 	}
 }
+
+func TestResolveFZFSlotRejectsBoundsAndInvalidBatchWithoutChangingInput(t *testing.T) {
+	data := fzfbuilder.MakeBanklessVoiceDump(t)
+	fzutil.StampVoiceCountMarker(data, fzfbuilder.BanklessDumpVoices)
+	layout, err := fzutil.ResolveStandaloneFZFLayout(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := bytes.Clone(data)
+	for _, slot := range []int{-1, layout.VoiceCount()} {
+		if _, err := voicepatch.ResolveFZFSlot(data, layout, slot, nil); err == nil {
+			t.Errorf("slot %d was accepted", slot)
+		}
+	}
+	edits := []voicepatch.Edit{
+		{Offset: disk.VoiceKeyLowOffset, Size: 1, Value: 42},
+		{Offset: disk.VoiceHeaderUsed, Size: 1, Value: 7},
+	}
+	if _, err := voicepatch.ResolveFZFSlot(data, layout, 0, edits); err == nil {
+		t.Fatal("invalid edit batch was accepted")
+	}
+	if !bytes.Equal(data, before) {
+		t.Fatal("rejected edit changed the input")
+	}
+}

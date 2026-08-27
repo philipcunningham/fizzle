@@ -260,6 +260,12 @@ func SetBytes(data []byte, p SetParams) (Result, error) {
 		if v < 0 || v > spec.maxValue {
 			return Result{}, fmt.Errorf("fzfeffects: %s must be 0 to %d, got %d", spec.flagName, spec.maxValue, v)
 		}
+	}
+	for _, spec := range effectFieldSpecs(&p) {
+		v := *spec.value
+		if v == unchanged {
+			continue
+		}
 		data[base+spec.offset] = byte(v) //nolint:gosec // validated above
 	}
 

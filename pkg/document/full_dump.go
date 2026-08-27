@@ -59,7 +59,7 @@ func (s State) PlaceSplit(split voicebuild.MultiDiskResult, authority Authority)
 	if err != nil {
 		return State{}, fmt.Errorf("document: reading disk 1: %w", err)
 	}
-	if count := looseFileCount(current); count > 0 {
+	if count := diskfs.LooseFileCount(current); count > 0 {
 		return State{}, &ErrSplitNeedsEmptyDisk{Files: count}
 	}
 	img1, err := formattedImage(current.Label())
@@ -126,20 +126,6 @@ func formattedImage(label string) (*disk.Image, error) {
 		return nil, fmt.Errorf("document: reading formatted image: %w", err)
 	}
 	return img, nil
-}
-
-func looseFileCount(img *disk.Image) int {
-	entries, err := img.Directory()
-	if err != nil {
-		return 0
-	}
-	count := 0
-	for _, entry := range entries {
-		if entry.NameString() != disk.FullDumpName {
-			count++
-		}
-	}
-	return count
 }
 
 func hasFile(img *disk.Image, name string) bool {

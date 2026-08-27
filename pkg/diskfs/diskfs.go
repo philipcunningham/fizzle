@@ -221,6 +221,21 @@ func List(img *disk.Image) (*Listing, error) {
 	return listing, nil
 }
 
+// LooseFileCount returns the number of directory entries other than the full dump.
+func LooseFileCount(img *disk.Image) int {
+	entries, err := img.Directory()
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, entry := range entries {
+		if entry.NameString() != disk.FullDumpName {
+			count++
+		}
+	}
+	return count
+}
+
 func buildDIS(disSector int, sectors []int, banks, voices, waves int) disk.DisSector {
 	var dis disk.DisSector
 	all := append([]int{disSector}, sectors...)

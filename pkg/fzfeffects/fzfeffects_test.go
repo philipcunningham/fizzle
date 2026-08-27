@@ -3,11 +3,26 @@ package fzfeffects
 import (
 	"bytes"
 	"os"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
 	"github.com/philipcunningham/fizzle/pkg/internal/testutil/fzfbuilder"
 )
+
+var effectFields = []struct {
+	name   string
+	offset int
+}{
+	{"BendRange", 0x00}, {"MVol", 0x01}, {"SusS", 0x02},
+	{"ModLFP", 0x03}, {"ModLFA", 0x04}, {"ModLFF", 0x05}, {"ModLFQ", 0x06},
+	{"ModDCA", 0x07}, {"ModDCF", 0x08}, {"ModDCQ", 0x09},
+	{"FotLFP", 0x0a}, {"FotLFA", 0x0b}, {"FotLFF", 0x0c}, {"FotLFQ", 0x0d},
+	{"FotDCA", 0x0e}, {"FotDCF", 0x0f}, {"FotDCQ", 0x10},
+	{"AftLFP", 0x11}, {"AftLFA", 0x12}, {"AftLFF", 0x13}, {"AftLFQ", 0x14},
+	{"AftDCA", 0x15}, {"AftDCF", 0x16}, {"AftDCQ", 0x17},
+}
 
 func readEffectByte(t *testing.T, path string, fieldOffset int) byte {
 	t.Helper()
@@ -342,6 +357,69 @@ func TestSetBytesRejectsOutOfRange(t *testing.T) {
 	set.AftDCQ = 200
 	if _, err := SetBytes(fzf, set); err == nil {
 		t.Fatal("out-of-range value accepted")
+	}
+}
+
+func TestSetBytesRejectsAtomically(t *testing.T) {
+	fzf, _ := fzfbuilder.MakeTestFZF(t, []string{"A"})
+	before := bytes.Clone(fzf)
+	set := Unchanged()
+	set.BendRange = 99
+	set.ModLFP = -5
+	if _, err := SetBytes(fzf, set); err == nil {
+		t.Fatal("expected out-of-range error")
+	}
+	if !bytes.Equal(fzf, before) {
+		t.Fatal("rejected batch mutated input")
+	}
+}
+
+func TestEveryEffectFieldReadsAndWritesItsHardwareByte(t *testing.T) {
+	for _, field := range effectFields {
+		t.Run(field.name, func(t *testing.T) {
+			fzf, _ := fzfbuilder.MakeTestFZF(t, []string{"A"})
+			block := fzf[disk.BankEffectOffset : disk.BankEffectOffset+disk.EffectDataSize]
+			clear(block)
+			block[field.offset] = 73
+			parsed, err := ParseBytes(fzf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			values := reflect.ValueOf(parsed).Elem()
+			for _, candidate := range effectFields {
+				want := int64(0)
+				if candidate.name == field.name {
+					want = 73
+				}
+				if got := values.FieldByName(candidate.name).Int(); got != want {
+					t.Errorf("parsed %s = %d, want %d", candidate.name, got, want)
+				}
+			}
+
+			clear(block)
+			set := Unchanged()
+			reflect.ValueOf(&set).Elem().FieldByName(field.name).SetInt(73)
+			if _, err := SetBytes(fzf, set); err != nil {
+				t.Fatal(err)
+			}
+			for offset, got := range block {
+				want := byte(0)
+				if offset == field.offset {
+					want = 73
+				}
+				if got != want {
+					t.Errorf("byte %#02x = %d, want %d", offset, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestRenderKeepsHardwareDCAAndDCFLabels(t *testing.T) {
+	var out strings.Builder
+	Render(&out, &Params{ModDCA: 7, ModDCF: 8})
+	if !strings.Contains(out.String(), "dca=7  dcf=8") {
+		t.Fatalf("rendered mod row does not preserve hardware order:\n%s", out.String())
 	}
 }
 

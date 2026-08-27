@@ -61,21 +61,6 @@ func (s *Session) replaceDump(img *disk.Image, fzf []byte, vn int, mode parseMod
 	return s.adoptPair(nextImage, next.Image2(), mode)
 }
 
-// looseFileCount counts directory entries other than the full dump.
-func looseFileCount(img *disk.Image) int {
-	entries, err := img.Directory()
-	if err != nil {
-		return 0
-	}
-	n := 0
-	for _, e := range entries {
-		if e.NameString() != disk.FullDumpName {
-			n++
-		}
-	}
-	return n
-}
-
 func documentMutationError(err error) *Error {
 	var occupied *documentmodel.ErrSplitNeedsEmptyDisk
 	if errors.As(err, &occupied) {

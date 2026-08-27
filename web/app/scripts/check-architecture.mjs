@@ -62,6 +62,14 @@ function inspect(path, source) {
     ) {
       failures.push(`${relative(root, path)} defines a second Core implementation`);
     }
+    if (
+      !allowedCoreImplementations.has(path) &&
+      path.startsWith(`${sourceRoot}/`) &&
+      ts.isVariableDeclaration(node) &&
+      node.type?.getText(ast) === "Core"
+    ) {
+      failures.push(`${relative(root, path)} defines a second Core implementation`);
+    }
     if (!allowedCoreImplementations.has(path) && objectMethodCount(node) >= 10) {
       failures.push(`${relative(root, path)} contains a behavioral Core object`);
     }
@@ -96,6 +104,7 @@ const adversarial = [
     join(sourceRoot, "screens", "Bad.tsx"),
     'async function bad() { await import("../shell/EditorShell"); }',
   ],
+  [join(sourceRoot, "core", "second.ts"), "const second: Core = { ...createCoreStub() };"],
 ];
 for (const [path, source] of adversarial) {
   if (inspect(path, source).length === 0) {
