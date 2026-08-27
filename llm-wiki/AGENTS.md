@@ -63,11 +63,11 @@ status: confirmed-hardware | confirmed-firmware | spec-only | suspect
 
 ## Workflows
 
-Ingest: read the source; place content with the new-page-versus-edit rule; update pages, `map.md`, `index.md`, `log.md`. Contradictions between evidence sources become finding pages. Ingest is idempotent: findings key on stable slugs and citations, so re-ingesting converges instead of duplicating.
+Ingest with `.claude/skills/llm-wiki-ingest/SKILL.md`. The skill routes evidence, updates the index and log, and finishes with the lint skill.
 
 Query: read `index.md` first; open `map.md` when the question needs spec-section or code anchors. Then read only the selected pages and answer with citations. File the answer back only when it adds new evidence or synthesis.
 
-Run `make lint-docs` after every ingest session. Vale checks prose, but it doesn't validate the wiki schema. Manually check frontmatter, links, index coverage, map paths, duplicate pages, and stale citations. An orphan is a page whose only inbound link is the index. Log every audit.
+Run `.claude/skills/llm-wiki-lint/SKILL.md` after every ingest session. It checks frontmatter, staleness, coverage, map drift, orphans, duplicates, and open questions. Run `make lint-docs` for Vale's prose checks.
 
 ## Citations
 

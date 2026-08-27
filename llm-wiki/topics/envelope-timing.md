@@ -3,7 +3,7 @@ type: topic
 title: Envelope timing
 description: How the firmware turns 8-stage rate and stop bytes into wall-clock envelope times, what note on scales them by, and what the output stage does to the result.
 tags: [fzv, envelope, dca, dcf, firmware]
-updated: 2026-08-20
+updated: 2026-08-27
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
   - llm-wiki/sources/casio-service-manuals.md

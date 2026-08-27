@@ -39,3 +39,7 @@ Every `.fzf` under `testdata/corpus/` was read at bank offset 0x3c0, 112 files i
 ## What fizzle implements
 
 `EffectModDCAOffset` is 0x07 and `EffectModDCFOffset` is 0x08 in `pkg/disk/voice.go`. `pkg/fzfeffects` reads and writes through both, and `pkg/webcore` projects them into the browser's DCA and DCF columns. `TestEveryEffectFieldReadsAndWritesItsHardwareByte` pins every field against its raw offset. `TestModWheelMatrixColumnsFollowHardware` pins the browser projection.
+
+## Compatibility
+
+A filter offset set by a build with transposed labels remains at 0x07. Hardware and current fizzle builds read that byte as DCA LEVEL.

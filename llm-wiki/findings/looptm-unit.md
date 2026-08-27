@@ -3,7 +3,7 @@ type: finding
 title: looptm is a duration in 16 ms units
 description: The spec's duration reading is right; the FZ book's repeat-count caption describes what a player hears, and the 1024 the corpus writes on end loops is never read at playback.
 tags: [fzv, loops]
-updated: 2026-08-21
+updated: 2026-08-27
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
   - FZ-1 ROM (loop advance F000:1D11 to F000:1D43)
