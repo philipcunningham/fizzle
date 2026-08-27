@@ -1,61 +1,31 @@
 # Casio FZ-1 corpus
 
-The full hardware corpus is optional and is not stored in Git, downloaded by
-the build, or packaged with fizzle. Developers with access to the fixtures can
-place them here to enable the corpus tests. The normal test suite remains
-self-contained and exercises the curated regression images under
-`testdata/synthetic`.
+The optional hardware corpus isn't stored, downloaded, or packaged by fizzle. Place authorized fixtures here to enable corpus tests.
 
-Real-world FZ-1 sampler files used as test fixtures, downloaded from
-https://zine.r-massive.com/casio-fz-sampler-archive/.
+Fixtures originate from the [Casio FZ sampler archive](https://zine.r-massive.com/casio-fz-sampler-archive/).
 
-`../layout-manifest.json` records each collection's provenance, evidence
-tier, parse context, expected authority, file count, and resolved-layout
-digest. `pkg/integration/layout_manifest_test.go` verifies that every corpus
-collection remains covered and that layout behavior changes deliberately.
+| Directory | Contents |
+|---|---|
+| `casio-fz-1-factory-library/` | Casio factory disks |
+| `casio-fz-1-shareware-library-fzf-format/` | CASIO001 through CASIO142 |
+| `casio-fz1-soundwaves/` | Casio Soundwaves library |
 
-### Reviewing an intentional layout change
+`../layout-manifest.json` records provenance, evidence, parse context, file count, authority, and layout digest for each collection.
 
-Capture the current per-file records before changing a parser:
+## Reviewing a layout change
+
+Capture records before and after changing a parser:
 
 ```sh
 scratch=$(mktemp -d)
 UPDATE_LAYOUTS=true LAYOUT_SCRATCH_DIR="$scratch/before" \
-  go test ./pkg/integration \
-  -run TestStandaloneCorpusLayoutManifest -count=1 -v
-```
+  go test ./pkg/integration -run TestStandaloneCorpusLayoutManifest -count=1 -v
 
-After the parser change, write a second set and compare it:
-
-```sh
+# Apply the parser change, then capture again.
 UPDATE_LAYOUTS=true LAYOUT_SCRATCH_DIR="$scratch/after" \
-  go test ./pkg/integration \
-  -run TestStandaloneCorpusLayoutManifest -count=1 -v
+  go test ./pkg/integration -run TestStandaloneCorpusLayoutManifest -count=1 -v
+
 diff -ru "$scratch/before" "$scratch/after"
 ```
 
-The JSON names every changed fixture and field. Only after reviewing those
-differences should the new `layoutDigest` values be copied into
-`../layout-manifest.json`.
-
-## Archives
-
-| Directory                                    | Contents                                                   |
-|----------------------------------------------|------------------------------------------------------------|
-| `casio-fz-1-factory-library/`                | Official Casio factory disks (FL-1 through FL-14, plus FL-A and FL-B). |
-| `casio-fz-1-shareware-library-fzf-format/`   | Shareware archive, CASIO001..CASIO142.                     |
-| `casio-fz1-soundwaves/`                      | Casio Soundwaves Library, organised by instrument family.  |
-
-Directory names were lowercased and hyphenated on import (so "Casio FZ-1
-Factory Library" becomes `casio-fz-1-factory-library/`). Filenames keep
-their original case for the extension (`.FZF` / `.FZV`); spaces in the
-original filenames were replaced with hyphens, with runs collapsed to a
-single hyphen. PDFs, JPGs, and TXT catalog listings that accompanied the
-original downloads were stripped. Only playable FZ-1 binaries remain.
-
-## File-type corrections
-
-Nineteen files in the shareware archive were originally distributed with a
-`.FZF` extension but are actually FZV (single-voice) files, not FZF (full
-dumps). They were renamed from `.FZF` to `.FZV` on import so the tooling
-routes them to the correct command (`fizzle fzv info`).
+Review every changed fixture and field before copying new `layoutDigest` values into the manifest.

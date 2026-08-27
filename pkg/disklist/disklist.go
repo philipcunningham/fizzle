@@ -1,6 +1,4 @@
-// Package disklist implements the fizzle disk ls command. It reads an FZ series
-// disk image and returns its directory contents as structured data, with a
-// separate renderer for terminal output.
+// Package disklist lists FZ disk contents.
 package disklist
 
 import (
@@ -16,10 +14,7 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/render"
 )
 
-// CorruptTypeName is the placeholder Type column value shown for directory
-// entries whose DIS sector cannot be located or decoded. `disk ls` is the
-// tool used to diagnose damaged disks, so a single bad entry must not hide
-// every good entry behind it.
+// CorruptTypeName marks an unreadable entry without hiding readable entries.
 const CorruptTypeName = "(corrupt)"
 
 // FileEntry describes a single file on the disk.
@@ -28,8 +23,7 @@ type FileEntry struct {
 	Name     string `json:"name"`
 	TypeName string `json:"type"`
 	Size     int    `json:"size"`
-	// SlotIndex is the 0-based physical directory slot, set on corrupt
-	// rows only. Pass it directly to disk.Image.ClearDirectorySlot.
+	// SlotIndex identifies a corrupt row for Image.ClearDirectorySlot.
 	SlotIndex *int `json:"slot_index,omitempty"`
 }
 
@@ -51,8 +45,7 @@ func Parse(path string) (*Listing, error) {
 	return ParseImage(img)
 }
 
-// ParseImage returns the listing for an in-memory disk image: the same
-// result as Parse with no filesystem access.
+// ParseImage lists an in-memory disk image.
 func ParseImage(img *disk.Image) (*Listing, error) {
 	parsed, err := diskfs.List(img)
 	if err != nil {

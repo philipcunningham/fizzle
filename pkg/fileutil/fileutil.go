@@ -11,18 +11,11 @@ import (
 const (
 	lockAttempts      = 50
 	lockRetryInterval = 100 * time.Millisecond
-	// staleLockThreshold is how old a lockfile may be before WithFileLock
-	// clears it as orphaned, left behind by a fizzle process that died
-	// before its defer could run. Disk operations finish in seconds, so
-	// five minutes leaves a slow real workload plenty of margin.
+	// staleLockThreshold allows slow disk operations while recovering locks from dead processes.
 	staleLockThreshold = 5 * time.Minute
 )
 
-// WithFileLock acquires an exclusive file lock on path, runs fn while the
-// lock is held, and releases it when fn returns. It errors if the lock
-// stays out of reach for 5 seconds. Lockfiles older than
-// staleLockThreshold clear automatically, so a killed fizzle process
-// can't block later runs for good.
+// WithFileLock runs fn under an exclusive lock and recovers stale locks.
 func WithFileLock(path string, fn func() error) error {
 	lockPath := path + ".lock"
 	for range lockAttempts {
@@ -43,9 +36,7 @@ func WithFileLock(path string, fn func() error) error {
 	return fmt.Errorf("fileutil: could not acquire lock on %s (another fizzle process may be using it; if none is running, remove %s manually)", path, lockPath)
 }
 
-// WriteAtomic writes data to path atomically, through a temp file in the
-// same directory that it then renames, so a partial write never corrupts
-// an existing file. It creates the output directory when missing.
+// WriteAtomic replaces path through a same-directory temporary file.
 func WriteAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {

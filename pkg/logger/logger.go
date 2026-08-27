@@ -1,5 +1,4 @@
-// Package logger configures zerolog as the application logger.
-// Call Init once from main before running any commands.
+// Package logger configures application logging.
 package logger
 
 import (
@@ -11,16 +10,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// Init configures the global zerolog logger with a human-readable console
-// writer directed to stderr. If debug is true, DEBUG-level messages are
-// shown; otherwise only INFO and above.
+// Init configures console logging to stderr.
 func Init(debug bool) {
 	initLogger(debug, os.Stderr, !isTerminal())
 }
 
-// InitWithWriter configures the global zerolog logger with a human-readable
-// console writer directed to w, colour disabled. Tests use it to capture
-// log output without mutating stderr.
+// InitWithWriter configures colorless console logging to w.
 func InitWithWriter(debug bool, w io.Writer) {
 	initLogger(debug, w, true)
 }
@@ -45,10 +40,7 @@ func initLogger(debug bool, w io.Writer, noColor bool) {
 	log.Logger = zerolog.New(output).Level(level)
 }
 
-// Silence swaps the global zerolog logger for one that discards output and
-// returns a function restoring the previous logger. Callers such as
-// benchmarks use it to mute library log noise without redirecting their
-// own stderr; defer the returned function so the swap reverses on exit.
+// Silence discards logs until the returned restore function runs.
 func Silence() func() {
 	prev := log.Logger
 	log.Logger = zerolog.New(io.Discard)
@@ -57,13 +49,10 @@ func Silence() func() {
 	}
 }
 
-// Event is the chainable log event the level constructors below return.
-// Aliasing zerolog's own event lets callers write the familiar
-// .Str(...).Int(...).Err(...).Msg(...) chain without importing zerolog.
+// Event aliases a chainable zerolog event.
 type Event = zerolog.Event
 
-// Debug returns a chainable log event at DEBUG level. The event is a no-op
-// unless the global level (set by Init) is DEBUG or below.
+// Debug returns an event at DEBUG level.
 func Debug() *Event { return log.Debug() }
 
 // Info returns a chainable log event at INFO level.
