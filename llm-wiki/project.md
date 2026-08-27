@@ -1,27 +1,21 @@
 ---
 type: map
 title: Project outline
-description: Where the wiki links into the repo tree; the directory listing lives in the root AGENTS.md.
+description: Routes from the wiki into the current command, browser, format, and fixture packages.
 tags: [routing, repo]
-updated: 2026-08-18
+updated: 2026-08-27
 sources:
   - AGENTS.md
 ---
 
 # Project outline
 
-fizzle is a Go CLI (plus a Bubble Tea TUI) for loading samples onto
-Casio FZ series samplers via floppy disk images. The authoritative
-directory-by-directory listing is the Project structure section of the
-root `AGENTS.md`; maintaining a second copy here would drift. This
-page carries only the wiki's cross-references into the tree:
+fizzle is a Go CLI and browser application for editing Casio FZ disk images, full dumps, voices, and samples.
 
-- `pkg/fzutil/` voice counting and file-type detection are explained
-  in [voice-area-sizing](topics/voice-area-sizing.md).
-- `pkg/disk/voice.go` implements the front-panel value mappings; see
-  [display-scales](topics/display-scales.md).
-- `testdata/` is the fixture corpus, the wiki's strongest evidence,
-  including the Type 5 assembly demo; see
-  [corpus](sources/corpus.md).
-- `llm-wiki/sources/` holds the verbatim Casio spec (md and pdf)
-  beside the source pages.
+- `cmd/fizzle/` defines the CLI. `pkg/webcore/` and `web/` implement the browser application.
+- `pkg/document/` owns canonical in-memory documents. `pkg/fzf/` exposes validated full-dump views and mutations.
+- `pkg/disk/` implements disk structures and panel encodings. See [display-scales](topics/display-scales.md).
+- `pkg/fzutil/` detects file types and voice counts. See [voice-area-sizing](topics/voice-area-sizing.md).
+- `pkg/voicebuild/` assembles voices and multi-disk outputs. See [multi-disk-dumps](topics/multi-disk-dumps.md).
+- `testdata/synthetic/` and `testdata/assembly/` contain tracked fixtures. The hardware corpus is optional; see [corpus](sources/corpus.md).
+- `llm-wiki/sources/` holds the verbatim Casio specification beside its assessment page.

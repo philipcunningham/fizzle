@@ -3,7 +3,7 @@ type: topic
 title: Voice-area sizing
 description: Size the voice area by the DIS tail's vn where a disk supplies one; only a standalone dump falls back to the validated slot walk.
 tags: [fzf, parsing, voices]
-updated: 2026-08-23
+updated: 2026-08-27
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md sections 1-5, 2-1, 2-2
   - testdata/corpus (summed bstep equals vn for 80 of 235 full dumps)
@@ -26,7 +26,7 @@ The vn is trusted in one direction only: where it runs above the walk. `testdata
 
 A standalone `.fzf` export can carry the count in a fizzle-defined record at bank offset 0x294. The record holds the magic `fzv1`, the count, the dump length, and a structural CRC32. That sits inside the same firmware padding region as the 0x290 wave total. Readers honour it only where the record still binds to the dump and the count validates above the walk. A record that outlives an edit dies with it. The offset holds firmware garbage on 203 of 235 corpus dumps, so a bare count there means nothing.
 
-The standalone inference walks voice slots from 0 upward and stops at the first failure. It accepts each slot whose 192-byte header passes a plausibility check. The check wants a valid rate index, monotonic wave pointers, and a known playback mode. The name must be printable or padded. The walk was informed by the name-scan heuristic in [vosmaer-fz1](../sources/vosmaer-fz1.md). The summed `bstep` of every bank bounds the walk. The validation trim handles the overshoot on shared-voice kits, since the sum equals `vn` for only 80 of 235 dumps in the [corpus](../sources/corpus.md). The undercount has no standalone remedy; an extracted dump with a bank-less voice reads short.
+The standalone inference walks voice slots from 0 upward and stops at the first failure. It accepts each slot whose 192-byte header passes a plausibility check. The check wants a valid rate index, monotonic wave pointers, and a known playback mode. The name must be printable or padded. These checks are stricter than the name scan in [vosmaer-fz1](../sources/vosmaer-fz1.md). The summed `bstep` of every bank bounds the walk. The validation trim handles the overshoot on shared-voice kits, since the sum equals `vn` for only 80 of 235 dumps in the [corpus](../sources/corpus.md). The undercount has no standalone remedy; an extracted dump with a bank-less voice reads short.
 
 fizzle implements the policy once behind `pkg/fzf`'s context-specific document constructors. `NewDiskFile` takes the DIS tail's count and `NewStandalone` accepts a valid marker record; the two authorities never compete. The document retains the resolved layout and its source for its lifetime. CLI readers, `pkg/webcore`, and `pkg/diskadd` consume that document instead of repeating the walk.
 
@@ -34,5 +34,5 @@ Related heuristic: a printable 12-byte name at header offset 0xB2 marks a voice 
 
 ## Open questions
 
-- `Drums.fzf` (FL-4) has been recorded with three voice counts in past notes: `vp[]` referencing 19 distinct slots (max index 23), "24 voices total", and "vn of about 28". Recount with `fizzle fzf info` and settle the number.
+- Recount `Drums.fzf` from FL-4 when the corpus is available. Existing evidence conflicts between 19 referenced slots, 24 voices, and a `vn` near 28.
 - Whether slot order always tracks wave-address order in firmware-saved dumps. If it does, a cross-slot `wavst` monotonicity check could trim stale slots for standalone files too; test it over the corpus before trusting it.

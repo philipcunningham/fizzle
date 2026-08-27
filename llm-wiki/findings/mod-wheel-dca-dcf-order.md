@@ -3,7 +3,7 @@ type: finding
 title: The mod wheel's amp and filter offsets are the reverse of the spec
 description: The spec orders the mod row filter then amp at 0x07 and 0x08; an FZ-1 reads them amp then filter, like the other two controllers.
 tags: [fzf, bank, effects, dca, dcf]
-updated: 2026-08-26
+updated: 2026-08-27
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-3
   - effectdata_edit_screen at F000:6B98
@@ -38,8 +38,4 @@ Every `.fzf` under `testdata/corpus/` was read at bank offset 0x3c0, 112 files i
 
 ## What fizzle implements
 
-`EffectModDCAOffset` is 0x07 and `EffectModDCFOffset` is 0x08 in `pkg/disk/voice.go`. `pkg/fzfeffects` reads and writes through both, and `pkg/webcore` projects them into the browser's matrix as the DCA and DCF columns. `TestParseModWheelMatchesHardwareBytes` and `TestSetModWheelWritesHardwareOffsets` pin the read and write sides against raw offsets, and `TestModWheelMatrixColumnsFollowHardware` pins the browser column.
-
-## Compatibility
-
-No stored bytes were ever wrong. Reads and writes used the same offset, so files round-tripped correctly and only the two labels were transposed. A corrected build re-reads a file written by an older one and shows the machine's values. Anyone who set the filter offset on an older build set what the machine calls DCA LEVEL. That value still sits at 0x07.
+`EffectModDCAOffset` is 0x07 and `EffectModDCFOffset` is 0x08 in `pkg/disk/voice.go`. `pkg/fzfeffects` reads and writes through both, and `pkg/webcore` projects them into the browser's DCA and DCF columns. `TestEveryEffectFieldReadsAndWritesItsHardwareByte` pins every field against its raw offset. `TestModWheelMatrixColumnsFollowHardware` pins the browser projection.
