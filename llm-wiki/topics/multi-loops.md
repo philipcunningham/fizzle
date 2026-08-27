@@ -3,7 +3,7 @@ type: topic
 title: Multi-loop playback
 description: The eight loops play as a chain in numerical order; sustain and end are two roles inside it, assigned through each loop's time field.
 tags: [fzv, loops, playback]
-updated: 2026-08-21
+updated: 2026-08-27
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 2-1
   - FZ-1 ROM (note on F000:122B; note off F000:1515; loop advance F000:1D11 to F000:1D43)

@@ -3,7 +3,7 @@ type: finding
 title: Deleted directory entries leave blank slots in place
 description: The firmware deletes a file by zeroing the first name byte and saves later files behind the gap; whether it reads past one is open.
 tags: [disk, directory, firmware]
-updated: 2026-08-23
+updated: 2026-08-27
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 1-3
   - testdata/synthetic/PREY.img

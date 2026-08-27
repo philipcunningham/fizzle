@@ -110,6 +110,6 @@ A user's FZ-1 photo showed mod wheel `DCF LEVEL = 127` where the saved block hol
 
 Added the read address `F000:6562` and inverse write address `F000:6725` to the display-scale mapping.
 
-## [2026-08-27] maintenance | Current-source audit
+## [2026-08-27] lint | Current-source audit
 
 Audited every maintained page against current fizzle source and all 62 cited firmware addresses. Corrected stale TUI, corpus, effect command, multi-disk marker, and package-routing claims. Unwrapped prose throughout the maintained wiki and removed completed migration history from current pages.

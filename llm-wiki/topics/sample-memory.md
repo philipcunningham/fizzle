@@ -3,7 +3,7 @@ type: topic
 title: Sample memory per machine
 description: The FZ-1 shipped with 1 MB and the rack units with 2 MB, and the firmware discovers which at power on. There is no single figure for the series.
 tags: [hardware, memory, fzf]
-updated: 2026-08-20
+updated: 2026-08-27
 sources:
   - llm-wiki/sources/casio-fz1-data-structures.md section 4 (work area listing)
   - FZ-1 firmware, the wave memory probe at F000:07D4 and length_limit at F000:7A74
