@@ -857,6 +857,20 @@ input[type="range"]::-webkit-slider-thumb {
   font-size: 10px;
 }
 
+/* The Sample group's read-only rate. It stacks like an editable field,
+   so its caption sits under the value instead of running on from it. */
+.readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 52px;
+}
+.readout-label {
+  color: var(--fz-fg-faint);
+  font-size: 10px;
+}
+
 .stepperinput {
   width: 64px;
   text-align: center;
