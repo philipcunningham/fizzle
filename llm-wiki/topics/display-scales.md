@@ -3,7 +3,7 @@ type: topic
 title: Front-panel display scales
 description: How the FZ front panel maps raw header bytes to its 0 to 99 and -15 to +15 displays; calibrated on hardware, absent from the spec.
 tags: [fzv, display, hardware]
-updated: 2026-08-23
+updated: 2026-08-27
 sources:
   - FZ-10M hardware (calibration disk images; BRASS1 D3 1)
   - FZ-1 system ROM executed under an emulator (panel driven, bytes read back)
@@ -14,14 +14,9 @@ status: confirmed-hardware
 
 # Front-panel display scales
 
-The FZ-1/FZ-10M front panel never shows raw header bytes. Envelope
-values display on a 0 to 99 scale. Key-follow values display as -15
-to +15. The spec never gives the mapping; these were calibrated
-against hardware.
+The FZ-1/FZ-10M front panel never shows raw header bytes. Envelope values display on a 0 to 99 scale. Key-follow values display as -15 to +15. The spec never gives the mapping; these were calibrated against hardware.
 
-The [undecyclenate editor](../sources/undecyclenate-editor.md)
-documents the same mismatch from the UI side. It exposes raw 0 to 127
-and 0 to 255 ranges where the FZ shows 0 to 99.
+The [undecyclenate editor](../sources/undecyclenate-editor.md) documents the same mismatch from the UI side. It exposes raw 0 to 127 and 0 to 255 ranges where the FZ shows 0 to 99.
 
 **Rates** (magnitude 0 to 127; bit 7 is direction):
 
@@ -33,83 +28,48 @@ and 0 to 255 ranges where the FZ shows 0 to 99.
 - display = `ceil(byte * 99 / 255)` (0 maps to 0)
 - byte = `floor(255 * (display - 1) / 99) + 1` (0 maps to 0)
 
-Confirmed against BRASS1 D3 1: rate byte 127 displays 99, stop byte
-218 displays 85.
+Confirmed against BRASS1 D3 1: rate byte 127 displays 99, stop byte 218 displays 85.
 
-**Key follow / rate scaling** (signed byte, applies to `dca_kf`,
-`dca_rs`, `dcf_kf`, `dcf_rs`):
+**Key follow / rate scaling** (signed byte, applies to `dca_kf`, `dca_rs`, `dcf_kf`, `dcf_rs`):
 
 - display = `clamp(int8(byte) / 8, -15, +15)`
 - byte = `uint8(int8(display * 8))`
 
-Validated on FZ-10M with calibration images at bytes 0, 1, 4, 8, 15,
-64, 127, 128. Implemented as `disk.KFByteToDisplay` and
-`disk.KFDisplayToByte` in `pkg/disk/voice.go`; `pkg/fzvinfo`,
-`pkg/webcore`, and `pkg/sfzexport` render through them.
+Validated on FZ-10M with calibration images at bytes 0, 1, 4, 8, 15, 64, 127, 128. Implemented as `disk.KFByteToDisplay` and `disk.KFDisplayToByte` in `pkg/disk/voice.go`; `pkg/fzvinfo`, `pkg/webcore`, and `pkg/sfzexport` render through them.
 
 ## Mappings read off the panel under an emulator
 
-These come from driving the FZ-1 firmware under an emulator: set the
-value on the panel, save, and read the bytes back. That beats a static
-read of the ROM and falls short of a measurement on a real device.
-Treat each row as provisional until hardware confirms it.
+These come from driving the FZ-1 firmware under an emulator: set the value on the panel, save, and read the bytes back. That beats a static read of the ROM and falls short of a measurement on a real device. Treat each row as provisional until hardware confirms it.
 
-Casio's own manuals confirm the panel ranges independently, which is
-worth more than the emulator for what a row displays. The owner's
-manual prints each page's slider bounds, and the FZ-1 and FZ-10M book
-states several in prose:
+Casio's own manuals confirm the panel ranges independently, which is worth more than the emulator for what a row displays. The owner's manual prints each page's slider bounds, and the FZ-1 and FZ-10M book states several in prose:
 
-- TUNE is cents, one semitone either way. "The values for this
-  parameter are equal to cents. (One hundred divisions per semitone.)"
-- The LFO page carries seven rows: WAVE, LFO SYNC, DELAY, RATE, and
-  depths for OSC, DCA, and DCF. No attack row and no resonance depth
-  row appear in either manual.
-- DELAY is a fade in rather than a pre-delay. The book describes it as
-  the rate the depth climbs from zero, and adds: "Higher delay settings
-  cause longer LFO fade-ins." That fits one row driving an attack
-  value.
-- The velocity page's first four rows print as "+001" to "+127" or
-  "-001" to "-127". Resonance is "positive only ('000' to '127')".
-- AREA LEVEL: "The maximum value, 127, equals the voice's normal
-  loudness."
-- Envelope rates and levels top out at 99: "99 is the fastest" and
-  "99 is the greatest".
+- TUNE is cents, one semitone either way. "The values for this parameter are equal to cents. (One hundred divisions per semitone.)"
+- The LFO page carries seven rows: WAVE, LFO SYNC, DELAY, RATE, and depths for OSC, DCA, and DCF. No attack row and no resonance depth row appear in either manual.
+- DELAY is a fade in rather than a pre-delay. The book describes it as the rate the depth climbs from zero, and adds: "Higher delay settings cause longer LFO fade-ins." That fits one row driving an attack value.
+- The velocity page's first four rows print as "+001" to "+127" or "-001" to "-127". Resonance is "positive only ('000' to '127')".
+- AREA LEVEL: "The maximum value, 127, equals the voice's normal loudness."
+- Envelope rates and levels top out at 99: "99 is the fastest" and "99 is the greatest".
 
-The manuals say nothing about stored bytes, so they confirm the panel
-ranges and leave every byte mapping to the emulator.
+The manuals say nothing about stored bytes, so they confirm the panel ranges and leave every byte mapping to the emulator.
 
 | Field | Panel range | Mapping |
-|---|---|---|
+| --- | --- | --- |
 | `vel_dca_kf`, `vel_dca_rs`, `vel_dcf_kf`, `vel_dcf_rs` | -127 to +127 | the raw signed byte |
 | `vel_dcq_kf` | 0 to 127 | the same byte unsigned; the row carries no sign column and refuses to go below zero |
 | `dcp` (TUNE) | -100 to +100 | `word = display * 255 / 100`, truncated toward zero. Reading back, the panel takes the magnitude from the low byte and the sign from the word, so a word beyond the span wraps |
 | `lfo_delay` (DELAY) | 0 to 127 | `word = display * 16`. The same row writes `lfo_atck` as `18 - ceil(display / 8)`: there is no independent attack row |
-| `bvol` (AREA LEVEL) | 0 to 127 | `byte = 127 - display`, so a stored 0 is the panel's loudest |
+| `bvol` (AREA LEVEL) | 0 to 127 | `byte = 127 - display`, so a stored 0 is the panel's loudest. Firmware reads at `F000:6562` and writes the inverse at `F000:6725` |
 
-Two rows here replaced earlier readings taken statically from the ROM's
-bounds table. The velocity RESONANCE row was recorded as plus or
-minus 100, and the velocity DCF RATE row as 0 to 127. Both are the
-VELOCITY SENS page's rows, not the envelope rate scales this page also
-documents. Both came from misjudging the 24 byte
-record's phase by one, which still decodes into plausible bounds.
+Static bounds-table reads are unsafe because shifting a 24-byte record by one still yields plausible ranges. Panel execution establishes the velocity rows recorded here.
 
-`lfo_atck` and `lfo_dcq` have no panel row at all. The DELAY row derives
-the attack, and nothing reaches the resonance depth. `lfo_dcq` is zero
-in all 735 voices unpacked from the Casio factory library, and it can't
-be used on a physical unit.
+`lfo_atck` and `lfo_dcq` have no panel row at all. The DELAY row derives the attack, and nothing reaches the resonance depth. `lfo_dcq` is zero in all 735 voices unpacked from the Casio factory library, and it can't be used on a physical unit.
 
 ## What the manuals add
 
-MAX TOUCH and MIN TOUCH both floor at 001, not 000. The owner's manual
-prints both sliders as 127 over 001, and a velocity of zero silences
-the voice. AREA LEVEL beside them floors at 000.
+MAX TOUCH and MIN TOUCH both floor at 001, not 000. The owner's manual prints both sliders as 127 over 001, and a velocity of zero silences the voice. AREA LEVEL beside them floors at 000.
 
-Key follow rows print two digits signed, "+01" to "+15" and "-01" to
-"-15", matching the byte over 8 rule above.
+Key follow rows print two digits signed, "+01" to "+15" and "-01" to "-15", matching the byte over 8 rule above.
 
 ## Open questions
 
-- Whether the four writes an emulated panel makes with no edit also
-  happen on hardware: rate sign bits set across all eight envelope
-  stages, one stop level rewritten, a loop sustain index set past the
-  last loop, and a tune word nudged by one.
+- Whether the four writes an emulated panel makes with no edit also happen on hardware: rate sign bits set across all eight envelope stages, one stop level rewritten, a loop sustain index set past the last loop, and a tune word nudged by one.
