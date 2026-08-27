@@ -74,5 +74,5 @@ Authoring writes one sustain loop or a one shot, with the chain's auxiliary fiel
 ## Open questions
 
 - Trace and Skip rest on the book and the manual. The firmware's use of the `looped` MSB is untraced, so how a Skip transition reaches the sample hardware is unrecorded.
-- What starts a loop's timer is untraced. The writers are known, at F000:2033 and F000:251F, but the conditions they run under aren't, so how long a loop sounds before its time begins counting is unrecorded.
+- What starts a loop's timer is untraced. The writers are known at F000:2033 and F000:251F, but their conditions aren't. The delay before counting begins is therefore unrecorded.
 - The cross fade's effect on the seam is documented by the manual, not by a trace.

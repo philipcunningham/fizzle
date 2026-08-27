@@ -72,4 +72,4 @@ Key follow rows print two digits signed, "+01" to "+15" and "-01" to "-15", matc
 
 ## Open questions
 
-- Whether the four writes an emulated panel makes with no edit also happen on hardware: rate sign bits set across all eight envelope stages, one stop level rewritten, a loop sustain index set past the last loop, and a tune word nudged by one.
+- Whether the four writes an emulated panel makes without edits also occur on hardware. They alter envelope signs, one stop, loop sustain, and tune.

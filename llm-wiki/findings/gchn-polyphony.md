@@ -14,7 +14,7 @@ status: confirmed-hardware
 `gchn` (per key split, `bankdata` 0x182; "OUTPUT" on the front panel) is a bitmask over the 8 voice generators, each feeding a rear output jack. Bit 0 is output 1; bit 7 is output 8.
 
 - `0xff`: all 8 outputs, full polyphony (round-robin).
-- Single bit (`0x01`): one output, monophonic; a new note cuts the previous one, and voices sharing the same single-bit value mute each other (open/closed hi-hat).
+- Single bit (`0x01`): one monophonic output. A new note cuts the previous one, and voices sharing the bit mute each other.
 - Multiple bits (`0x05`): limited polyphony across the set outputs.
 
 Shared mute groups combine with `vp[]` voice sharing. Several key splits can point at one voice slot and use distinct or matching `gchn` bits; [bstep-key-splits](bstep-key-splits.md) covers how sharing skews key-split counts. fizzle maps SFZ `mutegroup=N` onto separate single-bit outputs during conversion (`pkg/sfzconvert`) and back on export (`pkg/sfzexport`).

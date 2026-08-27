@@ -75,20 +75,20 @@ The answer isn't part of the body; it's recorded on resolution (see [Work throug
 Every ticket is either **HITL** (human in the loop, worked *with* a human who speaks for themselves) or **AFK**, driven by the agent alone. A HITL ticket only resolves through that live exchange. The agent never stands in for the human's side of it (a grilling agent that answers its own questions has broken this).
 
 - **Research** (AFK): Reading documentation, third-party APIs, or local resources like knowledge bases. Creates a markdown summary as a linked asset. Use when knowledge outside the current working directory is required.
-- **Prototype** (HITL): Raise the fidelity of the discussion by making a cheap, rough, concrete artifact to react to: an outline, a rough take, a stub, or UI/logic code. Links the prototype as an asset. Use when "how should it look" or "how should it behave" is the key question.
+- **Prototype** (HITL): Raise the discussion's fidelity with a cheap, rough artifact, such as an outline, stub, or UI code. Link the prototype as an asset. Use it when appearance or behavior is the key question.
 - **Grilling** (HITL): Conversation via the /grilling skill, one question at a time. The default case.
-- **Task** (HITL or AFK): Manual work that must happen before a *decision* can be made: nothing to decide, prototype, or research, but the discussion is blocked until it's done. Signing up for a service so its API can be judged, provisioning access, moving data so its shape can be seen. Task is the one type that *does* rather than decides; it earns its place by unblocking a decision, not by delivering the destination. The agent drives it alone where it can (AFK); otherwise it hands the human a precise checklist (HITL). Resolved when the work is done; the answer records what was done and any resulting facts (credentials location, new URLs, row counts) later tickets depend on.
+- **Task** (HITL or AFK): Manual work required before a *decision* can be made. Examples include provisioning access or moving data for inspection. A task acts instead of deciding, and it must unblock a decision rather than deliver the destination. The agent works alone where possible (AFK). Otherwise, it gives the human a precise checklist (HITL). Resolve it when the work finishes. Record the completed work and any facts that later tickets need.
 
 ## Fog of war
 
 The map is _deliberately_ incomplete: don't chart what you can't yet see. Beyond the live tickets lies the **fog of war**. It's the dim view of decisions and investigations you can tell are coming but can't yet pin down. They hang on questions still open. Resolving a ticket clears the fog ahead of it, graduating whatever's now specifiable into fresh tickets (one at a time). The map is finished when the way to the destination is clear and no tickets remain.
 
-The map's **Not yet specified** section is where that dim view is written down: the suspected question, the area to revisit later. It's the undiscovered frontier _toward_ the destination: everything here is in scope, just not sharp enough to ticket. Write as loosely or as fully as the view allows; it doubles as a signpost for collaborators reading where the effort is headed.
+The map's **Not yet specified** section records that dim view: the suspected question and area to revisit. It is the undiscovered frontier _toward_ the destination. Everything here is in scope but not sharp enough to ticket. Write as loosely or fully as the view allows. It also guides collaborators toward the effort's direction.
 
 **Fog or ticket?** The test is whether you can state the question precisely now, _not_ whether you can answer it now.
 
 - **Ticket when** the question is already sharp, even if it's blocked and you can't act on it yet.
-- **Not yet specified when** you can't yet phrase it that sharply. Don't pre-slice the fog into ticket-sized pieces: it's coarser than a ticket, and one patch may graduate into several tickets, or none, once the frontier reaches it.
+- **Not yet specified when** you can't yet phrase it that sharply. Don't pre-slice the fog into ticket-sized pieces. It is coarser than a ticket. One patch may become several tickets, or none, when the frontier reaches it.
 
 **Not yet specified** excludes what's already decided (Decisions so far) and what's already a live ticket. It also excludes what's out of scope (the next section).
 
@@ -108,10 +108,10 @@ Two modes. Either way, **never resolve more than one ticket per session.**
 
 User invokes with a loose idea.
 
-1. **Name the destination.** Run a `/grilling` session to pin down what this map is finding its way to: the spec, decision, or change. The destination fixes the scope, so it's settled first.
-2. **Map the frontier.** Grill again, **breadth-first** this time: fan out across the whole space rather than deep on any one thread, surfacing the open decisions and the first steps takeable now. **If this surfaces no fog** (the way to the destination is already clear, the whole journey small enough for one session), you don't need a map. Stop and ask the user how they'd like to proceed.
-3. **Create the map** (label `wayfinder:map`): Destination and Notes filled in, Decisions-so-far empty, the fog sketched into **Not yet specified**.
-4. **Create the tickets you can specify now** as child issues of the map, then wire blocking edges in a **second pass** (issues need ids before they can reference each other). Wiring sorts them into the frontier and the blocked; everything you can't yet specify stays in the fog (the **Not yet specified** section).
+1. **Name the destination.** Run a `/grilling` session to identify the spec, decision, or change that this map seeks. The destination fixes the scope, so settle it first.
+2. **Map the frontier.** Grill again, this time **breadth-first**. Fan out across the space to surface open decisions and immediately available steps. **If this surfaces no fog**, you don't need a map. Stop and ask the user how they'd like to proceed.
+3. **Create the map** with the `wayfinder:map` label. Fill Destination and Notes, leave Decisions-so-far empty, and sketch the fog under **Not yet specified**.
+4. **Create the tickets you can specify now** as child issues of the map. Wire blocking edges in a **second pass**, after issues have ids. Wiring separates the frontier from blocked work. Everything you can't specify stays in the fog under **Not yet specified**.
 5. Stop: charting the map is one session's work; don't also resolve tickets.
 
 ### Work through the map
@@ -122,6 +122,6 @@ User invokes with a map (URL or number). A ticket is **optional**: without one, 
 2. Choose the ticket. If the user named one, use it. Otherwise take the first frontier ticket in order. **Claim it**: assign it to yourself before any work.
 3. Resolve it and **zoom as needed**: fetch the full body of any related or closed ticket on demand; invoke the skills the `## Notes` block names. If in doubt, use `/grilling`.
 4. Record the resolution: post the answer as a **resolution comment**, **close** the issue, and **append a context pointer** to the map's Decisions-so-far.
-5. Add newly-surfaced tickets (create-then-wire); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals a ticket (this one or another) sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets.
+5. Add newly surfaced tickets, then wire them. Graduate any fog that the answer makes specifiable. Remove each graduated item from **Not yet specified** so only its ticket remains. If any ticket sits beyond the destination, **rule it out of scope**. Update or delete tickets invalidated by the decision.
 
 The user may run unblocked tickets in parallel, so expect other sessions to be editing the tracker concurrently.

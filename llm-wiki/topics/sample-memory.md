@@ -42,5 +42,5 @@ A full dump loads as a unit, so the audio area of that one file is what has to f
 
 ## Open questions
 
-- What does a load do to memory that is already resident? Appending is confirmed for the two halves of one split dump (see [Multi-disk full dumps](multi-disk-dumps.md)), and nothing records whether loading a second voice adds to the first or replaces it. A firmware trace of `load` at `F000:B30E` across four cases, or a hardware experiment reading the remaining memory display between loads, would settle it.
+- What does a load do to resident memory? Appending is confirmed for both halves of one split dump; see [Multi-disk full dumps](multi-disk-dumps.md). No evidence shows whether a second voice adds to or replaces the first. Trace `load` at `F000:B30E`, or inspect the hardware's remaining-memory display between loads.
 - Does any machine in use exceed 2 MB? Third party upgrades are described online, and the bank register's five usable bits argue against more reaching memory without further modification.

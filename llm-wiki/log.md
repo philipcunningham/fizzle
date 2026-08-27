@@ -117,3 +117,7 @@ Audited every maintained page against current fizzle source and all 62 cited fir
 ## [2026-08-27] ingest | Hardware corpus tracked
 
 Added the authorized hardware corpus to `testdata/corpus`. Corpus regression tests now run from a clean checkout without an installer or external archive.
+
+## [2026-08-27] lint | Vale 3.19 compatibility
+
+Shortened prose newly detected by Vale 3.19 without changing claims or evidence. Updated index summaries to match the revised wording.
