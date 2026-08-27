@@ -39,40 +39,93 @@ export default tseslint.config(
       ],
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "error",
       ...jsxA11y.configs.recommended.rules,
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
-      "boundaries/element-types": [
+      "boundaries/dependencies": [
         "error",
         {
           default: "disallow",
-          rules: [
-            { from: "core", allow: ["boundary"] },
-            { from: "queries", allow: ["boundary"] },
-            { from: "viewstate", allow: ["boundary"] },
-            { from: "ui", allow: ["boundary", "queries", "viewstate"] },
-            { from: "screens", allow: ["boundary", "queries", "viewstate", "ui"] },
-            { from: "dialogs", allow: ["boundary", "queries", "viewstate", "ui"] },
+          policies: [
             {
-              from: "shell",
-              allow: ["boundary", "core", "queries", "viewstate", "ui", "screens", "dialogs"],
+              from: { element: { type: "core" } },
+              allow: { to: { element: { type: "boundary" } } },
             },
             {
-              from: "tests",
-              allow: [
-                "boundary",
-                "core",
-                "queries",
-                "viewstate",
-                "ui",
-                "screens",
-                "dialogs",
-                "shell",
-              ],
+              from: { element: { type: "queries" } },
+              allow: { to: { element: { type: "boundary" } } },
+            },
+            {
+              from: { element: { type: "viewstate" } },
+              allow: { to: { element: { type: "boundary" } } },
+            },
+            {
+              from: { element: { type: "ui" } },
+              allow: {
+                to: { element: { types: { anyOf: ["boundary", "queries", "viewstate"] } } },
+              },
+            },
+            {
+              from: { element: { type: "screens" } },
+              allow: {
+                to: {
+                  element: { types: { anyOf: ["boundary", "queries", "viewstate", "ui"] } },
+                },
+              },
+            },
+            {
+              from: { element: { type: "dialogs" } },
+              allow: {
+                to: {
+                  element: { types: { anyOf: ["boundary", "queries", "viewstate", "ui"] } },
+                },
+              },
+            },
+            {
+              from: { element: { type: "shell" } },
+              allow: {
+                to: {
+                  element: {
+                    types: {
+                      anyOf: [
+                        "boundary",
+                        "core",
+                        "queries",
+                        "viewstate",
+                        "ui",
+                        "screens",
+                        "dialogs",
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+            {
+              from: { element: { type: "tests" } },
+              allow: {
+                to: {
+                  element: {
+                    types: {
+                      anyOf: [
+                        "boundary",
+                        "core",
+                        "queries",
+                        "viewstate",
+                        "ui",
+                        "screens",
+                        "dialogs",
+                        "shell",
+                      ],
+                    },
+                  },
+                },
+              },
             },
           ],
         },

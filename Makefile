@@ -12,10 +12,10 @@ LDFLAGS = -ldflags "-X $(MODULE).Version=$(VERSION) -X $(MODULE).Commit=$(COMMIT
 # `go install` itself; a missing tool surfaces as a clear error from
 # `make licenses`.
 GO_LICENSES_VERSION := v1.6.0
-GOLANGCI_LINT_VERSION := 2.12.2
+GOLANGCI_LINT_VERSION := 2.13.1
 GO_VERSION := 1.26.5
-NODE_MAJOR := 22
-VALE_VERSION := 3.15.1
+NODE_MAJOR := 26
+VALE_VERSION := 3.19.0
 
 LICENSES_DIR  := internal/licenses
 LICENSES_FILE := $(LICENSES_DIR)/THIRD_PARTY_LICENSES.txt
