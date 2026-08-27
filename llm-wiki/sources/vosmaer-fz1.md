@@ -3,7 +3,7 @@ type: source
 title: Vosmaer fz1
 description: Jacob Vosmaer's 2025 FZ-1 disk-image utilities and write-up; corrected the file-head layout numbers.
 tags: [community, external]
-updated: 2026-07-11
+updated: 2026-08-27
 sources:
   - https://github.com/jacobvosmaer/fz1
   - https://blog.jacobvosmaer.nl/0057-fz-1-images/
@@ -12,14 +12,6 @@ status: suspect
 
 # Vosmaer fz1
 
-Jacob Vosmaer's fz1 project (2025): small C utilities for building
-FZ-1 disk images, with a blog write-up on the format. Community
-documentation, the lowest-ranked evidence.
+Jacob Vosmaer's fz1 project provides small C utilities for building FZ-1 disk images and a format article. It is community documentation and ranks below firmware and hardware evidence.
 
-Useful for two things. First, the file-head layout-number correction:
-counts at the sector end; see
-[dis-file-head](../findings/dis-file-head.md). Second, the heuristic
-for reconstructing layout numbers on FZF files found online by
-scanning for 12-byte ASCII voice names. That heuristic informed
-fizzle's voice-slot walk (see
-[voice-area-sizing](../topics/voice-area-sizing.md)).
+It independently corroborates the file-head counts at the sector end; see [dis-file-head](../findings/dis-file-head.md). Its 12-byte ASCII voice-name scan also provides a cross-check for fizzle's stricter standalone voice-slot walk; see [voice-area-sizing](../topics/voice-area-sizing.md).

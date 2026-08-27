@@ -3,7 +3,7 @@ type: source
 title: Casio service manuals and third-party books
 description: The hardware documents behind the DCA chip, the playback path, and the fitted memory; what each is authoritative for and where it stops.
 tags: [hardware, dca, primary-source]
-updated: 2026-08-20
+updated: 2026-08-27
 sources:
   - Casio FZ-1 Service Manual & Parts List, April 1987
   - Casio FZ-20M service manual, circuit explanation and parts list
@@ -26,7 +26,7 @@ Scanned PDFs held outside this repository. Pages are cited by document and page 
 
 ## The books
 
-*The Casio FZ-1 and FZ-10M Book*, *The FZ-1 Book*, and the owner's manual are player facing. They carry no timing tables, so they settle nothing about rates in seconds. They do corroborate firmware findings from the player's side, which is worth having when a disassembly is the only other evidence:
+_The Casio FZ-1 and FZ-10M Book_, _The FZ-1 Book_, and the owner's manual are player facing. They carry no timing tables, so they settle nothing about rates in seconds. They do corroborate firmware findings from the player's side, which is worth having when a disassembly is the only other evidence:
 
 - An envelope with no sustain step fades to nothing however long a key is held, and its rates set how long that fade takes. The books describe the self-terminating one shot of [envelope-timing](../topics/envelope-timing.md) to players.
 - A step set to END becomes the last step of the cycle, and the FZ sets its level to zero. The books describe the forced end stage at F000:1351.

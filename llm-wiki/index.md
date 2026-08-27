@@ -5,7 +5,7 @@ One line per page, grouped by type. Read this first on every query. Conventions:
 ## Map
 
 - [Truth map](map.md): per topic, where truth lives across the spec, fizzle code, firmware findings, and the corpus.
-- [Project outline](project.md): where the wiki links into the repo tree; the directory listing lives in the root AGENTS.md.
+- [Project outline](project.md): routes into the current command, browser, format, and fixture packages.
 
 ## Findings
 
@@ -36,7 +36,7 @@ One line per page, grouped by type. Read this first on every query. Conventions:
 - [Casio FZ-1 Data Structures spec](sources/casio-spec.md): the 1987 primary spec; reading conventions and known errors.
 - [Casio service manuals and books](sources/casio-service-manuals.md): the hardware documents behind the DCA chip, the playback path, and the fitted memory.
 - [FZ-1 firmware reverse engineering](sources/firmware.md): ROM address anchors; outranks the spec.
-- [Fixture corpus](sources/corpus.md): 235 real full dumps under testdata; the statistical evidence base.
+- [Fixture corpus](sources/corpus.md): optional real-hardware fixtures for reproducing recorded corpus observations.
 - [Buchty fztoolkit](sources/buchty-fztoolkit.md): 2000 C utilities; struct cross-check.
 - [Vosmaer fz1](sources/vosmaer-fz1.md): 2025 utilities and write-up; file-head correction, name-scan heuristic.
 - [Undecyclenate FZ Editor and Librarian](sources/undecyclenate-editor.md): Windows XP editor manual; front-panel semantics, open behavioural questions.
