@@ -32,6 +32,8 @@ fizzle --version
 
 Set `PREFIX` to change the default `/usr/local` installation prefix. The Makefile also provides `linux`, `darwin-arm64`, `darwin-amd64`, and `windows` cross-build targets.
 
+`fizzle completion bash|zsh|fish|pwsh` emits a completion script for the selected shell.
+
 ## CLI quickstart
 
 Convert an SFZ instrument, inspect it, and add it to a new disk image:

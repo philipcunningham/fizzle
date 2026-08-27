@@ -111,7 +111,7 @@ In Basic mode, differing stored channels don't provide independent routing.
 
 ### Performance controllers
 
-`MODIFY/EFFECT/MIDI` routes pitch bend, mod wheel, foot control, and aftertouch. These depths belong to a bank rather than an individual voice.
+`MODIFY/EFFECT/MIDI/BEND RANGE`, `MOD WHEEL`, and `AFTER TOUCH` route performance controllers. These depths belong to a bank rather than an individual voice.
 
 The keyboard FZ-1 accepts the Casio VP-2 foot controller. Rack models support sustain control but not the VP-2.
 
@@ -193,7 +193,7 @@ Unsupported opcodes produce warnings and don't affect output.
 | Loops | `MODIFY/VOICE EDIT/CREATE VOICE/LOOP SET` |
 | Tuning and mode | `MODIFY/VOICE EDIT/CREATE VOICE/TUNE/MEM READ` |
 | Bank ranges, MIDI, and output | `MODIFY/BANK EDIT/CREATE BANK` |
-| Controller routing | `MODIFY/EFFECT/MIDI` |
+| Controller routing | `MODIFY/EFFECT/MIDI/BEND RANGE`, `MOD WHEEL`, or `AFTER TOUCH` |
 | Area Mode | `MAIN MENU/EFFECT/MIDI/MIDI FUNCTION` |
 
 ## Format evidence

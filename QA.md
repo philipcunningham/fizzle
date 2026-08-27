@@ -26,6 +26,23 @@ fizzle fzv edit some.fzv --dca-rate-1 100
 
 Pass when each message identifies the bad input and the accepted constraint. Usage errors exit 2, data errors exit 1, and neither path panics.
 
+### CLI-02: Shell completion
+
+Generate and parse each supported completion script:
+
+```sh
+for shell in bash zsh fish pwsh; do
+  fizzle completion "$shell" >"$QA/completion.$shell"
+  test -s "$QA/completion.$shell"
+done
+
+bash -n "$QA/completion.bash"
+zsh -n "$QA/completion.zsh"
+fish -c "source $QA/completion.fish; complete -C 'fizzle '" | grep -E 'disk|fzv|fzf|fzb|sfz'
+```
+
+Pass when every command succeeds, each file is nonempty, and fish lists the top-level commands.
+
 ### CLI-03: Cancellation cleanup
 
 Interrupt conversion while it is writing:
