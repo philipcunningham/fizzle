@@ -632,44 +632,6 @@ func TestApplyToFZVBytesRejectsBatchAtomically(t *testing.T) {
 	}
 }
 
-func TestApplyToFZFSlotBytesRejectsHeaderAndBankBatchAtomically(t *testing.T) {
-	t.Parallel()
-	fzfPath := extractTestFZF(t, "../../testdata/synthetic/TECHNO.img", "FULL-DATA-FZ")
-	data, err := os.ReadFile(fzfPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	hdr, err := fzutil.ParseFZFHeader(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	slot, err := findVoiceIndex(data, hdr, "COWBELL")
-	if err != nil {
-		t.Fatal(err)
-	}
-	sites := fzutil.FindBankSitesForVoice(data, hdr, slot)
-	if len(sites) == 0 {
-		t.Fatal("COWBELL has no bank site; test would not exercise fan-out")
-	}
-	bankOffset := sites[0].BankIdx*disk.SectorSize + disk.BankKeyLowOffset + sites[0].SplitIdx
-	const newKeyLow = 40
-	if data[bankOffset] == newKeyLow {
-		t.Fatal("bank key-low already has test value; test would not observe a partial write")
-	}
-	before := bytes.Clone(data)
-	edits := []Edit{
-		{Offset: disk.VoiceKeyLowOffset, Size: 1, Value: newKeyLow},
-		{Offset: disk.VoiceHeaderUsed, Size: 1, Value: 7},
-	}
-
-	if err := ApplyToFZFSlotBytes(data, slot, edits); err == nil {
-		t.Fatal("expected out-of-range edit to reject the batch")
-	}
-	if !bytes.Equal(data, before) {
-		t.Fatalf("failed batch mutated the FZF; first bank difference is at %d", bankOffset)
-	}
-}
-
 func TestApplyToFZVBytesCoalescesSequentialWrites(t *testing.T) {
 	t.Parallel()
 	data, err := os.ReadFile(buildTestFZV(t))
@@ -1966,73 +1928,6 @@ func TestBuildLoopAttrPatchRejections(t *testing.T) {
 		if _, err := BuildLoopAttrPatch(tc.index, tc.xf, tc.tm); err == nil {
 			t.Errorf("%s: expected an error", tc.name)
 		}
-	}
-}
-
-// TestApplyToFZFSlotBytesMatchesByName pins the in-memory slot path to
-// the file path, byte for byte, including the bank key-range fan-out.
-func TestApplyToFZFSlotBytesMatchesByName(t *testing.T) {
-	t.Parallel()
-	fzfPath := extractTestFZF(t, "../../testdata/synthetic/TECHNO.img", "FULL-DATA-FZ")
-	original, err := os.ReadFile(fzfPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	hdr, err := fzutil.ParseFZFHeader(original)
-	if err != nil {
-		t.Fatal(err)
-	}
-	targets, _, err := fzutil.ResolveVoiceTargets(original, hdr, []string{"COWBELL"}, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	slot := targets[0]
-
-	// Key-range patches exercise the bank fan-out; LFO exercises plain
-	// header bytes.
-	keyPatches, err := BuildKeyRangePatch(40, 80, 60)
-	if err != nil {
-		t.Fatal(err)
-	}
-	lfoPatches, perr := BuildLFOPatches(0, 30, Unchanged, Unchanged, 60, 0)
-	if perr != nil {
-		t.Fatal(perr)
-	}
-	patches := make([]Edit, 0, len(keyPatches)+len(lfoPatches))
-	patches = append(patches, keyPatches...)
-	patches = append(patches, lfoPatches...)
-
-	if err := ApplyToFZFVoice(fzfPath, "COWBELL", patches); err != nil {
-		t.Fatal(err)
-	}
-	want, err := os.ReadFile(fzfPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got := make([]byte, len(original))
-	copy(got, original)
-	if err := ApplyToFZFSlotBytes(got, slot, patches); err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Error("slot-addressed patch differs from the name-addressed file patch")
-	}
-}
-
-func TestApplyToFZFSlotBytesBounds(t *testing.T) {
-	t.Parallel()
-	fzfPath := extractTestFZF(t, "../../testdata/synthetic/TECHNO.img", "FULL-DATA-FZ")
-	data, err := os.ReadFile(fzfPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	patches, _ := BuildTunePatch(0)
-	if err := ApplyToFZFSlotBytes(data, -1, patches); err == nil {
-		t.Error("expected an error for a negative slot")
-	}
-	if err := ApplyToFZFSlotBytes(data, 9999, patches); err == nil {
-		t.Error("expected an error for a slot past the voice count")
 	}
 }
 

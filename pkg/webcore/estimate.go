@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/philipcunningham/fizzle/pkg/disk"
+	"github.com/philipcunningham/fizzle/pkg/diskfs"
 	"github.com/philipcunningham/fizzle/pkg/fzutil"
 	"github.com/philipcunningham/fizzle/pkg/voicebuild"
 	"github.com/philipcunningham/fizzle/pkg/wav"
@@ -194,7 +195,7 @@ func (s *Session) profileDocument() (*docProfile, *Error) {
 		return nil, ierr
 	}
 	doc.freeSectors = img.FreeSectors()
-	doc.looseFiles = looseFileCount(img)
+	doc.looseFiles = diskfs.LooseFileCount(img)
 	if s.instrument == nil {
 		return doc, nil
 	}

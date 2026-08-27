@@ -143,18 +143,6 @@ func compactPlan(data []byte, bankCount, audioAreaStart int) (voiceAreaStart, re
 	return voiceAreaStart, requiredVoiceSectors, requiredAudioBytes, true
 }
 
-// CompactedSize returns the byte length CompactVoiceArea would shrink
-// the container to right now, computed without allocating. The free-space
-// figure uses it so reclaimable orphan audio (say after an undone import)
-// shows immediately, not only once a save compacts it (N-04).
-func CompactedSize(data []byte, bankCount, audioAreaStart int) int {
-	voiceAreaStart, vsec, abytes, ok := compactPlan(data, bankCount, audioAreaStart)
-	if !ok {
-		return len(data)
-	}
-	return voiceAreaStart + vsec*disk.SectorSize + abytes
-}
-
 // CompactEmptyBanks removes every bank sector with bstep=0 (both
 // trailing and middle gaps), packs the kept banks in order, and shifts
 // the voice+audio areas earlier by the dropped bytes. At least one bank
@@ -413,32 +401,6 @@ func DefaultBankRangePatches(data []byte, bankIdx, areaIdx int) []model.Patch {
 	setIfZero(base+disk.BankVelLowOffset+areaIdx, 0x01)
 	setIfZero(base+disk.BankVelHighOffset+areaIdx, 0x7F)
 	return patches
-}
-
-// IsBareSingleVoice reports whether the container holds exactly one voice
-// and no bank name, the only state a wrapped single-voice .img can be
-// saved back faithfully as a bare FZV. Richer content (a second voice or
-// a bank name) must be promoted to a full dump on save so it isn't
-// dropped (UXF / UXD).
-func IsBareSingleVoice(data []byte, bankCount int) bool {
-	// -1 means no voices and >0 means several; only slot 0 alone
-	// round-trips as an FZV.
-	if maxReferencedSlot(data, bankCount) != 0 {
-		return false
-	}
-	for b := 0; b < bankCount; b++ {
-		base := b * disk.SectorSize
-		off := base + disk.BankNameOffset
-		if off+disk.VoiceNameFieldSize > len(data) {
-			continue
-		}
-		for i := 0; i < disk.VoiceNameFieldSize; i++ {
-			if c := data[off+i]; c != ' ' && c != 0 {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 // maxReferencedSlot returns the highest voice-slot index referenced by

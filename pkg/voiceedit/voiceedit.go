@@ -107,22 +107,6 @@ func applyToFZFVoiceLocked(path string, voiceName string, patches []Edit) error 
 	return nil
 }
 
-// ApplyToFZFSlotBytes patches a slot and mirrors key ranges to every referencing bank site.
-func ApplyToFZFSlotBytes(data []byte, slot int, patches []Edit) error {
-	layout, err := fzutil.ResolveStandaloneFZFLayout(data)
-	if err != nil {
-		return fmt.Errorf("voiceedit: %w", err)
-	}
-	resolved, err := voicepatch.ResolveFZFSlot(data, layout, slot, patches)
-	if err != nil {
-		return fmt.Errorf("voiceedit: %w", err)
-	}
-	if err := model.Apply(data, resolved); err != nil {
-		return fmt.Errorf("voiceedit: %w", err)
-	}
-	return nil
-}
-
 // resolvePatches exposes the header resolver to package tests.
 func resolvePatches(data []byte, base int, patches []Edit) ([]model.Patch, error) {
 	return voicepatch.ResolveHeader(data, base, patches)

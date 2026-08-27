@@ -50,6 +50,34 @@ func TestAddExtractAndList(t *testing.T) {
 	}
 }
 
+func TestLooseFileCount(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []diskfs.File
+		want  int
+	}{
+		{name: "empty", want: 0},
+		{name: "full dump", files: []diskfs.File{{Name: disk.PadLabel(disk.FullDumpName), Type: disk.TypeFullDump}}, want: 0},
+		{name: "full dump and voice", files: []diskfs.File{
+			{Name: disk.PadLabel(disk.FullDumpName), Type: disk.TypeFullDump},
+			{Name: disk.PadLabel("VOICE"), Type: disk.TypeVoice},
+		}, want: 1},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			img := image(t)
+			for _, file := range test.files {
+				if err := diskfs.Add(img, []byte{1}, file); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := diskfs.LooseFileCount(img); got != test.want {
+				t.Fatalf("LooseFileCount = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
 func TestReplaceRollsBackOnFailure(t *testing.T) {
 	img := image(t)
 	file := diskfs.File{Name: disk.PadLabel("PROGRAM"), Type: disk.TypeProgram}
