@@ -114,7 +114,7 @@ wasm:
 # counts the real payload.
 web-check: wasm
 	@command -v npm >/dev/null 2>&1 || \
-	  (echo "npm not found on PATH. Install Node 22+ to run web checks." >&2; exit 1)
+	  (echo "npm not found on PATH. Install Node $(NODE_MAJOR)+ to run web checks." >&2; exit 1)
 	cd web/app && npm run check
 
 # Exercise the production React bundle against the real WASM core.
@@ -127,7 +127,7 @@ web-smoke: wasm
 docshots: wasm
 	cd web/app && npm run build && npm run docshots
 
-web-fast:
+web-fast: wasm
 	@command -v npm >/dev/null 2>&1 || \
 	  (echo "npm not found on PATH. Install Node $(NODE_MAJOR)+ to run web checks." >&2; exit 1)
 	cd web/app && npm run check:fast
