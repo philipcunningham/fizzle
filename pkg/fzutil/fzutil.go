@@ -1,4 +1,4 @@
-// Package fzutil provides FZ series format utilities shared across packages.
+// Package fzutil provides shared FZ format utilities.
 package fzutil
 
 import (
@@ -22,8 +22,7 @@ import (
 // MaxReadSize is the maximum file size accepted when reading files.
 const MaxReadSize = limits.MaxRead
 
-// DefaultRate is the highest quality sample rate supported by the FZ series
-// samplers. It is used as the default for import and conversion commands.
+// DefaultRate is the highest FZ sample rate.
 const DefaultRate = 36000
 
 // ReadBounded reads a file at path, returning an error if it exceeds maxSize bytes.
@@ -58,28 +57,19 @@ func ReadWAV(path string) (*wav.File, error) {
 	return f, nil
 }
 
-// Refusals callers distinguish: a source rate too low to resample
-// from, and audio longer than the sampler's memory holds.
+// ErrSourceRateTooLow and ErrTooLong classify resampling refusals.
 var (
 	ErrSourceRateTooLow = errors.New("fzutil: source sample rate below minimum")
 	ErrTooLong          = errors.New("fzutil: resampled length exceeds the sampler's memory")
 )
 
-// MinSampleRate is the lowest source rate Resample accepts. The WAV spec
-// sets no floor, and real audio never falls below 1 kHz. Without the bound
-// a tiny SampleRate blows the output up to gigabytes on the way to an FZ
-// rate (DefaultRate is 36 kHz).
+// MinSampleRate prevents tiny source rates from expanding into impractical output.
 const MinSampleRate = 1000
 
-// MaxResampleOut caps the resampled output length at the FZ-1's total sample
-// memory in samples. Any conversion that would exceed this cannot fit on the
-// target hardware, so we refuse rather than allocate the buffer.
+// MaxResampleOut is the sample count that fits in FZ sample memory.
 const MaxResampleOut = disk.MaxSampleRAM / disk.BytesPerSample
 
-// ResampledLen returns the sample count Resample produces for frames input
-// samples converted from src to dst, applying the same guards. Callers
-// estimating a conversion's size share it with the conversion, so the two
-// can never disagree.
+// ResampledLen estimates output using the same guards as Resample.
 func ResampledLen(frames int, src, dst uint32) (int, error) {
 	if frames <= 0 {
 		return 0, errors.New("fzutil: WAV contains no samples")
@@ -93,8 +83,7 @@ func ResampledLen(frames int, src, dst uint32) (int, error) {
 	if src == dst {
 		return frames, nil
 	}
-	// Compute the length in float64 so a pathological input can't overflow
-	// an int, then bounds-check before anything allocates.
+	// Float conversion avoids integer overflow before the allocation bound applies.
 	outLenF := math.Round(float64(frames) * float64(dst) / float64(src))
 	if outLenF > float64(MaxResampleOut) {
 		return 0, fmt.Errorf("%w: %.0f exceeds maximum %d samples", ErrTooLong, outLenF, MaxResampleOut)
@@ -106,8 +95,7 @@ func ResampledLen(frames int, src, dst uint32) (int, error) {
 	return outLen, nil
 }
 
-// Resample converts f.Samples to targetRate using linear interpolation.
-// Returns a copy when the rates are equal.
+// Resample uses linear interpolation and copies samples when rates match.
 func Resample(f *wav.File, targetRate uint32) ([]int16, error) {
 	outLen, err := ResampledLen(len(f.Samples), f.SampleRate, targetRate)
 	if err != nil {
@@ -124,8 +112,7 @@ func Resample(f *wav.File, targetRate uint32) ([]int16, error) {
 	srcRate := int64(f.SampleRate)
 	dstRate := int64(targetRate)
 	for i := range outLen {
-		// Fixed-point position in the source: (i * srcRate) / dstRate, in
-		// int64 to avoid platform-dependent floating point rounding.
+		// Integer positions avoid platform-dependent floating-point rounding.
 		num := int64(i) * srcRate
 		lo := int(num / dstRate)
 		if lo >= srcLen {
@@ -136,8 +123,7 @@ func Resample(f *wav.File, targetRate uint32) ([]int16, error) {
 		if hi >= srcLen {
 			hi = srcLen - 1
 		}
-		// Linear interpolation: src[lo] + (src[hi]-src[lo]) * rem / dstRate,
-		// with the multiply in int64 so int16 * int64 can't overflow.
+		// int64 prevents the interpolation product from overflowing.
 		a := int64(src[lo])
 		b := int64(src[hi])
 		v := a + (b-a)*rem/dstRate
@@ -146,9 +132,7 @@ func Resample(f *wav.File, targetRate uint32) ([]int16, error) {
 	return out, nil
 }
 
-// VoiceName derives a normalised FZ voice name from a file path stem.
-// It uppercases, replaces runs of non-alphanumeric characters with a space,
-// and truncates to 12 characters, the FZ series display limit.
+// VoiceName normalizes a path stem for the 12-character FZ display.
 func VoiceName(path string) string {
 	stem := filepath.Base(path)
 	stem = strings.TrimSuffix(stem, filepath.Ext(stem))
@@ -174,8 +158,7 @@ func VoiceName(path string) string {
 	return name
 }
 
-// ReadFZV reads an FZV voice file at path, enforcing a minimum size of one
-// sector (1024 bytes) to ensure the voice header is present.
+// ReadFZV reads an FZV containing at least one header sector.
 func ReadFZV(path string) ([]byte, error) {
 	data, err := ReadBounded(path, MaxReadSize)
 	if err != nil {
@@ -187,15 +170,7 @@ func ReadFZV(path string) ([]byte, error) {
 	return data, nil
 }
 
-// FZFHeader holds the parsed header metadata from an FZF full dump file.
-//
-// NVoice is the inferred file-level voice count (the spec's `vn`) obtained
-// by walking the voice area. BStep0 is the raw bstep value from bank 0 of
-// the file (which counts key splits in that bank, not voices); the two
-// agree on most files but diverge on factory drum kits where several key
-// splits share a single voice via vp[]. Callers that need the spec
-// definition of "voice area size" should use NVoice. fzfinfo, fzfmidi, and
-// voiceunpack share this header parse.
+// FZFHeader holds resolved full-dump geometry. BStep0 counts bank splits, while NVoice counts file-level voice slots.
 type FZFHeader struct {
 	NVoice         int
 	BStep0         int
@@ -203,14 +178,7 @@ type FZFHeader struct {
 	VoiceAreaStart int
 }
 
-// ParseFZFHeader reads and validates the header of an FZF full dump.
-//
-// The voice count is inferred by walking the voice area, not trusted from
-// the bank sector's bstep. bstep is per-bank and counts key splits, several
-// of which vp[] can map onto one voice. The spec sizes the voice area from
-// a file-level `vn` in the dBP file head, and a standalone FZF pulled out
-// by `disk get` has lost the dBP. See llm-wiki/topics/voice-area-sizing.md
-// for the full rationale. bstep stays available as BStep0 for diagnostics.
+// ParseFZFHeader resolves standalone geometry by walking voice slots. See llm-wiki/topics/voice-area-sizing.md.
 func ParseFZFHeader(data []byte) (*FZFHeader, error) {
 	if len(data) < disk.SectorSize {
 		return nil, fmt.Errorf("fzutil: FZF too small (%d bytes, need at least %d)", len(data), disk.SectorSize)
@@ -221,9 +189,7 @@ func ParseFZFHeader(data []byte) (*FZFHeader, error) {
 	}
 	nBankSectors := countBankSectors(data)
 	voiceAreaStart := nBankSectors * disk.SectorSize
-	// Bank 0's bstep doesn't cover voices in banks 1..N. countAllVoices sums
-	// every bank's bstep for the walk bound, so nvoice spans the whole
-	// voice area.
+	// Every bank contributes to the walk bound.
 	nvoice := countAllVoices(data)
 	if nvoice == 0 {
 		return nil, fmt.Errorf("fzutil: no valid voice headers found in voice area")
@@ -236,11 +202,7 @@ func ParseFZFHeader(data []byte) (*FZFHeader, error) {
 	}, nil
 }
 
-// parseFZFHeaderWithVoiceCount parses under the DIS tail's voice
-// count, validating the slots it claims. Zeroed bytes read as
-// placeholder slots, so the effective ceiling is geometry: a count
-// whose voice area runs past the data errors.
-// See llm-wiki/topics/voice-area-sizing.md.
+// parseFZFHeaderWithVoiceCount validates geometry under DIS authority. See llm-wiki/topics/voice-area-sizing.md.
 func parseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
 	if len(data) < disk.SectorSize {
 		return nil, fmt.Errorf("fzutil: FZF too small (%d bytes, need at least %d)", len(data), disk.SectorSize)
@@ -271,33 +233,26 @@ func parseFZFHeaderWithVoiceCount(data []byte, vn int) (*FZFHeader, error) {
 	}, nil
 }
 
-// VoiceCountSource names where a resolved dump's voice count came
-// from.
+// VoiceCountSource identifies voice-count authority.
 type VoiceCountSource uint8
 
-// The three ways a dump's voice count resolves.
+// VoiceCountWalk, VoiceCountDIS, and VoiceCountMarker identify count authority.
 const (
 	VoiceCountWalk VoiceCountSource = iota
 	VoiceCountDIS
 	VoiceCountMarker
 )
 
-// voiceMarkerMagic guards the voice-count marker record: the offset
-// holds firmware garbage on real dumps. The trailing digit is the
-// record version.
+// voiceMarkerMagic distinguishes fizzle metadata from firmware garbage at the same offset.
 var voiceMarkerMagic = [4]byte{'f', 'z', 'v', '1'}
 
-// After the magic: the count, the dump length, and a CRC32 over the
-// structural bytes with the record zeroed, so a record that outlives
-// an edit dies with it.
 const (
 	markerCountOffset = disk.BankVoiceMarkerOffset + 4
 	markerLenOffset   = disk.BankVoiceMarkerOffset + 6
 	markerSumOffset   = disk.BankVoiceMarkerOffset + 12
 )
 
-// markerChecksum hashes the dump's structural region (banks and the
-// vn-sized voice area) with the marker record zeroed.
+// markerChecksum excludes its own marker record.
 func markerChecksum(data []byte, vn int) uint32 {
 	end := countBankSectors(data)*disk.SectorSize + disk.VoiceAreaSectors(vn)*disk.SectorSize
 	if end > len(data) {
@@ -308,8 +263,7 @@ func markerChecksum(data []byte, vn int) uint32 {
 	return crc32.ChecksumIEEE(region)
 }
 
-// StampVoiceCountMarker writes the voice-count record into a
-// standalone dump copy.
+// StampVoiceCountMarker writes voice-count authority into a standalone dump.
 func StampVoiceCountMarker(data []byte, vn int) {
 	if len(data) < disk.BankVoiceMarkerOffset+disk.BankVoiceMarkerSize || vn < 1 || vn > disk.MaxVoices {
 		return
@@ -320,8 +274,7 @@ func StampVoiceCountMarker(data []byte, vn int) {
 	binary.LittleEndian.PutUint32(data[markerSumOffset:], markerChecksum(data, vn))
 }
 
-// ClearVoiceCountMarker zeroes the marker record where the magic
-// matches; firmware garbage at the offset stays byte for byte.
+// ClearVoiceCountMarker removes only a recognized fizzle marker.
 func ClearVoiceCountMarker(data []byte) {
 	if len(data) < disk.BankVoiceMarkerOffset+disk.BankVoiceMarkerSize {
 		return
@@ -332,9 +285,7 @@ func ClearVoiceCountMarker(data []byte) {
 	clear(data[disk.BankVoiceMarkerOffset : disk.BankVoiceMarkerOffset+disk.BankVoiceMarkerSize])
 }
 
-// MarkerVoiceCount decodes the marker record's count, 0 unless the
-// magic, the recorded length, and the structural checksum all hold.
-// The count acceptance policy lives in the resolver alone.
+// MarkerVoiceCount returns a validated marker count or zero.
 func MarkerVoiceCount(data []byte) int {
 	if len(data) < disk.BankVoiceMarkerOffset+disk.BankVoiceMarkerSize {
 		return 0
@@ -355,15 +306,7 @@ func MarkerVoiceCount(data []byte) int {
 	return vn
 }
 
-// inferVoiceCount walks voice slots from voiceAreaStart and counts the
-// contiguous ones that are plausible active voices or explicit
-// PlaybackModeNoSound placeholders. It stops at the first slot that doesn't
-// look like a voice header, the boundary where the audio area begins.
-// bstep is only an upper bound: it can exceed vn when several key splits
-// share a voice via vp[]. A bstep below vn would under-count, since the
-// min(bstep, MaxVoices) bound stops the walk early. No real-world FZF does
-// that, and an under-count beats over-walking arbitrary bytes past the
-// slot region.
+// inferVoiceCount walks plausible slots up to the split-count bound. See llm-wiki/topics/voice-area-sizing.md.
 func inferVoiceCount(data []byte, voiceAreaStart, bstep int) int {
 	upper := bstep
 	if upper > disk.MaxVoices {
@@ -383,15 +326,7 @@ func inferVoiceCount(data []byte, voiceAreaStart, bstep int) int {
 	return n
 }
 
-// countAllVoices returns the inferred total voice count across all bank
-// sectors. It sums bstep from every valid bank sector (clamped to
-// MaxVoices) and uses that sum as the upper bound for InferVoiceCount.
-//
-// Bank 0's bstep alone is an unreliable bound on a multi-bank dump: a bstep
-// belongs to that bank's key splits and misses voices living only in later
-// banks. The sum is safe, overshooting when vp[] shares voices across
-// banks, and the walk-and-validate step trims the overshoot. See
-// ParseFZFHeader for why the count is walked rather than read.
+// countAllVoices uses every bank's split count as a bounded walk limit.
 func countAllVoices(data []byte) int {
 	nBanks := countBankSectors(data)
 	total := 0
@@ -410,18 +345,7 @@ func countAllVoices(data []byte) int {
 	return inferVoiceCount(data, voiceAreaStart, total)
 }
 
-// countBankSectors returns the number of consecutive valid bank sectors at the
-// start of a raw FZF byte slice. Real hardware full dumps can contain up to 8
-// banks; each bank sector has a non-zero voice count and a printable name at
-// offset 0x282. Returns at least 1.
-//
-// Note: a sector with bstep=0 is NOT counted as a bank, even with a
-// printable name. Single-voice FZFs (from `fizzle voice import`) seed the
-// voice-area sector with the voice name at offset 0x282 alongside bstep=0.
-// Requiring bstep>0 keeps the bank and voice-area boundary unambiguous.
-// Callers that produce empty trailing banks (auto-grow on rename, or
-// assign-skip) must compact them at save time, or those banks vanish on
-// reload.
+// countBankSectors counts consecutive named banks with nonzero split counts. Empty trailing banks don't survive reload.
 func countBankSectors(data []byte) int {
 	n := 1
 	for i := 1; i < disk.MaxBanks; i++ {
@@ -442,22 +366,12 @@ func countBankSectors(data []byte) int {
 	return n
 }
 
-// OverCapacity reports whether sizeBytes exceeds the usable data
-// capacity of a single FZ series floppy disk.
+// OverCapacity reports whether bytes exceed one FZ floppy.
 func OverCapacity(sizeBytes int) bool {
 	return sizeBytes > disk.UsableDataSize
 }
 
-// BankVoiceEntry holds the subset of voice metadata extracted from the bank
-// sector plus voice header that is common to both bank dumps (FZB) and full
-// dumps (FZF). Callers compose this into their own entry types and add any
-// format-specific fields on top.
-//
-// BankVolume is the per-voice bvol byte from the bank sector (spec §2-2,
-// `bvol[64]`, range 0-127). Voicebuild writes DefaultBankVolume (0) for
-// fresh dumps to match factory Casio disks (which sit in 0..27); factory
-// and shareware FZFs commonly carry small non-zero values. The field's
-// semantics aren't fully understood; see DefaultBankVolume.
+// BankVoiceEntry combines metadata shared by bank and full dumps. BankVolume remains uninterpreted.
 type BankVoiceEntry struct {
 	Index       int
 	Name        string
@@ -471,10 +385,7 @@ type BankVoiceEntry struct {
 	BankVolume  uint8
 }
 
-// VoiceEntry is the rendered voice-slot record shared between fzbinfo
-// (bank dumps) and fzfinfo (full dumps). It holds the 11 fields that are
-// meaningful for both file types. fzfinfo extends this type with
-// audio-only fields (rate index, duration, has-loop) via struct embedding.
+// VoiceEntry is the rendered metadata shared by bank and full dumps.
 type VoiceEntry struct {
 	Index        int    `json:"index"`
 	Name         string `json:"name"`
@@ -489,35 +400,13 @@ type VoiceEntry struct {
 	BankVolume   uint8  `json:"bank_volume"`
 }
 
-// BankSite identifies one (bank, key-split) location where a voice slot is
-// referenced via a bank sector's `vp[]` array (spec §2-2). On a multi-bank
-// FZF a single voice header in the voice area may be referenced from any
-// number of (bank, split) sites; each site carries its own htch/ltch/mchn/
-// gchn/bvol/cent value indexed by SplitIdx within the bank at BankIdx.
-//
-// fizzle's own voicebuild emits single-bank dumps with identity `vp[i]=i`,
-// so every voice slot there has exactly one site at {BankIdx: 0, SplitIdx:
-// voiceSlot}. Real-hardware multi-bank dumps fan one slot across several
-// banks (TECHNO.img references slot 10 from banks 1-4 and 6-7 at distinct
-// key splits).
+// BankSite identifies a bank split whose vp entry references a voice slot.
 type BankSite struct {
 	BankIdx  int // 0..hdr.NBankSectors-1
 	SplitIdx int // 0..bstep[BankIdx]-1
 }
 
-// FindBankSitesForVoice walks every bank sector in data and returns the
-// (bank, split) sites whose vp[SplitIdx] equals voiceSlot. The returned
-// slice is in bank-then-split order, so the first element is the
-// canonical "owning" site for read-display callers. An empty result means
-// no bank references the voice (e.g. an orphan voice header); callers
-// that mutate per-voice bank metadata must skip such slots rather than
-// silently write into bank 0.
-//
-// Spec context: §2-2 defines `vp[64]` as the per-bank array mapping each
-// key-split index to a voice slot (0-63). The bank sector's per-voice
-// arrays (hwid, lwid, htch, ltch, cent, mchn, gchn, bvol) are likewise
-// indexed by key-split, not by voice slot. Indexing them by voice slot
-// silently drops any voice that lives only in banks 1-7.
+// FindBankSitesForVoice returns referencing splits in bank order. Bank metadata uses split indices, not voice-slot indices.
 func FindBankSitesForVoice(data []byte, hdr *FZFHeader, voiceSlot int) []BankSite {
 	if hdr == nil {
 		return nil
@@ -546,9 +435,7 @@ func FindBankSitesForVoice(data []byte, hdr *FZFHeader, voiceSlot int) []BankSit
 	return sites
 }
 
-// BankSliceAt returns the 1024-byte bank sector at bankIdx, or nil if the
-// data is too small to contain it. Use with BankSite.BankIdx when reading
-// per-voice bank fields at SplitIdx.
+// BankSliceAt returns a bank sector or nil when unavailable.
 func BankSliceAt(data []byte, bankIdx int) []byte {
 	off := bankIdx * disk.SectorSize
 	if off+disk.SectorSize > len(data) {
@@ -557,13 +444,7 @@ func BankSliceAt(data []byte, bankIdx int) []byte {
 	return data[off : off+disk.SectorSize]
 }
 
-// BankSectorShowsVelocity reports whether any voice slot in the voice area
-// has a non-default velocity range at any of its bank sites. On a
-// multi-bank FZF the velocity range belongs to the (bank, split) pair, not
-// to the voice slot, so this visits every site of every voice. The (0,0)
-// state counts too: it silences the voice. Spec §1-5 puts htch and ltch at
-// 1-127, so that range never matches a note-on velocity, and the user
-// should see the voice is unreachable.
+// BankSectorShowsVelocity reports whether any bank site has a nondefault or silent velocity range.
 func BankSectorShowsVelocity(data []byte, hdr *FZFHeader) bool {
 	if hdr == nil {
 		return false
@@ -587,12 +468,7 @@ func BankSectorShowsVelocity(data []byte, hdr *FZFHeader) bool {
 	return false
 }
 
-// BankSectorShowsVolume reports whether any voice slot in the voice area
-// carries a non-default bvol at any of its bank sites (spec §2-2, range
-// 0-127). Voicebuild writes DefaultBankVolume (0) on fresh dumps to match
-// factory Casio disks; factory voices often carry small non-zero bvols to
-// balance per-voice mix levels, so the info commands show the column only
-// when it says something. Mirrors BankSectorShowsVelocity.
+// BankSectorShowsVolume reports whether any bank site has nondefault volume.
 func BankSectorShowsVolume(data []byte, hdr *FZFHeader) bool {
 	if hdr == nil {
 		return false
@@ -611,22 +487,7 @@ func BankSectorShowsVolume(data []byte, hdr *FZFHeader) bool {
 	return false
 }
 
-// ParseBankVoiceEntry extracts the shared voice metadata for voice slot
-// voiceSlot. The voice header is read from voiceArea at the offset for
-// voiceSlot; the bank metadata (key range, MIDI channel, output, bvol) is
-// read from the (bank, split) site identified by the bank slice and
-// splitIdx.
-//
-// On a single-bank FZF (anything voicebuild produces) callers pass
-// bank=data[:SectorSize] and splitIdx=voiceSlot, the identity vp[i]=i
-// case. On multi-bank FZFs callers must first look up the voice's BankSite
-// via FindBankSitesForVoice and pass the matching bank slice and SplitIdx.
-// The metadata then comes from the bank that defines the voice, not always
-// from bank 0.
-//
-// Returns false when the voice slot is silenced (loop mode
-// PlaybackModeNoSound) or when voiceArea is too short to hold the voice
-// header.
+// ParseBankVoiceEntry combines one voice header with one referencing bank split. It rejects silent or truncated slots.
 func ParseBankVoiceEntry(bank, voiceArea []byte, splitIdx, voiceSlot int) (BankVoiceEntry, bool) {
 	voff := disk.VoiceSlotOffset(0, voiceSlot)
 	if voff+disk.VoiceHeaderUsed > len(voiceArea) {
@@ -676,8 +537,7 @@ func ParseBankVoiceEntry(bank, voiceArea []byte, splitIdx, voiceSlot int) (BankV
 	}, true
 }
 
-// ReadFZF reads an FZF full dump file at path, validates its header, and
-// returns the raw data along with the parsed header.
+// ReadFZF reads bytes and resolved geometry from an FZF.
 func ReadFZF(path string) ([]byte, *FZFHeader, error) {
 	data, err := ReadBounded(path, MaxReadSize)
 	if err != nil {
@@ -691,9 +551,7 @@ func ReadFZF(path string) ([]byte, *FZFHeader, error) {
 	return data, hdr, nil
 }
 
-// ExtractStoredNames reads the trimmed voice names from an FZF byte slice
-// using the offsets in hdr. Names that fall outside the data slice are
-// returned as empty strings, preserving voice index alignment.
+// ExtractStoredNames preserves slot alignment by returning empty names for unavailable slots.
 func ExtractStoredNames(data []byte, hdr *FZFHeader) []string {
 	storedNames := make([]string, hdr.NVoice)
 	for i := range hdr.NVoice {
@@ -706,15 +564,7 @@ func ExtractStoredNames(data []byte, hdr *FZFHeader) []string {
 	return storedNames
 }
 
-// ResolveVoiceTargets returns the voice indices selected by CLI-style
-// selectors along with the full list of stored voice names for the FZF.
-// If allVoices is true, every voice index is returned. Otherwise each name
-// in voiceNames must match a stored name (case-insensitive); when a name
-// has no match, an error listing the available voice names is returned.
-//
-// Callers must have already validated that exactly one of voiceNames or
-// allVoices is supplied. The returned error carries the "fzutil:" prefix
-// and callers may wrap it.
+// ResolveVoiceTargets resolves case-insensitive CLI selectors and lists stored names.
 func ResolveVoiceTargets(data []byte, hdr *FZFHeader, voiceNames []string, allVoices bool) (targets []int, storedNames []string, err error) {
 	storedNames = ExtractStoredNames(data, hdr)
 	if allVoices {

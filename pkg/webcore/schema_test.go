@@ -14,7 +14,6 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/voiceimport"
 )
 
-// importedSession returns a session holding one imported voice.
 func importedSession(t *testing.T) (*Session, string) {
 	t.Helper()
 	s := NewSession()
@@ -73,22 +72,15 @@ func TestSchemaShape(t *testing.T) {
 			t.Fatalf("field %q has unknown kind %q", f.ID, f.Kind)
 		}
 	}
-	// R15 used to require lfoAttack and lfoQ here, because other tools
-	// hide them. Measurement retired it. The panel derives attack from
-	// its DELAY row and has no row at all for the resonance depth, and
-	// the resonance depth can't be used on a physical unit.
+	// The panel derives attack from DELAY and has no resonance-depth control.
 	if seen["lfoAttack"] || seen["lfoQ"] {
 		t.Fatal("lfoAttack and lfoQ have no panel control and should not be in the schema")
 	}
-	// The panel's LFO SYNC row does earn a control.
 	if !seen["lfoSync"] {
 		t.Fatal("lfoSync missing from the schema")
 	}
 }
 
-// R14: ranges and clamping are defined solely by the core's schema.
-// Property test: any integer sent to any numeric field lands clamped
-// inside the field's declared range, and in-range values land exactly.
 func TestSetParamClampsEveryField(t *testing.T) {
 	s, voice := importedSession(t)
 	rng := rand.New(rand.NewSource(1)) // #nosec G404 -- deterministic test data
@@ -190,8 +182,6 @@ func TestSetParamInvalidLeavesStateUntouched(t *testing.T) {
 	}
 }
 
-// Q1 again: an edit through the session equals the CLI pipeline (disk
-// get, fzv edit, replace on image) on the same input.
 func TestSetParamMatchesCLIPipeline(t *testing.T) {
 	wavData := wavBytes(t, 4000)
 

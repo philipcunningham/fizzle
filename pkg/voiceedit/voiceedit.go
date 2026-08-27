@@ -1,6 +1,4 @@
-// Package voiceedit provides in-place byte patching for FZV and FZF voice
-// parameters. Patches are applied atomically: the file is read, modified in
-// memory, and written back via fileutil.WriteAtomic.
+// Package voiceedit patches FZV and FZF voice parameters atomically.
 package voiceedit
 
 import (
@@ -20,20 +18,17 @@ import (
 	"github.com/philipcunningham/fizzle/pkg/voicepatch"
 )
 
-// Sentinel errors. Wrap with %w; match with errors.Is, not on message text.
+// ErrNotVoiceFile, ErrUnsupportedPatch, and ErrFileTooSmall classify edit refusals.
 var (
 	ErrNotVoiceFile     = errors.New("voiceedit: file does not appear to be a voice file")
 	ErrUnsupportedPatch = voicepatch.ErrUnsupportedSize
 	ErrFileTooSmall     = errors.New("voiceedit: file too small")
 )
 
-// Edit describes a modification to a voice header. When Bytes is non-nil it
-// is written verbatim at Offset and Size/Value are ignored. Otherwise Size
-// (1 or 2) bytes from Value are written as little-endian.
+// Edit describes a voice-header mutation.
 type Edit = voicepatch.Edit
 
-// ApplyToFZVBytes applies edits to FZV voice file bytes in place:
-// the same validation and patching as ApplyToFZV with no filesystem.
+// ApplyToFZVBytes applies validated edits to FZV bytes in place.
 func ApplyToFZVBytes(data []byte, patches []Edit) error {
 	if len(data) < disk.SectorSize {
 		return fmt.Errorf("%w (%d bytes, need at least %d)", ErrFileTooSmall, len(data), disk.SectorSize)
@@ -51,11 +46,7 @@ func ApplyToFZVBytes(data []byte, patches []Edit) error {
 	return nil
 }
 
-// ApplyToFZV reads the FZV file at path, applies patches to the voice header,
-// and writes the result back atomically. Offsets are relative to the start of
-// the voice header (byte 0 of the file). The read-modify-write sequence is
-// serialised across processes via fileutil.WithFileLock so concurrent writers
-// can't lose each other's edits.
+// ApplyToFZV applies header-relative patches under a cross-process lock.
 func ApplyToFZV(path string, patches []Edit) error {
 	return fileutil.WithFileLock(path, func() error {
 		return applyToFZVLocked(path, patches)
@@ -77,9 +68,7 @@ func applyToFZVLocked(path string, patches []Edit) error {
 	return nil
 }
 
-// ApplyToFZFVoice reads the FZF file at path, locates the voice by name,
-// applies edits to that voice's header, and writes back atomically. It
-// takes the same cross-process lock as ApplyToFZV.
+// ApplyToFZFVoice atomically patches the named voice under a cross-process lock.
 func ApplyToFZFVoice(path string, voiceName string, patches []Edit) error {
 	return fileutil.WithFileLock(path, func() error {
 		return applyToFZFVoiceLocked(path, voiceName, patches)
@@ -118,10 +107,7 @@ func applyToFZFVoiceLocked(path string, voiceName string, patches []Edit) error 
 	return nil
 }
 
-// ApplyToFZFSlotBytes applies edits to one voice slot's header inside
-// FZF full dump bytes, in place: the in-memory, slot-addressed sibling
-// of ApplyToFZFVoice. Key-range patches mirror into every bank site
-// that references the slot, exactly as the file-path edit does.
+// ApplyToFZFSlotBytes patches a slot and mirrors key ranges to every referencing bank site.
 func ApplyToFZFSlotBytes(data []byte, slot int, patches []Edit) error {
 	layout, err := fzutil.ResolveStandaloneFZFLayout(data)
 	if err != nil {
@@ -137,8 +123,7 @@ func ApplyToFZFSlotBytes(data []byte, slot int, patches []Edit) error {
 	return nil
 }
 
-// resolvePatches retains the package-local seam used by characterization
-// tests while the canonical resolver lives in voicepatch.
+// resolvePatches exposes the header resolver to package tests.
 func resolvePatches(data []byte, base int, patches []Edit) ([]model.Patch, error) {
 	return voicepatch.ResolveHeader(data, base, patches)
 }
@@ -159,23 +144,14 @@ func findVoiceIndex(data []byte, hdr *fzutil.FZFHeader, name string) (int, error
 	return -1, fmt.Errorf("voiceedit: voice %q not found", name)
 }
 
-// BuildLFOPatches creates patches for LFO parameters. Pass Unchanged for any
-// parameter to leave it unmodified. origLFOName is the current value of the
-// lfo_name byte (spec offset 0x9E): bits 0-6 hold the waveform index, bit 7
-// is the phase-sync flag. It is used to preserve the phase-sync flag when
-// only the waveform index changes; see disk.LFOWaveformMask / LFOPhaseFlag.
-// The delay, attack and resonance depth are absent on purpose. The
-// panel's DELAY row writes the delay word and the attack byte together,
-// so BuildLFODelayPatches owns both, and no panel row reaches the
-// resonance depth at all. Taking them here would let a caller write a
-// raw delay and skip the attack the machine pairs with it.
+// BuildLFOPatches preserves the phase bit beside the waveform. Delay and its derived attack belong to BuildLFODelayPatches; the panel can't edit resonance depth.
 func BuildLFOPatches(wave, rate, pitch, amp, filter int, origLFOName uint8) ([]Edit, error) {
 	var patches []Edit
 	if wave != Unchanged {
 		if err := ValidateWaveform(wave); err != nil {
 			return nil, err
 		}
-		// A clean byte(wave) would silently clear bit 7 (phase-sync).
+		// Preserve phase sync in the shared waveform byte.
 		val := uint8(wave)&disk.LFOWaveformMask | (origLFOName & disk.LFOPhaseFlag) //nolint:gosec // wave is validated above (0..5)
 		patches = append(patches, Edit{Offset: disk.VoiceLFONameOffset, Size: 1, Value: uint16(val)})
 	}
@@ -201,13 +177,7 @@ func BuildLFOPatches(wave, rate, pitch, amp, filter int, origLFOName uint8) ([]E
 	return patches, nil
 }
 
-// BuildModulationPatches creates patches for modulation routing parameters.
-// KF parameters (dcaKF, dcaRS, dcfKF, dcfRS) use the hardware display scale
-// (-15 to +15). velDCAKF, velDCFKF, velDCARS and velDCFRS are signed -127 to
-// +127 and are stored as two's-complement bytes. velDCQKF is unsigned 0 to
-// 127: the panel's row has no sign column and refuses to go below zero, so
-// spec §2-1's blanket claim is wrong for that one. Pass Unchanged for any
-// parameter to leave it unmodified.
+// BuildModulationPatches uses panel scales and preserves fields set to Unchanged. See llm-wiki/topics/display-scales.md.
 func BuildModulationPatches(dcaKF, dcaRS, dcfKF, dcfRS, velDCAKF, velDCFKF, velDCQKF, velDCARS, velDCFRS int) ([]Edit, error) {
 	type kfParam struct {
 		name   string
@@ -245,8 +215,6 @@ func BuildModulationPatches(dcaKF, dcaRS, dcfKF, dcfRS, velDCAKF, velDCFKF, velD
 		if p.val != Unchanged {
 			lo := -127
 			if p.name == "vel-dcq-kf" {
-				// The panel's row carries no sign column and refuses to
-				// go below zero, whatever spec section 2-1 says.
 				lo = 0
 			}
 			if err := ValidateByte(p.name, p.val, lo, 127); err != nil {
@@ -258,10 +226,7 @@ func BuildModulationPatches(dcaKF, dcaRS, dcfKF, dcfRS, velDCAKF, velDCFKF, velD
 	return patches, nil
 }
 
-// BuildLFODelayPatches creates the patches the panel's DELAY row
-// writes. The row has no independent attack control: moving it writes
-// the delay word and the attack byte together, so both come from the
-// one display value.
+// BuildLFODelayPatches writes the delay and derived attack controlled by one panel row.
 func BuildLFODelayPatches(display int) ([]Edit, error) {
 	if display < 0 || display > disk.MaxLFODelayDisplay {
 		return nil, fmt.Errorf("voiceedit: lfo-delay must be 0 to %d, got %d", disk.MaxLFODelayDisplay, display)
@@ -272,8 +237,7 @@ func BuildLFODelayPatches(display int) ([]Edit, error) {
 	}, nil
 }
 
-// BuildLFOSyncPatch sets the phase-sync flag in the lfo_name byte,
-// keeping the waveform index beside it.
+// BuildLFOSyncPatch changes phase sync without changing the waveform.
 func BuildLFOSyncPatch(option string, origLFOName uint8) ([]Edit, error) {
 	val := origLFOName & disk.LFOWaveformMask
 	switch option {
@@ -286,11 +250,7 @@ func BuildLFOSyncPatch(option string, origLFOName uint8) ([]Edit, error) {
 	return []Edit{{Offset: disk.VoiceLFONameOffset, Size: 1, Value: uint16(val)}}, nil
 }
 
-// BuildFilterPatches creates patches for filter cutoff and resonance.
-// Both use the hardware display scale: cutoff 0 to 127, resonance 0 to 127.
-// The resonance byte is stored directly (the full byte is used by the hardware,
-// not just the upper nibble as the spec suggests). Pass Unchanged to leave
-// a parameter unmodified.
+// BuildFilterPatches uses the panel's full-byte cutoff and resonance scales.
 func BuildFilterPatches(cutoff, resonance int) ([]Edit, error) {
 	var patches []Edit
 	if cutoff != Unchanged {
@@ -308,14 +268,7 @@ func BuildFilterPatches(cutoff, resonance int) ([]Edit, error) {
 	return patches, nil
 }
 
-// BuildNamePatch creates a patch for the voice name (max 12 characters). The
-// 12-byte padded name is followed by the two zero bytes the FZ voice header
-// layout requires.
-//
-// Case is stored verbatim. The FZ-1 supports mixed-case names (factory disks
-// carry "All Voices"), and upper-casing on commit mutates a field the user
-// only tabbed through. findVoiceIndex matches case-insensitively, so lookups
-// still work either way.
+// BuildNamePatch preserves case and writes the padded 14-byte name field.
 func BuildNamePatch(name string) ([]Edit, error) {
 	if len(name) > disk.LabelSize {
 		return nil, fmt.Errorf("voiceedit: name %q exceeds %d characters", name, disk.LabelSize)
