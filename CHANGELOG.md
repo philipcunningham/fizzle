@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased (last updated 2026-08-26)
+## Unreleased (last updated 2026-08-27)
+
+- The Sample panel's rate caption sits under its value instead of running on from it, so the browser reads `18000 Hz` over `Sample rate` rather than `18000 HzSample rate`.
 
 ## v0.7.0 (2026-08-26)
 
