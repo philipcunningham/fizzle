@@ -113,3 +113,7 @@ Added the read address `F000:6562` and inverse write address `F000:6725` to the 
 ## [2026-08-27] lint | Current-source audit
 
 Audited every maintained page against current fizzle source and all 62 cited firmware addresses. Corrected stale TUI, corpus, effect command, multi-disk marker, and package-routing claims. Unwrapped prose throughout the maintained wiki and removed completed migration history from current pages.
+
+## [2026-08-27] ingest | Hardware corpus tracked
+
+Added the authorized hardware corpus to `testdata/corpus`. Corpus regression tests now run from a clean checkout without an installer or external archive.

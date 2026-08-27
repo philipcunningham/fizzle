@@ -210,4 +210,4 @@ asm-tools:
 	  (echo "Homebrew required (see https://brew.sh)" >&2; exit 1)
 	brew install nasm
 
-.PHONY: build license-tools tools tools-check licenses test integration-test corpus fuzz-seed fmt fmt-check vet lint lint-go lint-docs wasm wasm-check web-fast web-check web-smoke docshots check-fast check-full check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools
+.PHONY: build license-tools tools tools-check licenses test integration-test fuzz-seed fmt fmt-check vet lint lint-go lint-docs wasm wasm-check web-fast web-check web-smoke docshots check-fast check-full check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools

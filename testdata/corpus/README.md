@@ -1,6 +1,6 @@
 # Casio FZ-1 corpus
 
-The optional hardware corpus isn't stored, downloaded, or packaged by fizzle. Place authorized fixtures here to enable corpus tests.
+This directory contains the hardware corpus used by fizzle's parser, layout, mutation, and snapshot tests.
 
 Fixtures originate from the [Casio FZ sampler archive](https://zine.r-massive.com/casio-fz-sampler-archive/).
 
@@ -11,6 +11,8 @@ Fixtures originate from the [Casio FZ sampler archive](https://zine.r-massive.co
 | `casio-fz1-soundwaves/` | Casio Soundwaves library |
 
 `../layout-manifest.json` records provenance, evidence, parse context, file count, authority, and layout digest for each collection.
+
+Keep these binary fixtures unchanged. Add new material only with its provenance and manifest record.
 
 ## Reviewing a layout change
 

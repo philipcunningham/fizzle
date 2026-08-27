@@ -30,9 +30,6 @@ func sharedVoiceSession(t *testing.T) *Session {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "corpus",
 		"casio-fz-1-shareware-library-fzf-format", sharedVoiceDump))
-	if os.IsNotExist(err) {
-		t.Skip("full hardware corpus is not installed")
-	}
 	if err != nil {
 		t.Fatalf("read %s: %v", sharedVoiceDump, err)
 	}

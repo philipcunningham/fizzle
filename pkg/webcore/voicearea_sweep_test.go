@@ -111,7 +111,7 @@ func corpusDumps(t *testing.T) map[string]sweptDump {
 		}
 	}
 	if len(out) < 100 {
-		t.Skipf("full hardware corpus is not installed (found %d dumps)", len(out))
+		t.Fatalf("tracked hardware corpus is incomplete: found %d dumps", len(out))
 	}
 	return out
 }
@@ -231,9 +231,6 @@ func TestAddVoiceMakesJoinedSlotReachableOnCASIO066(t *testing.T) {
 	path := filepath.Join("..", "..", "testdata", "corpus",
 		"casio-fz-1-shareware-library-fzf-format", "CASIO066.FZF")
 	data, err := os.ReadFile(path) // #nosec G304 -- fixed test fixture path
-	if os.IsNotExist(err) {
-		t.Skip("full hardware corpus is not installed")
-	}
 	if err != nil {
 		t.Fatal(err)
 	}

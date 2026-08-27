@@ -75,7 +75,3 @@ lerna-debug.log*
 .eslintcache
 .stylelintcache
 .npm
-
-# Installed by `make corpus` from the pinned, hash-verified release archive.
-/testdata/corpus/*
-!/testdata/corpus/README.md
