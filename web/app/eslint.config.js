@@ -26,6 +26,9 @@ export default tseslint.config(
       boundaries,
     },
     settings: {
+      "import/resolver": {
+        node: { extensions: [".js", ".jsx", ".ts", ".tsx"] },
+      },
       "boundaries/elements": [
         { type: "boundary", pattern: "src/boundary/**" },
         { type: "core", pattern: "src/core/**" },
@@ -40,16 +43,6 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      // The compiler-era rules land with this plugin version. Two of them
-      // flag deliberate lifecycle choices, so they stay off by name rather
-      // than through a narrower rule list that would also drop the twelve
-      // this upgrade adds.
-      // "refs" flags the render-phase ref writes that keep the boot effect
-      // running once when a caller passes inline callbacks. "set-state-in-effect"
-      // flags adopting persisted sampler memory at boot. Both need a lifecycle
-      // change with its own review, not a dependency bump.
-      "react-hooks/refs": "off",
-      "react-hooks/set-state-in-effect": "off",
       ...jsxA11y.configs.recommended.rules,
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
       "@typescript-eslint/no-unused-vars": [
@@ -139,6 +132,7 @@ export default tseslint.config(
           ],
         },
       ],
+      "boundaries/no-unknown-dependencies": "error",
     },
   },
   {

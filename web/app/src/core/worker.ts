@@ -11,6 +11,8 @@ import type {
   Snapshot,
 } from "../boundary/contract";
 import "./generated/wasm_exec.js";
+// Vite resolves this virtual WASM asset through its query suffix.
+// eslint-disable-next-line boundaries/no-unknown-dependencies
 import wasmUrl from "./fizzle.wasm?url";
 
 interface FizzleCore {

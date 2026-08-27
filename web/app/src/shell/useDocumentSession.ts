@@ -26,7 +26,11 @@ export function useDocumentSession(
   // latest callbacks in refs preserves boot-once behavior for inline functions.
   const onFailureRef = useRef(onFailure);
   const onSuccessRef = useRef(onSuccess);
+  // Session callbacks stay current without making the boot effect repeat.
+  // eslint-disable-next-line react-hooks/refs
   onFailureRef.current = onFailure;
+  // Session callbacks stay current without making the boot effect repeat.
+  // eslint-disable-next-line react-hooks/refs
   onSuccessRef.current = onSuccess;
 
   useEffect(() => {
@@ -91,7 +95,11 @@ export function useDocumentSession(
     } catch {
       saved = 0;
     }
-    if (MEMORY_CHOICES.some((choice) => choice.bytes === saved)) setMemory(saved);
+    if (MEMORY_CHOICES.some((choice) => choice.bytes === saved)) {
+      // Boot adopts persisted sampler memory into the session once.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMemory(saved);
+    }
   }, [setMemory]);
 
   useEffect(() => {

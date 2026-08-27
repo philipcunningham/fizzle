@@ -33,8 +33,12 @@ export function useGestureBracket(onBegin?: () => void, onCommit?: () => void): 
   // Refs, not captures: the unmount effect runs once, and the handler
   // it holds must be the one the last render was given.
   const beginRef = useRef(onBegin);
+  // The stable bracket API calls the latest render's callback.
+  // eslint-disable-next-line react-hooks/refs
   beginRef.current = onBegin;
   const commitRef = useRef(onCommit);
+  // The stable bracket API calls the latest render's callback.
+  // eslint-disable-next-line react-hooks/refs
   commitRef.current = onCommit;
 
   useEffect(
