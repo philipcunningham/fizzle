@@ -2,3 +2,4 @@
 # Snapshot JSON files must stay LF so go-snaps comparisons
 # produce identical results on macOS, Linux, and Windows.
 testdata/snapshots/**/*.json text eol=lf
+testdata/corpus/** -text
