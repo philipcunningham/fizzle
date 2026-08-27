@@ -1,6 +1,6 @@
 module github.com/philipcunningham/fizzle
 
-go 1.26.5
+go 1.26
 
 require (
 	github.com/ebitengine/oto/v3 v3.4.1

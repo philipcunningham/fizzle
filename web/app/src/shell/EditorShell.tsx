@@ -309,6 +309,8 @@ export function EditorShell({ core }: { core: Core }) {
   // from one sample on another's waveform.
   const focusSlot = focusVoice?.slot ?? null;
   useEffect(() => {
+    // A voice change invalidates the previous voice's playhead.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPlayhead(null);
   }, [focusSlot]);
 
@@ -318,8 +320,12 @@ export function EditorShell({ core }: { core: Core }) {
     if (heldNotes.current.size === 0) setAuditioning(false);
   };
   const noteOnRef = useRef(noteOn);
+  // MIDI callbacks need the latest render without resubscribing the device.
+  // eslint-disable-next-line react-hooks/refs
   noteOnRef.current = noteOn;
   const noteOffRef = useRef(noteOff);
+  // MIDI callbacks need the latest render without resubscribing the device.
+  // eslint-disable-next-line react-hooks/refs
   noteOffRef.current = noteOff;
   useEffect(() => {
     return subscribeMIDI({
@@ -344,6 +350,8 @@ export function EditorShell({ core }: { core: Core }) {
     if (heldNotes.current.size === 0) setAuditioning(false);
   };
   const releaseHeldRef = useRef(releaseHeld);
+  // Window lifecycle listeners need the latest render without resubscribing.
+  // eslint-disable-next-line react-hooks/refs
   releaseHeldRef.current = releaseHeld;
 
   useEffect(() => {
@@ -535,6 +543,8 @@ export function EditorShell({ core }: { core: Core }) {
     const neighbour = rows?.length ? rows[Math.min(rowFocus.index, rows.length - 1)] : null;
     // An empty list still has the sidebar's own buttons to land on.
     (neighbour ?? sidebarRef.current?.querySelector<HTMLElement>("button"))?.focus();
+    // Clear the pending request after the replacement row receives focus.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRowFocus(null);
   }, [rowFocus, fileNames]);
 
