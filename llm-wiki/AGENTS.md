@@ -6,7 +6,7 @@ Knowledge of firmware behaviour comes from reverse engineering the FZ-1 firmware
 
 ## Layers
 
-Raw sources are immutable; the LLM reads them, never edits them. They include the Casio specification, an authorized corpus when installed, and FZ-1 firmware research. External references are cited by URL from their source pages; their content is never copied into this repo.
+Raw sources are immutable; the LLM reads them, never edits them. They include the Casio specification, the tracked hardware corpus, and FZ-1 firmware research. External references are cited by URL from their source pages; their content is never copied into this repo.
 
 This directory is LLM written; humans read it and direct the work. The schema co-evolves: when a rule proves wrong, update it and log the change.
 
@@ -74,7 +74,7 @@ Run `.claude/skills/llm-wiki-lint/SKILL.md` after every ingest session. It check
 - fizzle code: `pkg/fzf/document.go` and the relevant bounded view.
 - Firmware: ROM address and routine name; reverse engineering documents by filename and section.
 - Casio spec: file plus section number.
-- Corpus: collection and fixture identity, with counts for statistical claims. Add a path when the authorized corpus is installed.
+- Corpus: collection and fixture identity, with counts for statistical claims. Cite the tracked fixture path.
 
 ## Writing style
 

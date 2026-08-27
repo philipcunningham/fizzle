@@ -23,7 +23,10 @@ func skipShort(t *testing.T) {
 func requireFullCorpus(t *testing.T) {
 	t.Helper()
 	entries, err := os.ReadDir(corpusRoot)
-	if err != nil || len(entries) < 3 {
-		t.Skip("full hardware corpus is not installed")
+	if err != nil {
+		t.Fatalf("read tracked hardware corpus: %v", err)
+	}
+	if len(entries) < 3 {
+		t.Fatalf("tracked hardware corpus has %d collections, want at least 3", len(entries))
 	}
 }

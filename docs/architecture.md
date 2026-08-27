@@ -34,4 +34,4 @@ Protocol tests compare Go registration, worker dispatch, and the TypeScript cont
 
 ## Fixtures
 
-Tracked synthetic and hardware regression fixtures support offline tests. Optional hardware-corpus tests run when fixtures exist under `testdata/corpus`.
+Tracked synthetic and hardware corpus fixtures support offline tests. Corpus tests run against the real sampler files under `testdata/corpus`.
