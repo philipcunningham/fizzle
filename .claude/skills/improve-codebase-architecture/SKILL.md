@@ -10,7 +10,7 @@ Surface architectural friction and propose **deepening opportunities**: refactor
 
 This command is _informed_ by the project's domain model and built on a shared design vocabulary:
 
-- Use a fixed architecture vocabulary (**module**, **interface**, **depth**, **seam**, **adapter**, **reuse**, **locality**) and its principles (the deletion test, "the interface is the test surface", "one adapter = hypothetical seam, two = real"). Use these terms exactly in every suggestion; don't drift into "component," "service," "API," or "boundary."
+- Use a fixed architecture vocabulary: **module**, **interface**, **depth**, **seam**, **adapter**, **reuse**, and **locality**. Apply its deletion, test-surface, and adapter principles. Use these terms exactly in every suggestion; don't drift into "component," "service," "API," or "boundary."
 - The domain language in `llm-wiki/` gives names to good seams; the root `AGENTS.md` records conventions this command shouldn't re-litigate.
 
 ## Process
@@ -62,5 +62,5 @@ Side effects happen inline as decisions crystallize; update the project's domain
 
 - **Naming a deepened module after a domain concept `llm-wiki/` lacks?** File the term into the wiki with the llm-wiki-ingest skill.
 - **Sharpening a fuzzy term during the conversation?** Update the relevant `llm-wiki/` page right there.
-- **User rejects the candidate with a lasting reason?** Offer to record it as a convention in the root `AGENTS.md`, framed as: _"Want me to record this convention so future architecture reviews don't re-suggest it?"_ Only offer when the reason would actually be needed by a future explorer to avoid re-suggesting the same thing; skip ephemeral reasons ("not worth it right now") and self-evident ones.
+- **User rejects the candidate with a lasting reason?** Offer to record it as a convention in the root `AGENTS.md`. Ask: _"Want me to record this convention so future architecture reviews don't re-suggest it?"_ Only offer when a future explorer needs the reason. Skip ephemeral and self-evident reasons.
 - **Want to explore alternative interfaces for the deepened module?** Design it twice: spawn parallel sub-agents to draft two competing interfaces, then compare them before committing.

@@ -13,9 +13,6 @@ LDFLAGS = -ldflags "-X $(MODULE).Version=$(VERSION) -X $(MODULE).Commit=$(COMMIT
 # `make licenses`.
 GO_LICENSES_VERSION := v1.6.0
 GOLANGCI_LINT_VERSION := 2.13.1
-GO_VERSION := 1.26.5
-NODE_MAJOR := 26
-VALE_VERSION := 3.19.0
 
 LICENSES_DIR  := internal/licenses
 LICENSES_FILE := $(LICENSES_DIR)/THIRD_PARTY_LICENSES.txt
@@ -38,16 +35,6 @@ license-tools:
 
 tools: license-tools
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$(GOLANGCI_LINT_VERSION)
-
-tools-check:
-	@go version | grep -q 'go$(GO_VERSION)' || \
-	  (echo "Go $(GO_VERSION) required" >&2; exit 1)
-	@node --version | grep -Eq '^v$(NODE_MAJOR)\\.' || \
-	  (echo "Node $(NODE_MAJOR).x required" >&2; exit 1)
-	@golangci-lint --version | grep -q 'version $(GOLANGCI_LINT_VERSION)' || \
-	  (echo "golangci-lint $(GOLANGCI_LINT_VERSION) required" >&2; exit 1)
-	@vale --version | grep -q '$(VALE_VERSION)' || \
-	  (echo "vale $(VALE_VERSION) required" >&2; exit 1)
 
 licenses: $(LICENSES_FILE) $(PROJECT_LICENSE_EMBED)
 
@@ -114,7 +101,7 @@ wasm:
 # counts the real payload.
 web-check: wasm
 	@command -v npm >/dev/null 2>&1 || \
-	  (echo "npm not found on PATH. Install Node $(NODE_MAJOR)+ to run web checks." >&2; exit 1)
+	  (echo "npm not found on PATH. Install the Node version declared in web/app/package.json." >&2; exit 1)
 	cd web/app && npm run check
 
 # Exercise the production React bundle against the real WASM core.
@@ -129,7 +116,7 @@ docshots: wasm
 
 web-fast: wasm
 	@command -v npm >/dev/null 2>&1 || \
-	  (echo "npm not found on PATH. Install Node $(NODE_MAJOR)+ to run web checks." >&2; exit 1)
+	  (echo "npm not found on PATH. Install the Node version declared in web/app/package.json." >&2; exit 1)
 	cd web/app && npm run check:fast
 
 check-fast: fmt-check vet lint
@@ -210,4 +197,4 @@ asm-tools:
 	  (echo "Homebrew required (see https://brew.sh)" >&2; exit 1)
 	brew install nasm
 
-.PHONY: build license-tools tools tools-check licenses test integration-test fuzz-seed fmt fmt-check vet lint lint-go lint-docs wasm wasm-check web-fast web-check web-smoke docshots check-fast check-full check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools
+.PHONY: build license-tools tools licenses test integration-test corpus fuzz-seed fmt fmt-check vet lint lint-go lint-docs wasm wasm-check web-fast web-check web-smoke docshots check-fast check-full check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools

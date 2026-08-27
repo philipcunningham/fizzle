@@ -17,7 +17,7 @@ The spec (section 1-3) allows a full dump to span 2 floppies via the directory e
 **Disk 1** (`disknum = 0`) holds the entire instrument's metadata:
 
 - Bank sector `bstep` counts all voices across both disks; without the full count the sampler considers loading complete and never asks for disk 2.
-- Voice headers for every voice, including those whose audio lives on disk 2; their `wavst` values point past disk 1's local audio into the RAM region that disk 2's audio fills (wave-address semantics: [audio-block-padding](../findings/audio-block-padding.md)).
+- Voice headers cover every voice, including audio stored on disk 2. Their `wavst` values point into the RAM region filled by disk 2. See [audio-block-padding](../findings/audio-block-padding.md) for wave-address semantics.
 - DIS tail `wn` is the total wave sectors across both disks. Multi-disk saves can stamp that total at bank offset 0x290. The field can contain residue, so fizzle accepts it only when a voice crosses disk 1's audio boundary. A separate fizzle-defined record at 0x294 can carry a dump's voice count; see [voice-area-sizing](voice-area-sizing.md).
 - Audio for as many voices as fit in 1.25 MB.
 

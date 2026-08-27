@@ -10,7 +10,7 @@ make check
 
 Use `make check-fast` during development. UI changes also require `npm run visual` from `web/app`; its baselines are platform specific.
 
-Run `make tools` once to install pinned Go tools. `make tools-check` verifies Go, Node, golangci-lint, and Vale versions.
+Run `make tools` once to install pinned Go tools. mise reads `.tool-versions` for the complete local toolchain.
 
 ## Architecture
 

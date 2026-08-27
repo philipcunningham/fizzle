@@ -30,7 +30,7 @@ The FZ book reads as a repeat count from the keyboard. Its Figure 33 caption say
 
 Every usable loop named by `loop_end` alone carries `looptm = 1024`, across all 2,554 of them. No timed loop carries that value. Sustain loops run 0, 100, and 1024, the last only where one loop serves both roles. Both 0 and 1024 sit outside the spec's stated 1 to 1022.
 
-The firmware explains why the file can hold a meaningless value there. The advance runs only while the cap sits above the current loop (F000:1D1A), and note off sets the cap to `loop_end`. The end loop's timer therefore never runs, and its `looptm` is never read. The value is an authoring marker for the END designation. That matches the panel, which folds SUS and END into the time control as positions past the numbers.
+The firmware explains why the file can hold a meaningless value there. The advance runs only while the cap exceeds the current loop (F000:1D1A). Note off sets the cap to `loop_end`. The end loop's timer therefore never runs, and its `looptm` is never read. The value is an authoring marker for the END designation. That matches the panel, which folds SUS and END into the time control as positions past the numbers.
 
 ## What fizzle implements
 
@@ -38,4 +38,4 @@ Authoring writes `looptm` per [voice-authoring-defaults](../topics/voice-authori
 
 ## Open questions
 
-- What the book hears in Experiment 12 doesn't follow from a 16 ms timer alone. The timer runs only while a loop sounds, and what starts it is untraced, so the audible repeat count may come from that gating rather than from `looptm`.
+- What the book hears in Experiment 12 doesn't follow from a 16 ms timer alone. The timer runs only while a loop sounds. Its untraced start condition may determine the audible repeat count instead of `looptm` alone.
