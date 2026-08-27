@@ -1,6 +1,6 @@
 # fizzle manual
 
-This manual explains FZ concepts and hardware behavior that command help can't express. See the generated [CLI reference](cli-reference.md) for commands, arguments, flags, and ranges.
+This manual explains FZ concepts and hardware behavior that command help can't express, and the browser editor's screens. See the generated [CLI reference](cli-reference.md) for commands, arguments, flags, and ranges.
 
 Panel paths use `MENU/SUBMENU/PAGE`. Display values are numbers shown by the sampler; stored values are their encoded bytes.
 
@@ -14,7 +14,7 @@ A voice combines one sample with its key range, root key, envelopes, filter, mod
 
 A full dump combines up to 64 voices with bank mappings. The mappings assign key and velocity ranges, MIDI channels, levels, and outputs. Full dump files use `.fzf` and appear on disk as `FULL-DATA-FZ`.
 
-A standalone FZF doesn't store its voice count. fizzle infers it from bank data unless the enclosing disk supplies the count. A voice no bank plays can therefore be absent from a bare extraction. The browser editor stamps the disk's count into the file it exports, which keeps that voice.
+The Casio format gives a standalone FZF no authoritative voice count, so fizzle infers one from bank data unless the enclosing disk supplies it. A voice no bank plays can therefore be absent from a bare extraction. The browser editor adds a validated fizzle marker carrying the disk's count, which keeps that voice. Adding the file back to a disk clears the marker, so the bytes an FZ reads differ from the ones fizzle exported.
 
 ### Bank dump
 
@@ -149,17 +149,17 @@ Voice order follows the arguments passed to `fzf build`.
 
 The [browser editor](https://philipcunningham.github.io/fizzle/) runs fizzle's Go core compiled to WebAssembly. It expects a desktop Chromium browser and warns when parts it relies on are missing.
 
-![Top bar with two capacity meters and the Import, Undo, Redo, Export, and Eject buttons. A Disk files sidebar lists FULL-DATA-FZ. Three tabs read Voices, Banks and Areas, and Effects. The Voices tab holds a five voice table, a Sample panel, the loop strip, and a Generation panel. A six octave keyboard runs along the bottom.](images/workspace.png)
+![Two capacity meters and the Import, Undo, Redo, Export, and Eject buttons run along the top. Below them sit a Disk files sidebar, the Voices tab of a five voice instrument, and a keyboard.](images/workspace.png)
 
 Disk files sit on the left, and the open instrument fills the centre. Voices holds the voice table, the sample, the loop strip, and both envelope graphs. Banks and Areas holds the mapping. Effects holds the pitch bend range in eighths of a semitone, and the controller modulation matrix.
 
-The keyboard along the bottom auditions the focused voice through its DCA envelope and loop chain.
+The keyboard along the bottom previews the focused voice with its DCA envelope and loop chain. Filter behavior and playback timing are approximate, so confirm how the sampler behaves on hardware.
 
 Export writes the disk image. Export instrument writes the open dump as an `.fzf`, and each voice row writes a `.fzv` or a WAV.
 
 ### Reading the capacity meters
 
-![Two meters side by side. The first reads 606.0 KB used and 53% disk free. The second reads 600.0 KB used and 41% memory free.](images/capacity.png)
+![The first meter reads 606.0 KB used and 53% disk free. The second reads 600.0 KB used and 41% memory free.](images/capacity.png)
 
 Two ceilings, measuring different things. Disk counts image bytes against the floppy, doubling once a document spans a two disk set. Memory counts the instrument's audio against the sampler you declare on the start screen.
 
@@ -167,33 +167,25 @@ Both meters count down, so a full one reads zero. fizzle remembers the declared 
 
 ### Reading the loop strip
 
-![A drawn sample with a shaded span over its first third, between two handles. The caption reads Loop 1, sustain, repeats while held. Start is 3600 and End is 21600 of 61,200 frames. Snap is set to zero crossing, beside a zoom slider at 1x.](images/waveform.png)
+![A shaded span covers the first third of a drawn sample, between two handles. Its caption reads Loop 1, sustain, repeats while held, from frame 3600 to 21600 of 61,200.](images/waveform.png)
 
 The strip draws the selected voice and shades the selected loop. Its caption places that loop in the chain. A sustain loop repeats while a key stays down. A release loop takes over once the key comes up. A loop in neither position keeps the plain fill.
 
-Drag a handle, or type frames into Start and End. Handles snap to the nearest zero crossing. Holding a key runs a cursor through the span the FZ repeats, drawing the chain as it plays.
+Drag a handle, or type frames into Start and End. Handles snap to the nearest zero crossing. Holding a key draws the preview's playhead across the loop it repeats, a position the preview models rather than reads back.
 
 ### Reading the bank mapping
 
-![Eight bank chips above a table of eleven areas. Each row carries a voice, key range, velocity range, output, MIDI channel, and volume. An Edit area panel below holds range sliders and steppers for voice, output, channel, volume, and root.](images/banks-and-areas.png)
+![Eight bank chips over a table of areas, each row carrying a voice, key range, velocity range, output, MIDI channel, and volume. An Edit area panel sits below it.](images/banks-and-areas.png)
 
 Each chip is a bank, and its figure counts the areas the bank holds. Selecting an area opens the editor beneath the table, where the key and velocity ranges drag or type.
 
 ### Editor and CLI
 
-Both surfaces read and write the same files, and each holds something the other doesn't.
-
-Only the CLI exports an instrument back to SFZ, with `sfz export`, and only the CLI runs over many files unattended.
+Reach for the editor to inspect and edit a disk by hand. Reach for the CLI to automate, and to export an instrument back to SFZ with `sfz export`.
 
 Only the editor stamps the disk's voice count into a standalone `.fzf`, so a voice no bank plays survives the export. `disk get` writes the same dump without that count, and a later reading loses the voice.
 
-### Regenerating these images
-
-```sh
-make docshots
-```
-
-The script drives the built app over the real core and rewrites every PNG under `docs/images`. Rerun it when a surface above moves.
+A stale screenshot above means the images need regenerating: `make docshots` rewrites them from a fresh build.
 
 ## SFZ conversion
 
@@ -215,22 +207,6 @@ fizzle implements these SFZ opcodes:
 | `loop_start`, `loop_end` | Loop sample positions |
 
 Unsupported opcodes produce warnings and don't affect output.
-
-## Hardware locations
-
-| Function | Panel path |
-|---|---|
-| Voice name | `MODIFY/VOICE EDIT/DEFINE VOICE/VOICE NAME` |
-| Keyboard range | `MODIFY/VOICE EDIT/KEYBOARD SET` |
-| DCA envelope | `MODIFY/VOICE EDIT/CREATE VOICE/DCA ENVELOPE` |
-| DCF envelope | `MODIFY/VOICE EDIT/CREATE VOICE/DCF ENVELOPE` |
-| LFO | `MODIFY/VOICE EDIT/CREATE VOICE/LFO SET` |
-| Velocity routing | `MODIFY/VOICE EDIT/CREATE VOICE/VELOCITY SENS` |
-| Loops | `MODIFY/VOICE EDIT/CREATE VOICE/LOOP SET` |
-| Tuning and mode | `MODIFY/VOICE EDIT/CREATE VOICE/TUNE/MEM READ` |
-| Bank ranges, MIDI, and output | `MODIFY/BANK EDIT/CREATE BANK` |
-| Controller routing | `MODIFY/EFFECT/MIDI/BEND RANGE`, `MOD WHEEL`, or `AFTER TOUCH` |
-| Area Mode | `MAIN MENU/EFFECT/MIDI/MIDI FUNCTION` |
 
 ## Format evidence
 
