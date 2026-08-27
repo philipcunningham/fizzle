@@ -121,6 +121,12 @@ web-check: wasm
 web-smoke: wasm
 	cd web/app && npm run smoke
 
+# Regenerate the manual's screenshots from the production bundle. These
+# are documentation rather than baselines, so nothing compares them and
+# `check` doesn't run this. Regenerate when the surfaces they show move.
+docshots: wasm
+	cd web/app && npm run build && npm run docshots
+
 web-fast:
 	@command -v npm >/dev/null 2>&1 || \
 	  (echo "npm not found on PATH. Install Node $(NODE_MAJOR)+ to run web checks." >&2; exit 1)
@@ -204,4 +210,4 @@ asm-tools:
 	  (echo "Homebrew required (see https://brew.sh)" >&2; exit 1)
 	brew install nasm
 
-.PHONY: build license-tools tools tools-check licenses test integration-test corpus fuzz-seed fmt fmt-check vet lint lint-go lint-docs wasm wasm-check web-fast web-check web-smoke check-fast check-full check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools
+.PHONY: build license-tools tools tools-check licenses test integration-test corpus fuzz-seed fmt fmt-check vet lint lint-go lint-docs wasm wasm-check web-fast web-check web-smoke docshots check-fast check-full check coverage benchmark profile install clean linux darwin-arm64 darwin-amd64 windows release demo asm-tools

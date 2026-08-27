@@ -20,6 +20,7 @@
     "architecture-check": "node scripts/check-architecture.mjs",
     "bundle-check": "node scripts/check-bundle.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "docshots": "node scripts/docshots.mjs",
     "perf": "node scripts/perf-drag.mjs",
     "check": "npm run protocol-check && npm run architecture-check && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build && npm run bundle-check && npm run base-check",
     "check:fast": "npm run protocol-check && npm run architecture-check && npm run format:check && npm run lint && npm run typecheck",
